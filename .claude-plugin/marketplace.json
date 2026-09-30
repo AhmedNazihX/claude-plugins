@@ -6,8 +6,8 @@
   "description": "Ahmed Nazih's Claude Code plugins",
   "plugins": [
     {
-      "name": "story-workflow",
-      "source": "./story-workflow",
+      "name": "foreman",
+      "source": "./foreman",
       "description": "Idea → design → backlog → parallel worktree agents, verified and reviewed before every merge."
     },
     {
