@@ -1,0 +1,14 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [{ "type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/block-dangerous-git.sh\"" }]
+      },
+      {
+        "matcher": "Read|Grep|Write|Edit|MultiEdit|NotebookEdit|Bash",
+        "hooks": [{ "type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/block-secrets.sh\"" }]
+      }
+    ]
+  }
+}

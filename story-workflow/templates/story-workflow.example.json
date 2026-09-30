@@ -1,0 +1,77 @@
+{
+  "base_branch": "main",
+  "checks": [
+    "cd backend && uv run ruff check . && uv run ruff format --check .",
+    "cd backend && uv run pyright",
+    "cd backend && uv run pytest -q"
+  ],
+  "link_files": [
+    ".env",
+    "backend/.env"
+  ],
+  "env": {
+    "APP_DATA_DIR": "{MAIN}/data"
+  },
+  "reviewers": [
+    "story-workflow:diff-reviewer",
+    "story-workflow:security-reviewer"
+  ],
+  "lanes": {
+    "Corpus": {
+      "deny": [
+        "eval"
+      ],
+      "allow": [],
+      "reviewers": [
+        "story-workflow:lane-auditor"
+      ]
+    }
+  },
+  "stories": {
+    "C2": {
+      "deny": [
+        "eval"
+      ],
+      "allow": [
+        "eval/split.json"
+      ]
+    }
+  },
+  "gates": [
+    {
+      "path": "backend/app/engine",
+      "requires": "eval/split.json",
+      "reason": "the test-set split must be committed before any code that is scored on it exists"
+    }
+  ],
+  "isolation": {
+    "test": "cd backend && uv run pytest -q tests/test_isolation.py",
+    "design_section": "docs/DESIGN.md › Data, security and compliance",
+    "private": [
+      "eval/private"
+    ]
+  },
+  "decisions": {
+    "reserved": {
+      "003": "X1 model choice"
+    }
+  },
+  "format": {
+    "backend/": "uv run ruff format {file}",
+    "frontend/src/": "pnpm exec prettier --write {file}"
+  },
+  "guardrails": [
+    {
+      "rule": "Benchmark files are never read by corpus code",
+      "source": "DESIGN.md › Data, security and compliance; decision 012",
+      "enforced_by": ["lanes.Corpus", "story-workflow:lane-auditor", "backend/tests/test_isolation.py"]
+    },
+    {
+      "rule": "No live model calls in tests",
+      "source": "DESIGN.md › Rules and enforcement",
+      "enforced_by": [".claude/hooks/no-live-calls.sh", ".claude/rules/python.md"]
+    }
+  ],
+  "cost_cap_usd": 0.5,
+  "max_review_stories": 2
+}
