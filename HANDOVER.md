@@ -5,14 +5,17 @@ opened in this repo). The capstone below is an earlier private project whose old
 
 ## State
 
-- **This repo** (a local clone, not pushed yet) is the `nazihx` marketplace with
-  two plugins:
+- **This repo** is the `nazihx` marketplace, public at https://github.com/AhmedNazihX/claude-plugins (history
+  squashed to one commit for the first push; tags `story-workflow--v0.3.5`, `git-guardrails--v0.2.1`). Two plugins:
   - `story-workflow` **0.3.5**: skills `next`, `kickoff`, `work-breakdown`, `setup`, `guardrails`, `status`,
     `story-start`, `story-finish`, `decision`, `handover`; agents `story-worker`, `dod-verifier`, `diff-reviewer`,
     `security-reviewer`, `backlog-reviewer`, `lane-auditor`, `test-auditor`; hooks `gate.sh`, `lane-guard.sh`,
     `worker-guard.sh` (PreToolUse), `format.sh` (PostToolUse); `scripts/backlog.py`. Depends on `git-guardrails`.
   - `git-guardrails` **0.2.1**: `block-dangerous-git.sh` and `block-secrets.sh` as plugin hooks.
-- **Installed** at user scope (`claude plugin install story-workflow@nazihx`); the dependency installed itself.
+- **Installed** at user scope from this local folder (`claude plugin install story-workflow@nazihx`); the dependency
+  installed itself. An install still registered as `nazih-local` (the old name) needs `claude plugin marketplace
+  remove nazih-local`, then `marketplace add` of this folder and the install again. Others install with
+  `claude plugin marketplace add AhmedNazihX/claude-plugins`.
 - **Global guards removed** from the user settings (only the two `block-*.sh` PreToolUse entries; a backup was
   kept). The old scripts are still in `~/.claude/hooks/`, unused; delete them once the plugin guards are confirmed
   live.
@@ -64,8 +67,8 @@ Write down each thing that looks off and fix it in this repo; bump the version a
 
 ## Still open
 
-- Needs the user: pushing this repo to its public GitHub remote; deleting `~/.claude/hooks/block-*.sh` (unused
-  since the plugin guards are live); version tags (`story-workflow--v0.3.5`, `git-guardrails--v0.2.1`).
+- Needs the user: deleting `~/.claude/hooks/block-*.sh` (unused since the plugin guards are live). Tag each
+  release as `<plugin>--v<version>` and push the tags by name.
 - A `WorktreeCreate` hook that applies a lane's sparse checkout itself (removes the manual `!` step): its input and
   contract are undocumented (checked 2026-09-30); prototype with `claude --debug`, keep the manual path as fallback.
 - Evals with `claude plugin eval` for `next`, `status`, `story-start`, `kickoff`; the suggestion list (replan,
