@@ -14,8 +14,9 @@ opened in this repo). The capstone below is an earlier private project whose old
     `worker-guard.sh` (PreToolUse), `format.sh` (PostToolUse); `scripts/backlog.py`. Depends on `git-guardrails`.
   - `git-guardrails` **0.2.1**: `block-dangerous-git.sh` and `block-secrets.sh` as plugin hooks.
 - **Installed** at user scope from this local folder; the dependency installed itself. After the 0.4.0 rename,
-  reinstall with `claude plugin uninstall story-workflow@nazihx`, then `claude plugin install foreman@nazihx`. An install still registered as `nazih-local` (the old name) needs `claude plugin marketplace
-  remove nazih-local`, then `marketplace add` of this folder and the install again. Others install with
+  reinstall with `claude plugin uninstall story-workflow@nazihx`, then `claude plugin install foreman@nazihx`.
+  An install still registered as `nazih-local` (the old marketplace name) needs `claude plugin marketplace remove
+  nazih-local`, then `marketplace add` of this folder and the install again. Others install with
   `claude plugin marketplace add AhmedNazihX/claude-plugins`.
 - **Global guards removed** from the user settings (only the two `block-*.sh` PreToolUse entries; a backup was
   kept). The old scripts are still in `~/.claude/hooks/`, unused; delete them once the plugin guards are confirmed
