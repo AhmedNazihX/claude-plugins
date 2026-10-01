@@ -12,11 +12,13 @@ rule allows, and keeps a registry so none is forgotten.
 ## 1. Collect the rules
 
 - `docs/DESIGN.md` › **Rules and enforcement** (written by `kickoff`), plus rules stated elsewhere in the design:
-  Gates, Shared resources, Data, security and compliance, Stack. These documents can be long: ask the
-  `foreman:doc-reader` agent for each section's rules rather than reading the whole file yourself.
-- `docs/decisions/*.md`: a decision whose Consequences say "always", "never", "only", "before" or "must". Ask
-  `foreman:doc-reader` to list the rule-bearing Consequences across the decision records; read a record directly
-  only once you're writing its specific rule into the registry.
+  Gates, Shared resources, Data, security and compliance, Stack. Read these sections yourself. Only when the
+  document is long enough that a configured `docs` guard would block reading it whole, ask `foreman:doc-reader`
+  to locate the sections first, then read each one's line range yourself — don't hand the rule extraction itself
+  to `doc-reader`, or a rule it judges not worth quoting never reaches the registry.
+- `docs/decisions/*.md`: a decision whose Consequences say "always", "never", "only", "before" or "must". Decision
+  records are usually short enough to read in full, directly. Only for an unusually large decision log, ask
+  `foreman:doc-reader` to locate the rule-bearing Consequences first, then read each one yourself.
 - `CLAUDE.md` rules that have no mechanism yet, and `$ARGUMENTS` if the user names one. `CLAUDE.md` is usually
   short enough to read directly.
 - The registry: `.claude/foreman.json` › `guardrails` (what exists already).

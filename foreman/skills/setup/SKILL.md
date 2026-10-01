@@ -27,7 +27,7 @@ Detect what you can; ask only for the rest, **one question at a time**, with a r
 | Config key | How to fill it |
 | --- | --- |
 | `base_branch` | `git symbolic-ref refs/remotes/origin/HEAD`, or the current branch |
-| `checks` | Copied **verbatim** from the backlog's *Global rules › Checks* line — `grep -A5 '^## Global rules' docs/BACKLOG.md` rather than reading the whole backlog — (else from the repo: `pyproject.toml` means uv/ruff/pyright/pytest, `package.json` scripts mean lint, typecheck, test). Confirm with the user. Before the scaffold story exists, use the commands it will create and say so. |
+| `checks` | Copied **verbatim** from the backlog's **Global rules for every story** section (the marker is a bold line, not a heading — find it with `rg -n -i -A6 'global rules' docs/BACKLOG.md` rather than reading the whole backlog). Look for a `- **Checks:**` line with the commands, or (once a project has already run `setup` before) a line pointing at `.claude/foreman.json` › `checks` instead — follow that pointer rather than re-typing stale commands. Else derive from the repo: `pyproject.toml` means uv/ruff/pyright/pytest, `package.json` scripts mean lint, typecheck, test. Confirm with the user. Before the scaffold story exists, use the commands it will create and say so. |
 | `link_files` | Gitignored local files a worker needs, such as `.env` (from `.gitignore` and `.env.example`) |
 | `env` | Shared paths workers need, e.g. `{"APP_DATA_DIR": "{MAIN}/data"}`; empty if none |
 | `reviewers` | Review agents run by `story-finish` on every story; default `["foreman:diff-reviewer", "foreman:security-reviewer"]` (the security reviewer judges each diff against the design's *Data, security and compliance* section) |

@@ -25,13 +25,14 @@ A backlog, a design document or a decision log grows over a project's life — a
 (about 38k tokens), which is real context budget spent before any work starts. Two things keep that out of an
 agent's context:
 
-- **`doc-reader`** (an agent, so only the main session can launch it): answer a question about a long `.md`
-  document by searching it and quoting only the relevant passages with `file:line`, instead of reading the whole
-  thing. Subagents can't start it, so they search with `rg` and `Read` a line range themselves.
+- **`doc-reader`** (an agent, read-only, no Bash, so only the main session can launch it): answer a question about
+  a long `.md` document by searching it (Grep) and quoting only the relevant passages with `file:line`, instead of
+  reading the whole thing. Subagents can't start it, so they search with `rg` and `Read` a line range themselves.
 - **`doc-guard.sh`** (a hook): once `.claude/foreman.json` has a `docs` key (`{"max_bytes": 20000, "exclude": []}`,
-  written by `setup`), it blocks `Read`ing a `.md` file whole — or over a `Bash` `cat`/`less`/`more`/`bat`/`tac`/`nl`
-  — past `max_bytes`, in the main session or a subagent alike. A ranged `Read` (`offset`/`limit`), `rg`/`grep`,
-  `head`/`tail -n`, `sed -n`, and `backlog.py` are never blocked.
+  written by `setup`), it blocks `Read`ing a `.md` file whole — or, best effort, a `Bash`
+  `cat`/`less`/`more`/`bat`/`tac`/`nl` of one — past `max_bytes`, in the main session or a subagent alike. A ranged
+  `Read` (`offset`/`limit`) under the limit is fine, as is `rg`/`grep`, `head`/`tail -n`, `sed -n`, and
+  `backlog.py`; the `Bash` side is best effort, not exact, so it can still be worked around on purpose.
 
 Each project keeps only its own facts: `docs/DESIGN.md`, `docs/BACKLOG.md`, `docs/decisions/`,
 `.claude/foreman.json`, and any project-specific skills, agents and rules.
