@@ -29,7 +29,7 @@
         ]
       },
       {
-        "matcher": "Read|Bash",
+        "matcher": "Read",
         "hooks": [
           {
             "type": "command",
