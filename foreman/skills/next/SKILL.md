@@ -32,4 +32,7 @@ each step, say in one line which step comes next and why.
 Projects that started before this plugin may name their design differently (for example an "Init Document"):
 if `CLAUDE.md` names the design's source of truth, use that file for rows 1–3.
 
+Row 2's Status line is one line: get it with `grep -m1 '^- \*\*Status:' docs/DESIGN.md`, not by reading the whole
+file (a design document can be long, and a configured `docs` guard blocks a whole over-limit `.md` file anyway).
+
 Read-only until the chosen skill runs.

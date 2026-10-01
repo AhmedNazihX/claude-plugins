@@ -12,9 +12,13 @@ rule allows, and keeps a registry so none is forgotten.
 ## 1. Collect the rules
 
 - `docs/DESIGN.md` › **Rules and enforcement** (written by `kickoff`), plus rules stated elsewhere in the design:
-  Gates, Shared resources, Data, security and compliance, Stack.
-- `docs/decisions/*.md`: a decision whose Consequences say "always", "never", "only", "before" or "must".
-- `CLAUDE.md` rules that have no mechanism yet, and `$ARGUMENTS` if the user names one.
+  Gates, Shared resources, Data, security and compliance, Stack. These documents can be long: ask the
+  `foreman:doc-reader` agent for each section's rules rather than reading the whole file yourself.
+- `docs/decisions/*.md`: a decision whose Consequences say "always", "never", "only", "before" or "must". Ask
+  `foreman:doc-reader` to list the rule-bearing Consequences across the decision records; read a record directly
+  only once you're writing its specific rule into the registry.
+- `CLAUDE.md` rules that have no mechanism yet, and `$ARGUMENTS` if the user names one. `CLAUDE.md` is usually
+  short enough to read directly.
 - The registry: `.claude/foreman.json` › `guardrails` (what exists already).
 
 List each rule in one line with its source (design section or decision number).
@@ -26,7 +30,7 @@ normal for anything that matters.
 
 | Strength | Mechanism | Fits a rule that … | How |
 | --- | --- | --- | --- |
-| 1 | **Built-in hook** (plugin, config only) | says "nothing under X until Y is committed", "lane L never sees folder F", "format files under P with command C" | add to `gates`, `lanes`/`stories`, or `format` in the config |
+| 1 | **Built-in hook** (plugin, config only) | says "nothing under X until Y is committed", "lane L never sees folder F", "format files under P with command C", "no `.md` file is loaded whole past N bytes" | add to `gates`, `lanes`/`stories`, `format`, or `docs` in the config |
 | 2 | **Project hook** | is mechanical but not built in: "no live API calls in tests", "migrations only via `<tool> migration new`", "never edit generated file G" | write `.claude/hooks/<name>.sh` from `${CLAUDE_PLUGIN_ROOT}/templates/project-hook.sh`, add a case to `.claude/hooks/test-hooks.sh`, register it in `.claude/settings.json` (show the diff) |
 | 3 | **Test or CI check** | can be checked on the code or data after the fact: an isolation test, a licence check, a schema check | add the test in the project's test tree (a story, if it's real work) and the CI job |
 | 4 | **Reviewer agent** | needs judgement: "no benchmark wording in prompts", "every citation quotes the source" | a checklist item for `foreman:lane-auditor`, `foreman:diff-reviewer` or `foreman:security-reviewer`, or a project agent in `.claude/agents/<name>.md` added to `reviewers` or `lanes.<lane>.reviewers` |

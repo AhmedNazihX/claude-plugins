@@ -24,6 +24,11 @@ Rules for the whole skill:
   `Cargo.toml`), the test and lint setup, CI (`.github/workflows/`), database and migrations, deploy files.
 - Any existing `docs/DESIGN.md`: if it exists, this is a revision. Show what you would change and ask.
 
+A source document can be long. If it's small, read it directly. If it's large (a configured `docs` guard in
+`.claude/foreman.json` will block a whole over-limit `.md` file), either ask the `foreman:doc-reader` agent for a
+per-section summary first, or read it yourself in consecutive ranges (offset/limit) under the guard's limit — you
+need the whole thing to write a coherent design, so don't stop at the first relevant passage the way a lookup would.
+
 Summarise back in five lines what you understood, and what you still need.
 
 ## 2. Interview for the gaps

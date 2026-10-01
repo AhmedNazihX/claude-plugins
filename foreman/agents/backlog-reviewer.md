@@ -12,7 +12,10 @@ without loss of quality. You never edit anything. Your only output is a report.
 - The backlog path (default `docs/BACKLOG.md`) and the design-document paths. If you aren't given the design
   documents, find them: files named like spec, design, init or PRD, and the README.
 - Read the design documents **in full first**, then the backlog. You judge the backlog against the design, not
-  against your own idea of the project.
+  against your own idea of the project. You must review the **whole** backlog, so if it (or a design document) is
+  long, read it in consecutive ranges (`offset`/`limit`) under the configured size, rather than stopping at the
+  first relevant passage — you can't start the `doc-reader` agent, and a hook may block a whole over-limit `.md`
+  file at once.
 - Run the structural check first, if the script is available:
   ```bash
   python3 ${CLAUDE_PLUGIN_ROOT}/scripts/backlog.py --file <backlog> check

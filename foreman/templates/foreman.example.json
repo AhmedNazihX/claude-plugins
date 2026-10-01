@@ -73,5 +73,9 @@
     }
   ],
   "cost_cap_usd": 0.5,
-  "max_review_stories": 2
+  "max_review_stories": 2,
+  "docs": {
+    "max_bytes": 20000,
+    "exclude": []
+  }
 }
