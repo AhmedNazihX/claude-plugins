@@ -39,7 +39,9 @@ Read these, in order:
 1. `CLAUDE.md`, then `docs/LAYOUT.md` if it exists. Every file you create must go where the layout says. If your
    story needs a folder or package area that isn't there yet, add it to `docs/LAYOUT.md` in the same branch.
 2. Your story: `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/backlog.py show <STORY>`
-3. The design-document sections named in its *Context* line
+3. The design-document sections named in its *Context* line. A design document can be long: find the section with
+   `rg -n '^#' <file>` (or search its heading text), then `Read` just that line range. You can't start an agent, so
+   you can't hand this to `doc-reader`; a hook may also block reading the whole file past a configured size.
 4. The files in its *Input*
 
 Then read the existing code your story builds on, and match its style, naming and comment density. Check library

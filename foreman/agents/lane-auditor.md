@@ -14,7 +14,9 @@ is a report.
   project's own isolation test command and the design section that states the rules).
 - The story: `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/backlog.py info <ID>` for its lane; the lane's rule is
   `stories[<ID>]` if present, else `lanes[<lane>]`.
-- The design's isolation rules, if `isolation.design_section` names them. Read that section first.
+- The design's isolation rules, if `isolation.design_section` names them. Read that section first — if the design
+  document is long, find the heading with `rg -n '^#' docs/DESIGN.md` and `Read` just its line range; you can't
+  start the `doc-reader` agent, and a hook may block a whole over-limit `.md` file.
 
 ```bash
 git log --oneline <base>..<branch>

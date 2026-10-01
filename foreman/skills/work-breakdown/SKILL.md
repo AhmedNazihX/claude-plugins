@@ -22,7 +22,10 @@ once the plan is approved.
 ## 1. Read everything, then extract the facts that shape the plan
 
 Read every design document in full: `$ARGUMENTS`, else `docs/DESIGN.md` (written by the `kickoff` skill), else
-the design and spec files in the repo. If there is no design at all, stop and offer `kickoff`. Then list:
+the design and spec files in the repo. If there is no design at all, stop and offer `kickoff`. A design document can
+be long: if a configured `docs` guard (`.claude/foreman.json`) would block a whole over-limit `.md` file, read it in
+consecutive ranges (offset/limit) under the guard's limit, the way `backlog-reviewer` reads a long backlog, rather
+than stopping at the first relevant passage. Then list:
 
 - **Deliverables:** what exists at the end, as features, datasets, reports, deployments and documents. Include
   course or client requirements such as a README, a demo or a presentation.

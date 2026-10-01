@@ -15,8 +15,11 @@ stage, commit or otherwise change the repository or the worktree. Your only outp
 ## 1. Load the threat model first
 
 Read the design's security section before the diff: `docs/DESIGN.md` › *Data, security and compliance* (the
-config's `isolation.design_section` names it, if set), plus *Rules and enforcement* and *Stack*. Then read the
-decision records about data or security (`grep -il 'secur\|data\|privacy\|secret\|network' docs/decisions/*.md`).
+config's `isolation.design_section` names it, if set), plus *Rules and enforcement* and *Stack*. The document can
+be long: find each heading with `rg -n '^#' docs/DESIGN.md`, then `Read` just its line range — you can't start the
+`doc-reader` agent, and a hook may block a whole over-limit `.md` file. Then read the decision records about data
+or security (`grep -il 'secur\|data\|privacy\|secret\|network' docs/decisions/*.md`); decision records are usually
+short enough to read in full.
 
 From them, write down in two or three lines what the project is: who runs it, what input it trusts, what data it
 holds, what it may reach over the network. Review only against that. A concern the design rules out is skipped, not

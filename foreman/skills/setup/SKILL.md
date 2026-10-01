@@ -27,7 +27,7 @@ Detect what you can; ask only for the rest, **one question at a time**, with a r
 | Config key | How to fill it |
 | --- | --- |
 | `base_branch` | `git symbolic-ref refs/remotes/origin/HEAD`, or the current branch |
-| `checks` | Copied **verbatim** from the backlog's *Global rules › Checks* line (else from the repo: `pyproject.toml` means uv/ruff/pyright/pytest, `package.json` scripts mean lint, typecheck, test). Confirm with the user. Before the scaffold story exists, use the commands it will create and say so. |
+| `checks` | Copied **verbatim** from the backlog's **Global rules for every story** section (the marker is a bold line, not a heading — find it with `rg -n -i -A6 'global rules' docs/BACKLOG.md` rather than reading the whole backlog). Look for a `- **Checks:**` line with the commands, or (once a project has already run `setup` before) a line pointing at `.claude/foreman.json` › `checks` instead — follow that pointer rather than re-typing stale commands. Else derive from the repo: `pyproject.toml` means uv/ruff/pyright/pytest, `package.json` scripts mean lint, typecheck, test. Confirm with the user. Before the scaffold story exists, use the commands it will create and say so. |
 | `link_files` | Gitignored local files a worker needs, such as `.env` (from `.gitignore` and `.env.example`) |
 | `env` | Shared paths workers need, e.g. `{"APP_DATA_DIR": "{MAIN}/data"}`; empty if none |
 | `reviewers` | Review agents run by `story-finish` on every story; default `["foreman:diff-reviewer", "foreman:security-reviewer"]` (the security reviewer judges each diff against the design's *Data, security and compliance* section) |
@@ -39,6 +39,7 @@ Detect what you can; ask only for the rest, **one question at a time**, with a r
 | `isolation` | For lanes with a deny list: the project's own isolation test command (`test`), the design section that states the rules (`design_section`), and folders that must never be tracked (`private`). The `lane-auditor` reads it |
 | `decisions.reserved` | Decision numbers the backlog reserves for specific stories, e.g. `{"003": "X1 model choice"}` |
 | `max_review_stories` | How many `mixed`/`human` stories `status` may put in one launch set (default 2) |
+| `docs` | `{"max_bytes": 20000, "exclude": []}`: blocks loading a `.md` file whole past `max_bytes` (the `doc-reader` agent or a search-and-range read is the way around it), so a growing backlog or design doc never fills an agent's context |
 
 Find `lanes` and `gates` candidates in the design's Gates and Data sections and the backlog's gate stories.
 Leave them empty if there are none or the user passed `--no-guards`. The plugin's hooks do nothing without them.
@@ -69,6 +70,7 @@ and records each in the config's `guardrails` registry.
 python3 ${CLAUDE_PLUGIN_ROOT}/scripts/backlog.py check
 python3 ${CLAUDE_PLUGIN_ROOT}/scripts/backlog.py plan
 bash ${CLAUDE_PLUGIN_ROOT}/hooks/test-guards.sh      # only if lanes or gates are configured
+bash ${CLAUDE_PLUGIN_ROOT}/hooks/test-doc-guard.sh   # only if docs is configured
 jq empty .claude/settings.json .claude/foreman.json
 ```
 
