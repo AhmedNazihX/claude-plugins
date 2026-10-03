@@ -11,18 +11,13 @@ Two PreToolUse hooks for Claude Code:
   shell commands that print a secrets file, and staging or committing secrets. Copying or linking `.env` (to set up
   a worktree) is allowed.
 
-  Searches that would read `.env` are blocked too, with the fix in the message: a recursive grep without
-  `--exclude='.env*'` (including `rgrep`, GNU `ggrep` and `zgrep`/`bzgrep`/`xzgrep`), an `rg` over hidden or ignored
-  files without `-g '!.env*'`, and `find` handing files to a reader (`| xargs grep`, `-exec cat`) unless it excludes
-  `.env` by name or keeps to code files, with no `-o`. A disguised command word (`"grep"`, `\grep`, `gr''ep`) is
-  still seen, and a `<<` inside quotes (`echo "<<EOF"`) is not taken for a heredoc.
+The secrets guard fails closed: a tool call it can't read, or a command its heredoc stripper can't process, is
+blocked rather than allowed.
 
-  Only `.env*` or `*.env*` counts as excluding env files (`*environment*` or `dev.env` doesn't), and only an rg glob
-  of `!.env*` or `!*.env*`. An `--include` or `find -name` makes a search safe only when every pattern is a code or
-  docs file type (`*.ts`, `*.py`, `*.md`, …): `*`, `*.*` or `*.local` also match `.env` files.
-
-  The secrets guard fails closed: a tool call it can't read, or a command its heredoc stripper can't process, is
-  blocked rather than allowed.
+**These guards are best-effort, not a security boundary.** They match command text, and the shell has endless ways to
+say the same thing (variables, `python -c`, `eval`, aliases), so a determined command can get past them. They catch
+the common, accidental cases. To keep `.env` from being read whatever the command looks like, use Claude Code's
+permission deny rules or sandboxing, which act on file access.
 
 The hooks guard only Claude's own tool calls. For commits made outside Claude, add a git pre-commit hook and a CI
 check such as `gitleaks`.

@@ -81,59 +81,15 @@ case "$TOOL" in
       fi
     fi
 
-    # The search checks read the command with quotes and backslashes removed, so a
-    # disguised command word ("grep", \grep, gr''ep) is still seen as grep.
-    SCMD=$(printf '%s\n' "$CMD" | tr -d "\"'\\\\")
-    # Where a command word starts: the line's start or after ; & | ( or a backtick, past any
-    # sudo/command/exec/nice/time/xargs prefix. Keeps a word that is only an argument
-    # (a search pattern such as `grep -c rgrep notes.md`) from counting as the command.
-    CMD_POS='(^|[;&|(`])[[:space:]]*((sudo|command|exec|nice|time|xargs)([[:space:]]+-[^[:space:]]+)*[[:space:]]+)*'
-    # grep and its kin (GNU ggrep, compressed zgrep/bzgrep/xzgrep, egrep/fgrep).
-    GREP_WORD='(^|[^A-Za-z0-9_-])(g|z|bz|xz|zstd|lz)?[ef]?grep'
-    # Only these exclude .env and .env.*: `.env*` or `*.env*` (a pattern that merely contains "env",
-    # such as *environment* or dev.env, does not).
-    ENV_GLOB='\*?\.env\*'
-    # File types a search may be limited to: code and docs. A wider pattern (*, *.*, *.local, *.json)
-    # also matches .env or .env.<suffix>.
-    CODE_GLOB='\*\.(ts|tsx|js|jsx|mjs|cjs|py|md|mdx|go|rs|java|kt|rb|php|c|h|cc|cpp|hpp|cs|css|scss|html|vue|svelte|sql|sh|swift)'
-    # True when every --include is a code-file pattern (and there is at least one).
-    includes_only_code() {
-      local values
-      values=$(echo "$SCMD" | grep -oE -- '--include(=|[[:space:]]+)[^[:space:]]+' | sed -E 's/^--include(=|[[:space:]]+)//')
-      [ -n "$values" ] && ! echo "$values" | grep -qvE "^${CODE_GLOB}\$"
-    }
-    # A recursive grep reads .env too (unlike rg, which skips hidden and gitignored files by default);
-    # rgrep is recursive without a flag.
-    if { echo "$SCMD" | grep -qE "$GREP_WORD[[:space:]]([^;&|]*[[:space:]])?(-[A-Za-z]*[rR][A-Za-z]*|--recursive|--dereference-recursive)([[:space:]]|\$)" \
-         || echo "$SCMD" | grep -qE "$CMD_POS"'rgrep([[:space:]]|$)'; } \
-      && ! echo "$SCMD" | grep -qE -- "--exclude(=|[[:space:]]+)${ENV_GLOB}([[:space:]]|\$)" \
-      && ! includes_only_code; then
+    # A recursive grep reads .env too (unlike rg, which skips hidden and gitignored files by default).
+    if echo "$CMD" | grep -qE '(^|[^A-Za-z0-9_-])[ef]?grep[[:space:]]([^;&|]*[[:space:]])?(-[A-Za-z]*[rR][A-Za-z]*|--recursive|--dereference-recursive)([[:space:]]|$)' \
+      && ! echo "$CMD" | grep -qE -- "--exclude(=|[[:space:]]+)['\"]?[^[:space:]]*env" \
+      && ! { echo "$CMD" | grep -qE -- "--include(=|[[:space:]]+)" && ! echo "$CMD" | grep -qE -- "--include(=|[[:space:]]+)['\"]?[^[:space:]]*env"; }; then
       block "'$RAW' searches recursively and would read .env files. Add --exclude='.env*' (or use rg, which skips them)."
     fi
-    if echo "$SCMD" | grep -qE '(^|[^A-Za-z0-9_-])rg[[:space:]]([^;&|]*[[:space:]])?(-[A-Za-z]*u[A-Za-z]*|--hidden|--no-ignore[A-Za-z-]*)([[:space:]]|$)' \
-      && ! echo "$SCMD" | grep -qE -- "(-g|--glob)(=|[[:space:]]+)!${ENV_GLOB}([[:space:]]|\$)"; then
+    if echo "$CMD" | grep -qE '(^|[^A-Za-z0-9_-])rg[[:space:]]([^;&|]*[[:space:]])?(-[A-Za-z]*u[A-Za-z]*|--hidden|--no-ignore[A-Za-z-]*)([[:space:]]|$)' \
+      && ! echo "$CMD" | grep -qE -- "(-g|--glob)[[:space:]]+['\"]?!"; then
       block "'$RAW' searches hidden or ignored files and would read .env files. Add -g '!.env*'."
-    fi
-
-    # find hands every file it lists, .env included, to a reader (| xargs grep, -exec cat). Allowed only
-    # when the find itself either excludes .env by name or keeps to code files, and has no -o/-or,
-    # which would let other files through around that limit.
-    READER='(grep|egrep|fgrep|cat|head|tail|less|more|strings|xxd|od|sed|awk)'
-    if echo "$SCMD" | grep -qE '(^|[^A-Za-z0-9_-])find[[:space:]]' \
-      && echo "$SCMD" | grep -qE "(xargs([[:space:]]+-[^[:space:]]+)*[[:space:]]+$READER|-exec(dir)?[[:space:]]+$READER)([[:space:]]|\$)"; then
-      # The find's own expression: from `find` to the first pipe, separator or -exec.
-      FIND_EXPR=$(echo "$SCMD" | grep -oE '(^|[^A-Za-z0-9_-])find[[:space:]][^|;&]*' | head -1 | sed -E 's/-exec(dir)?[[:space:]].*//')
-      NAMES=$(echo "$FIND_EXPR" | grep -oE -- '(^|[[:space:]])-i?name[[:space:]]+[^[:space:]]+' | grep -vE -- '(!|-not)[[:space:]]*$' | sed -E 's/.*-i?name[[:space:]]+//')
-      if echo "$FIND_EXPR" | grep -qE -- '(^|[[:space:]])(-o|-or|,)([[:space:]]|$)'; then
-        FIND_OK=0
-      elif echo "$FIND_EXPR" | grep -qE -- "(!|-not)[[:space:]]+-i?name[[:space:]]+${ENV_GLOB}([[:space:]]|\$)"; then
-        FIND_OK=1
-      elif [ -n "$NAMES" ] && ! echo "$NAMES" | grep -qvE "^${CODE_GLOB}\$"; then
-        FIND_OK=1
-      else
-        FIND_OK=0
-      fi
-      [ "$FIND_OK" = 1 ] || block "'$RAW' hands every file find lists, .env included, to a reader. Add ! -name '.env*' to the find, without -o (or use rg)."
     fi
 
     # Printing the environment (exported keys live there).

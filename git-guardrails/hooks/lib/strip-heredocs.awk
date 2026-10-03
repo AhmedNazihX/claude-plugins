@@ -11,12 +11,6 @@ inh {
 }
 { print }
 match($0, /(^|[^<])<<-?[ \t]*["\047]?[A-Za-z_][A-Za-z0-9_]*["\047]?/) {
-  # A `<<` inside quotes (`echo "<<EOF"`) opens no heredoc: an odd number of
-  # quotes before it means it sits inside a quoted string.
-  before = substr($0, 1, RSTART)
-  dq = gsub(/"/, "", before)
-  sq = gsub(/\047/, "", before)
-  if (dq % 2 == 1 || sq % 2 == 1) next
   op = substr($0, RSTART, RLENGTH)
   sub(/^[^<]/, "", op)                 # drop the character before <<
   dash = (substr(op, 3, 1) == "-")

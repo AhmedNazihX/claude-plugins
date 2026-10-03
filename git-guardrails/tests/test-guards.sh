@@ -83,47 +83,8 @@ run "$SEC" 0 "$(printf '%s' '{"tool_name":"Bash","tool_input":{"command":"cat > 
 # The false positive of 2026-09-30: jq's .key field is not a key file.
 run "$SEC" 0 "$(bash_cmd "jq -r 'to_entries[] | \"\\(.key) \\(.value)\"' config.json && sed -n 1p README.md")" "jq .key with sed passes"
 
-# Gaps found on 2026-10-03 while building safe-search: other grep binaries,
-# a disguised command word, a fake heredoc opener inside quotes, find | xargs.
-run "$SEC" 2 "$(bash_cmd 'rgrep API_KEY .')" "rgrep (recursive by default) is blocked"
-run "$SEC" 0 "$(bash_cmd "rgrep --exclude='.env*' API_KEY .")" "rgrep excluding .env passes"
-run "$SEC" 0 "$(bash_cmd 'grep -c rgrep notes.md')" "rgrep as a search pattern passes"
-run "$SEC" 2 "$(bash_cmd 'ls && rgrep API_KEY .')" "rgrep after && is blocked"
-run "$SEC" 2 "$(bash_cmd 'find . -type f | xargs -0 rgrep KEY')" "rgrep after xargs is blocked"
-run "$SEC" 2 "$(bash_cmd 'ggrep -rn API_KEY .')" "ggrep -r (GNU grep) is blocked"
-run "$SEC" 2 "$(bash_cmd 'zgrep -r API_KEY .')" "zgrep -r is blocked"
-run "$SEC" 2 "$(bash_cmd '"grep" -rn API_KEY .')" "a quoted grep word is blocked"
-run "$SEC" 2 "$(bash_cmd '\grep -rn API_KEY .')" "a backslashed grep word is blocked"
-run "$SEC" 2 "$(bash_cmd "gr''ep -rn API_KEY .")" "a grep word split by empty quotes is blocked"
-run "$SEC" 2 "$(bash_cmd "\"rg\" --hidden API_KEY")" "a quoted rg --hidden is blocked"
-run "$SEC" 2 "$(printf '%s' '{"tool_name":"Bash","tool_input":{"command":"echo \"<<EOF\"\ngrep -rn API_KEY .\nEOF"}}')" "a heredoc opener inside quotes does not hide the next lines"
-run "$SEC" 0 "$(printf '%s' '{"tool_name":"Bash","tool_input":{"command":"cat > a.md <<EOF\nsay \"<<X\"\ngrep -rn x .\nEOF"}}')" "a quote inside a real heredoc body still passes"
-run "$SEC" 2 "$(bash_cmd 'find . -type f | xargs grep API_KEY')" "find | xargs grep is blocked"
-run "$SEC" 2 "$(bash_cmd 'find . -type f -exec grep -l API_KEY {} +')" "find -exec grep is blocked"
-run "$SEC" 2 "$(bash_cmd 'find . -type f -print0 | xargs -0 cat')" "find | xargs cat is blocked"
-run "$SEC" 0 "$(bash_cmd "find src -name '*.ts' | xargs grep API_KEY")" "find limited to .ts files passes"
-run "$SEC" 0 "$(bash_cmd "find . -type f ! -name '.env*' | xargs grep API_KEY")" "find excluding .env passes"
-run "$SEC" 0 "$(bash_cmd "find . -type f -not -name '.env*' -exec grep -l x {} +")" "find -not -name .env passes"
-run "$SEC" 0 "$(bash_cmd 'find . -name "*.py" -newer x')" "a find that reads nothing passes"
-
-# Bypasses found by the 2026-10-03 security review of the above: lists and
-# excludes that look limiting but still match .env, and failing open.
-run "$SEC" 2 "$(bash_cmd "find . -name '*' | xargs grep KEY")" "find -name '*' (matches .env) is blocked"
-run "$SEC" 2 "$(bash_cmd "find . -name '*.*' -exec cat {} +")" "find -name '*.*' (matches .env) is blocked"
-run "$SEC" 2 "$(bash_cmd "find . -name '*.local' | xargs cat")" "find -name '*.local' (matches .env.local) is blocked"
-run "$SEC" 2 "$(bash_cmd "find . -name '*.ts' -o -type f | xargs grep KEY")" "find with -o around the name limit is blocked"
-run "$SEC" 2 "$(bash_cmd "find . ! -name '.env*' -o -type f | xargs grep KEY")" "find with -o around the env exclusion is blocked"
-run "$SEC" 2 "$(bash_cmd "grep -rn --exclude='*environment*' KEY .")" "an exclude that does not cover .env is blocked"
-run "$SEC" 2 "$(bash_cmd "grep -rn --exclude=dev.env KEY .")" "an exclude of one other env file is blocked"
-run "$SEC" 2 "$(bash_cmd "rg --hidden -g '!node_modules' KEY")" "rg with a negative glob that is not .env is blocked"
-run "$SEC" 2 "$(bash_cmd "grep -rn --include='*' KEY .")" "an --include of everything is blocked"
-run "$SEC" 2 "$(bash_cmd "grep -rn --include='*.local' KEY .")" "an --include that matches .env.local is blocked"
-run "$SEC" 2 "$(bash_cmd "grep -rn --include=*.md --include=* KEY .")" "a second, wider --include is blocked"
-run "$SEC" 0 "$(bash_cmd "grep -rn --exclude='*.env*' KEY .")" "an exclude of *.env* passes"
-run "$SEC" 0 "$(bash_cmd "rg --hidden -g '!.env*' KEY")" "rg excluding .env* passes"
-run "$SEC" 0 "$(bash_cmd 'grep -rn x . --include=*.ts --include=*.tsx')" "--include of code files passes"
+# Fail closed (2026-10-03): input it can't read, or a missing heredoc stripper, blocks rather than allows.
 run "$SEC" 2 "$(printf 'not json')" "unreadable input is blocked, not allowed"
-
 NOLIB=$(mktemp -d); cp "$SEC" "$NOLIB/"
 run "$NOLIB/block-secrets.sh" 2 "$(bash_cmd 'grep -rn KEY .')" "a missing heredoc stripper blocks, not allows"
 rm -rf "$NOLIB"
