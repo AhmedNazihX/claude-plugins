@@ -106,5 +106,27 @@ run "$SEC" 0 "$(bash_cmd "find . -type f ! -name '.env*' | xargs grep API_KEY")"
 run "$SEC" 0 "$(bash_cmd "find . -type f -not -name '.env*' -exec grep -l x {} +")" "find -not -name .env passes"
 run "$SEC" 0 "$(bash_cmd 'find . -name "*.py" -newer x')" "a find that reads nothing passes"
 
+# Bypasses found by the 2026-10-03 security review of the above: lists and
+# excludes that look limiting but still match .env, and failing open.
+run "$SEC" 2 "$(bash_cmd "find . -name '*' | xargs grep KEY")" "find -name '*' (matches .env) is blocked"
+run "$SEC" 2 "$(bash_cmd "find . -name '*.*' -exec cat {} +")" "find -name '*.*' (matches .env) is blocked"
+run "$SEC" 2 "$(bash_cmd "find . -name '*.local' | xargs cat")" "find -name '*.local' (matches .env.local) is blocked"
+run "$SEC" 2 "$(bash_cmd "find . -name '*.ts' -o -type f | xargs grep KEY")" "find with -o around the name limit is blocked"
+run "$SEC" 2 "$(bash_cmd "find . ! -name '.env*' -o -type f | xargs grep KEY")" "find with -o around the env exclusion is blocked"
+run "$SEC" 2 "$(bash_cmd "grep -rn --exclude='*environment*' KEY .")" "an exclude that does not cover .env is blocked"
+run "$SEC" 2 "$(bash_cmd "grep -rn --exclude=dev.env KEY .")" "an exclude of one other env file is blocked"
+run "$SEC" 2 "$(bash_cmd "rg --hidden -g '!node_modules' KEY")" "rg with a negative glob that is not .env is blocked"
+run "$SEC" 2 "$(bash_cmd "grep -rn --include='*' KEY .")" "an --include of everything is blocked"
+run "$SEC" 2 "$(bash_cmd "grep -rn --include='*.local' KEY .")" "an --include that matches .env.local is blocked"
+run "$SEC" 2 "$(bash_cmd "grep -rn --include=*.md --include=* KEY .")" "a second, wider --include is blocked"
+run "$SEC" 0 "$(bash_cmd "grep -rn --exclude='*.env*' KEY .")" "an exclude of *.env* passes"
+run "$SEC" 0 "$(bash_cmd "rg --hidden -g '!.env*' KEY")" "rg excluding .env* passes"
+run "$SEC" 0 "$(bash_cmd 'grep -rn x . --include=*.ts --include=*.tsx')" "--include of code files passes"
+run "$SEC" 2 "$(printf 'not json')" "unreadable input is blocked, not allowed"
+
+NOLIB=$(mktemp -d); cp "$SEC" "$NOLIB/"
+run "$NOLIB/block-secrets.sh" 2 "$(bash_cmd 'grep -rn KEY .')" "a missing heredoc stripper blocks, not allows"
+rm -rf "$NOLIB"
+
 echo
 if [ "$FAILS" = 0 ]; then echo "All guard tests passed."; else echo "$FAILS guard test(s) failed."; exit 1; fi
