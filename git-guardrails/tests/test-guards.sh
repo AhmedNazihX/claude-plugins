@@ -83,5 +83,28 @@ run "$SEC" 0 "$(printf '%s' '{"tool_name":"Bash","tool_input":{"command":"cat > 
 # The false positive of 2026-09-30: jq's .key field is not a key file.
 run "$SEC" 0 "$(bash_cmd "jq -r 'to_entries[] | \"\\(.key) \\(.value)\"' config.json && sed -n 1p README.md")" "jq .key with sed passes"
 
+# Gaps found on 2026-10-03 while building safe-search: other grep binaries,
+# a disguised command word, a fake heredoc opener inside quotes, find | xargs.
+run "$SEC" 2 "$(bash_cmd 'rgrep API_KEY .')" "rgrep (recursive by default) is blocked"
+run "$SEC" 0 "$(bash_cmd "rgrep --exclude='.env*' API_KEY .")" "rgrep excluding .env passes"
+run "$SEC" 0 "$(bash_cmd 'grep -c rgrep notes.md')" "rgrep as a search pattern passes"
+run "$SEC" 2 "$(bash_cmd 'ls && rgrep API_KEY .')" "rgrep after && is blocked"
+run "$SEC" 2 "$(bash_cmd 'find . -type f | xargs -0 rgrep KEY')" "rgrep after xargs is blocked"
+run "$SEC" 2 "$(bash_cmd 'ggrep -rn API_KEY .')" "ggrep -r (GNU grep) is blocked"
+run "$SEC" 2 "$(bash_cmd 'zgrep -r API_KEY .')" "zgrep -r is blocked"
+run "$SEC" 2 "$(bash_cmd '"grep" -rn API_KEY .')" "a quoted grep word is blocked"
+run "$SEC" 2 "$(bash_cmd '\grep -rn API_KEY .')" "a backslashed grep word is blocked"
+run "$SEC" 2 "$(bash_cmd "gr''ep -rn API_KEY .")" "a grep word split by empty quotes is blocked"
+run "$SEC" 2 "$(bash_cmd "\"rg\" --hidden API_KEY")" "a quoted rg --hidden is blocked"
+run "$SEC" 2 "$(printf '%s' '{"tool_name":"Bash","tool_input":{"command":"echo \"<<EOF\"\ngrep -rn API_KEY .\nEOF"}}')" "a heredoc opener inside quotes does not hide the next lines"
+run "$SEC" 0 "$(printf '%s' '{"tool_name":"Bash","tool_input":{"command":"cat > a.md <<EOF\nsay \"<<X\"\ngrep -rn x .\nEOF"}}')" "a quote inside a real heredoc body still passes"
+run "$SEC" 2 "$(bash_cmd 'find . -type f | xargs grep API_KEY')" "find | xargs grep is blocked"
+run "$SEC" 2 "$(bash_cmd 'find . -type f -exec grep -l API_KEY {} +')" "find -exec grep is blocked"
+run "$SEC" 2 "$(bash_cmd 'find . -type f -print0 | xargs -0 cat')" "find | xargs cat is blocked"
+run "$SEC" 0 "$(bash_cmd "find src -name '*.ts' | xargs grep API_KEY")" "find limited to .ts files passes"
+run "$SEC" 0 "$(bash_cmd "find . -type f ! -name '.env*' | xargs grep API_KEY")" "find excluding .env passes"
+run "$SEC" 0 "$(bash_cmd "find . -type f -not -name '.env*' -exec grep -l x {} +")" "find -not -name .env passes"
+run "$SEC" 0 "$(bash_cmd 'find . -name "*.py" -newer x')" "a find that reads nothing passes"
+
 echo
 if [ "$FAILS" = 0 ]; then echo "All guard tests passed."; else echo "$FAILS guard test(s) failed."; exit 1; fi

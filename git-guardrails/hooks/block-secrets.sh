@@ -74,15 +74,38 @@ case "$TOOL" in
       fi
     fi
 
-    # A recursive grep reads .env too (unlike rg, which skips hidden and gitignored files by default).
-    if echo "$CMD" | grep -qE '(^|[^A-Za-z0-9_-])[ef]?grep[[:space:]]([^;&|]*[[:space:]])?(-[A-Za-z]*[rR][A-Za-z]*|--recursive|--dereference-recursive)([[:space:]]|$)' \
+    # The search checks read the command with quotes and backslashes removed, so a
+    # disguised command word ("grep", \grep, gr''ep) is still seen as grep.
+    SCMD=$(printf '%s\n' "$CMD" | tr -d "\"'\\\\")
+    # grep and its kin (GNU ggrep, compressed zgrep/bzgrep/xzgrep, egrep/fgrep).
+    GREP_WORD='(^|[^A-Za-z0-9_-])(g|z|bz|xz|zstd|lz)?[ef]?grep'
+    # Where a command word starts: the line's start or after ; & | ( or a backtick, past any
+    # sudo/command/exec/nice/time/xargs prefix. Keeps a word that is only an argument
+    # (a search pattern such as `grep -c rgrep notes.md`) from counting as the command.
+    CMD_POS='(^|[;&|(`])[[:space:]]*((sudo|command|exec|nice|time|xargs)([[:space:]]+-[^[:space:]]+)*[[:space:]]+)*'
+    # A recursive grep reads .env too (unlike rg, which skips hidden and gitignored files by default);
+    # rgrep is recursive without a flag.
+    if { echo "$SCMD" | grep -qE "$GREP_WORD[[:space:]]([^;&|]*[[:space:]])?(-[A-Za-z]*[rR][A-Za-z]*|--recursive|--dereference-recursive)([[:space:]]|\$)" \
+         || echo "$SCMD" | grep -qE "$CMD_POS"'rgrep([[:space:]]|$)'; } \
       && ! echo "$CMD" | grep -qE -- "--exclude(=|[[:space:]]+)['\"]?[^[:space:]]*env" \
       && ! { echo "$CMD" | grep -qE -- "--include(=|[[:space:]]+)" && ! echo "$CMD" | grep -qE -- "--include(=|[[:space:]]+)['\"]?[^[:space:]]*env"; }; then
       block "'$RAW' searches recursively and would read .env files. Add --exclude='.env*' (or use rg, which skips them)."
     fi
-    if echo "$CMD" | grep -qE '(^|[^A-Za-z0-9_-])rg[[:space:]]([^;&|]*[[:space:]])?(-[A-Za-z]*u[A-Za-z]*|--hidden|--no-ignore[A-Za-z-]*)([[:space:]]|$)' \
+    if echo "$SCMD" | grep -qE '(^|[^A-Za-z0-9_-])rg[[:space:]]([^;&|]*[[:space:]])?(-[A-Za-z]*u[A-Za-z]*|--hidden|--no-ignore[A-Za-z-]*)([[:space:]]|$)' \
       && ! echo "$CMD" | grep -qE -- "(-g|--glob)[[:space:]]+['\"]?!"; then
       block "'$RAW' searches hidden or ignored files and would read .env files. Add -g '!.env*'."
+    fi
+
+    # find hands every file it lists, .env included, to a reader (| xargs grep, -exec cat).
+    # Safe when it is limited by name, path or regex to something that is not env, or
+    # excludes env by name.
+    READER='(grep|egrep|fgrep|cat|head|tail|less|more|strings|xxd|od|sed|awk)'
+    if echo "$SCMD" | grep -qE '(^|[^A-Za-z0-9_-])find[[:space:]]' \
+      && echo "$SCMD" | grep -qE "(xargs([[:space:]]+-[^[:space:]]+)*[[:space:]]+$READER|-exec(dir)?[[:space:]]+$READER)([[:space:]]|\$)" \
+      && ! echo "$SCMD" | grep -qE '(!|-not)[[:space:]]+-i?(name|path)[[:space:]]+[^[:space:]]*env' \
+      && ! { echo "$SCMD" | grep -qE -- '-i?(name|path|regex)[[:space:]]+' \
+             && ! echo "$SCMD" | grep -qE -- '(^|[[:space:]])-i?(name|path|regex)[[:space:]]+[^[:space:]]*env'; }; then
+      block "'$RAW' hands every file find lists, .env included, to a reader. Add ! -name '.env*' to the find (or use rg)."
     fi
 
     # Printing the environment (exported keys live there).

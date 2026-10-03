@@ -11,6 +11,12 @@ Two PreToolUse hooks for Claude Code:
   shell commands that print a secrets file, and staging or committing secrets. Copying or linking `.env` (to set up
   a worktree) is allowed.
 
+  Searches that would read `.env` are blocked too, with the fix in the message: a recursive grep without
+  `--exclude='.env*'` (including `rgrep`, GNU `ggrep` and `zgrep`/`bzgrep`/`xzgrep`), an `rg` over hidden or ignored
+  files without `-g '!.env*'`, and `find` handing files to a reader (`| xargs grep`, `-exec cat`) unless it is limited
+  by name or excludes `.env`. A disguised command word (`"grep"`, `\grep`, `gr''ep`) is still seen, and a `<<` inside
+  quotes (`echo "<<EOF"`) is not taken for a heredoc.
+
 The hooks guard only Claude's own tool calls. For commits made outside Claude, add a git pre-commit hook and a CI
 check such as `gitleaks`.
 

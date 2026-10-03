@@ -1,6 +1,6 @@
 {
   "name": "git-guardrails",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "description": "Blocks destructive git commands, asks before every push, and keeps secrets out of the transcript, out of files and out of commits.",
   "author": {
     "name": "Ahmed Nazih"
