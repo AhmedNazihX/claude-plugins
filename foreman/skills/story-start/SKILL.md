@@ -82,3 +82,9 @@ list), never run the command yourself to get past the check: give the user the e
 starting with `!`, with several commands chained by `&&` (lines pasted together after one `!` run as shell negation
 and fail silently). After the user runs it, check its effect (for example `git sparse-checkout list` and that the
 denied folders are gone), then tell the worker to continue.
+
+**When a worker stops at setup with nothing changed** (`BLOCKED: sparse checkout`, or any stop before its first
+edit), its worktree is removed when it stops, so a `!` line aimed at that path fails. Check `git worktree list` and
+`git branch --list 'story/<ID>-*'`, delete an empty leftover story branch with `git branch -d` (it has no commits
+past the base), and relaunch the story with a fresh worker. If the same guard refuses the sparse checkout again,
+show the user the guard's message and ask how to proceed; don't work around it.

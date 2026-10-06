@@ -21,13 +21,17 @@ The project's settings are in `.claude/foreman.json`: its `checks`, `link_files`
 
 ## 1. Set up the worktree (in this order)
 
+Run each step below as its own tool call, and wait for its result before the next. Never put two of them in one
+parallel batch: if the sparse checkout is refused, the branch must not have been renamed yet.
+
 1. **Check the base.** Run `git merge-base --is-ancestor <BASE_SHA> HEAD`. If it fails, stop and report `BLOCKED: wrong base`.
 2. **Sparse checkout,** only if `DENY` isn't empty. Do this *before* renaming the branch: after the rename, the lane
    guard blocks every command that mentions a denied folder, including this one.
    `git sparse-checkout set --no-cone '/*' '!/<deny>/' … '/<allow>' …`
    Then check that the denied folders are gone, apart from the allowed exceptions. If the command is blocked,
-   stop and report it to the orchestrator as one line (`! git -C <worktree> sparse-checkout set …`); don't read,
-   list or search anything else until it is set, and say in your final report that you didn't.
+   stop at once, before step 3: don't rename the branch, don't retry variants, and don't read, list or search
+   anything else. Report `BLOCKED: sparse checkout` with the exact command and the guard's message. A worktree you
+   leave unchanged is removed when you stop, so the orchestrator relaunches the story rather than resuming you.
 3. **Rename the branch.** `git branch -m story/<STORY>-<SLUG>`
 4. **Link the local files.** For each path in `link_files` that exists in `MAIN`, run `ln -s "<MAIN>/<path>" <path>`.
    Never open, print or copy secret files. Export each `env` entry in every shell command that needs it, with
