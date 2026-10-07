@@ -7,6 +7,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 SCRIPT = Path(__file__).resolve().parents[1] / "scripts" / "workers.py"
@@ -82,6 +83,71 @@ class WorkersTest(unittest.TestCase):
 
     def test_an_empty_registry_lists_no_workers(self) -> None:
         self.assertIn("No workers recorded.", self.run_cli("list").stdout)
+
+    def write_transcript(self, agent: str, tokens: int, minutes_ago: float, session: str = "s1",
+                         tail: str = "") -> Path:
+        """A worker transcript whose last model turn had `tokens` of context, `minutes_ago` minutes ago.
+
+        An earlier, different turn comes first, and `tail` (raw lines) after the last turn."""
+        def turn(tokens: int, minutes_ago: float) -> str:
+            at = datetime.now(timezone.utc) - timedelta(minutes=minutes_ago)
+            return json.dumps({
+                "timestamp": at.strftime("%Y-%m-%dT%H:%M:%S.000Z"),
+                "message": {"model": "claude-opus-5-5", "usage": {
+                    "input_tokens": 1, "cache_creation_input_tokens": 999,
+                    "cache_read_input_tokens": tokens - 1000, "output_tokens": 50}},
+            })
+        root = Path(self.tmp.name) / "projects"
+        path = root / "-repo" / session / "subagents" / f"agent-{agent}.jsonl"
+        path.parent.mkdir(parents=True)
+        lines = ['{"type": "user"}', turn(20_000, 600), "not json", turn(tokens, minutes_ago), tail]
+        path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        return root
+
+    def context(self, sid: str, root: Path) -> str:
+        result = self.run_cli("--transcripts", str(root), "context", sid)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        return result.stdout
+
+    def advice(self, tokens: int, minutes_ago: float, tail: str = "") -> str:
+        self.run_cli("record", "E6", "--agent", "abc123", "--base", "abc")
+        return self.context("E6", self.write_transcript("abc123", tokens, minutes_ago, tail=tail))
+
+    def test_a_large_idle_worker_gets_a_fresh_worker(self) -> None:
+        out = self.advice(tokens=240_000, minutes_ago=30)
+        self.assertIn("context 240K tokens, idle 30 min", out)
+        self.assertIn("fresh: story-start --continue", out)
+
+    def test_the_cache_ttl_is_the_idle_threshold(self) -> None:
+        self.assertIn("fresh:", self.advice(tokens=200_000, minutes_ago=5.2))
+        self.tearDown(), self.setUp()
+        self.assertIn("resume:", self.advice(tokens=200_000, minutes_ago=4.8))
+
+    def test_150k_tokens_is_the_size_threshold(self) -> None:
+        self.assertIn("fresh:", self.advice(tokens=150_000, minutes_ago=30))
+        self.tearDown(), self.setUp()
+        self.assertIn("resume:", self.advice(tokens=149_999, minutes_ago=30))
+
+    def test_error_records_and_bad_lines_after_the_last_turn_are_skipped(self) -> None:
+        synthetic = json.dumps({"timestamp": "2026-10-07T10:00:00.000Z", "message": {
+            "model": "<synthetic>", "usage": {"input_tokens": 0, "cache_read_input_tokens": 0}}})
+        naive = json.dumps({"timestamp": "2026-10-07T10:00:00", "message": {"usage": {"input_tokens": 9}}})
+        odd = json.dumps({"timestamp": "yesterday", "message": {"usage": {"input_tokens": "n/a"}}})
+        out = self.advice(tokens=240_000, minutes_ago=30, tail="\n".join([synthetic, naive, odd, "[1]"]))
+        self.assertIn("context 240K tokens", out)
+        self.assertIn("fresh:", out)
+
+    def test_a_worker_without_a_transcript_is_resumed_as_usual(self) -> None:
+        self.run_cli("record", "E6", "--agent", "nofile", "--base", "abc")
+        out = self.context("E6", Path(self.tmp.name))
+        self.assertIn("no transcript with usage found for agent nofile", out)
+
+    def test_an_agent_id_with_glob_or_path_characters_is_refused(self) -> None:
+        for bad in ("*", "../x", "a?b"):
+            result = self.run_cli("record", "E6", "--agent", bad, "--base", "abc")
+            self.assertNotEqual(result.returncode, 0, bad)
+            self.assertIn("an agent id has only", result.stderr)
+        self.assertFalse(self.registry.exists())
 
 
 if __name__ == "__main__":

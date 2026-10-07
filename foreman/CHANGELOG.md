@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.8.0 (2026-10-07)
+
+Cost and quality changes, from an analysis of two weeks of transcripts (about 420 reviewer runs, 80 of them on
+Sonnet).
+- `dod-verifier` and `test-auditor` run on Sonnet (`model: sonnet`); their verdicts matched Opus on paired stories.
+  A prompt adds focus but doesn't narrow their scope. `story-finish` launches `dod-verifier` on Opus when a DoD item
+  needs domain judgement.
+- `workers.py context <ID>`: the worker's context size and idle time, from its transcript. A fix round goes to a
+  fresh worker (`--continue`) when the worker sat idle past its 5-minute prompt cache with 150K+ tokens, because
+  resuming it would rewrite its whole context to the cache.
+- `review_checklist` (config): a project file of recurring review findings. Workers check their staged diff against
+  it before running the checks, and `story-finish` adds a line when a kind of major finding comes back in a second
+  story.
+- `post_merge` (config): commands `story-finish` runs after a merge when the merged files match, taken from the
+  base branch's pre-merge config.
+- `story-finish`: one question for merge and push; after the third round's reviews still find new edge cases of the
+  same kind, the user gets a simpler design instead of a fourth round; CI is watched by a background
+  `gh run watch` instead of an agent.
+
 ## 0.7.0 (2026-10-07)
 
 - `story-start --continue <ID>` continues a story whose worker is gone, for example after a `/clear`: it removes the

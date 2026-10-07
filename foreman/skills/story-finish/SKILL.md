@@ -25,11 +25,11 @@ git merge-base --is-ancestor <base> story/<ID>-<slug> || echo "base has moved on
 git merge-tree --write-tree <base> story/<ID>-<slug> >/dev/null && echo "merges cleanly"
 ```
 
-If there's no branch or no commits, stop and report. If `merge-tree` reports conflicts, ask the worker (SendMessage,
-or `story-start --continue <ID>` when its agent id no longer answers) to run `git merge <base>` in its worktree, resolve the conflicts, rerun `checks` and
-commit; then review the new diff. Never rebase a story branch.
+If there's no branch or no commits, stop and report. If `merge-tree` reports conflicts, ask the worker (resumed or
+fresh, as `workers.py context` advises in step 3) to run `git merge <base>` in its worktree, resolve the conflicts,
+rerun `checks` and commit; then review the new diff. Never rebase a story branch.
 If the diff touches `.claude/foreman.json`, `.claude/settings*.json` or `.claude/hooks/`, say so to the user
-before the merge: `checks` and `format` are commands the hooks and agents run. If the worker's commit was blocked, give the user the exact
+before the merge: `checks`, `format` and `post_merge` are commands the hooks, the agents and you run. If the worker's commit was blocked, give the user the exact
 commands as one `!` line (see `story-start` › Tell the user). If the base branch has moved on, say so: the merge will
 be a real merge, which is fine unless files conflict.
 
@@ -43,6 +43,11 @@ be a real merge, which is fine unless files conflict.
 - **`foreman:test-auditor`**, when the DoD rests on tests: "Audit whether the tests of story `<ID>` (worktree
   `<path>`) prove its DoD." Run it again after a fix round that changed tests or the code they cover.
 
+`dod-verifier` and `test-auditor` run on Sonnet (their agent files say so): their work is checklist and mutation
+work, and on paired stories their verdicts matched Opus. Launch `dod-verifier` with `model: "opus"` when a DoD item
+needs domain judgement (a legal reading, a label's correctness, whether a text says what the design means), not
+only a check that something exists or passes.
+
 Relay each result as it arrives, in a few lines: the verdict, then the critical and major findings.
 
 ## 3. Fix rounds
@@ -50,11 +55,13 @@ Relay each result as it arrives, in a few lines: the verdict, then the critical 
 When any review is back with a FAIL, a critical or major finding, or minor findings worth fixing:
 - Wait for all the reviews of this round, then send **one** message to the worker with every finding: file and
   line, the failure, and the fix direction. Include the user's decisions on the worker's questions, and anything a
-  later story now needs. Find the worker with `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/workers.py show <ID>` and
-  SendMessage to its `agent_id` (this only works in the session that launched it). If that fails ("No
-  transcript found", after a `/clear` or in a new session), follow `story-start` › Continue (`--continue <ID>`)
-  with the findings as the task. Mark the round with
-  `workers.py set <ID> fix-round`, and `set <ID> reported` when the worker reports back.
+  later story now needs. Run `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/workers.py context <ID>` first:
+  - `resume`: SendMessage to the worker's `agent_id` (`workers.py show <ID>`; this only works in the session that
+    launched it). If that fails ("No transcript found", after a `/clear` or in a new session), continue as below.
+  - `fresh` (the worker sat idle past its 5-minute prompt cache with a large context, so resuming would rewrite all
+    of it): follow `story-start` › Continue (`--continue <ID>`) with the findings as the task. Resume instead when
+    a finding asks for the worker's own reasoning ("why did you choose X"), which a fresh worker doesn't have.
+  Mark the round with `workers.py set <ID> fix-round`, and `set <ID> reported` when the worker reports back.
 - Decisions that belong to the user (a trade-off, a label, a wording, a paid run) go to the user first, **one
   question at a time**, with your recommendation and why. Legal or domain decisions quote the source verbatim
   with its page and heading.
@@ -65,14 +72,22 @@ When any review is back with a FAIL, a critical or major finding, or minor findi
   regressions.
 - Severity labels (the security reviewer's) map onto this: CRITICAL and HIGH are major and are fixed before the
   merge; MEDIUM is fixed, or deferred with the user's agreement; LOW is minor.
-- Repeat until the DoD is DONE and no critical or major finding is open. Minor findings the user agrees to defer
-  go to the backlog in step 5.
+- Repeat until the DoD is DONE and no critical or major finding is open, with one exception: if the reviews of
+  the third round's fixes find new edge cases of the same kind (each fix exposing the next case), don't send a
+  fourth round. Tell the user, with a simpler design that removes the class of case, and let them choose. Minor
+  findings the user agrees to defer go to the backlog in step 5.
+- **Grow the checklist.** When `review_checklist` is set and a major finding is of a kind a worker could have
+  caught in its own diff, it isn't on the list yet, and the same kind was found in an earlier story too, add one
+  imperative line for it (with both story IDs) in the hand-over commit of step 5. One-off findings stay off the
+  list: every worker reads all of it.
 
 ## 4. Merge with the user's go-ahead
 
 Summarise in a small table: the DoD verdict, the reviews (findings per round, and "fixed"), the lane reviews. Name
-anything that will fail after the merge but isn't this story's. Then ask the user to confirm the merge. Merge from
-the main checkout, on the base branch (`git -C <main checkout> status` shows where you are).
+anything that will fail after the merge but isn't this story's. Check again whether the final branch touches
+`.claude/` (a fix round may have added it since step 1), and quote any changed `checks` or `post_merge` entries. Then ask the user to confirm the merge, and in the
+same question whether to push once the checks pass. Merge from the main checkout, on the base branch
+(`git -C <main checkout> status` shows where you are).
 
 ```bash
 git merge --no-ff story/<ID>-<slug> -m "merge: story <ID> <title>"
@@ -80,6 +95,15 @@ git merge --no-ff story/<ID>-<slug> -m "merge: story <ID> <title>"
 
 If the story added `docs/decisions/NNN-<slug>.md`, rename it to the next free number (and fix references to it)
 before running the checks.
+
+Then run the config's `post_merge` steps: each entry is `{"when": [<path globs>], "run": "<command>"}`. Take them
+from the base branch's config as it was before the merge (`git show ORIG_HEAD:.claude/foreman.json`), never from
+the merged copy, so a story branch can't add a command you run. Run an entry when a file the merge brought in
+(`git diff --name-only ORIG_HEAD HEAD`) matches one of its globs, matched as `fnmatch` does (`*` crosses `/`, so
+`eval/cases/**` matches every file under `eval/cases/`), in the listed order, from the main checkout. They
+regenerate what a merge can leave stale (a lockfile, a generated manifest, a seeded table). A step that makes paid
+calls counts against `cost_cap_usd`, as a worker's would: if it may spend more, ask the user first. If one changes tracked files, commit them as `chore: regenerate after merging <ID>`.
+If one fails, stop and tell the user, as for failing checks below.
 
 Then run every command in `checks` on the base branch. **Only if they all pass** (or the only failures are ones
 already known and not this story's, which you name), tick the story (the commit comes with the hand-over notes in step 5):
@@ -89,8 +113,10 @@ python3 ${CLAUDE_PLUGIN_ROOT}/scripts/backlog.py tick <ID> "<one-line outcome, f
 ```
 
 If the checks fail after the merge, don't tick. Tell the user what failed. The merge is local and not pushed, so the
-user decides whether to fix forward or undo it (`git reset --merge ORIG_HEAD` while it is the last commit and
-unpushed, else `git revert -m 1 <merge>`; `reset --hard` is blocked by the guards). For a sub-story of a grouped entry, `tick` only adds a note. Tick the
+user decides whether to fix forward or undo it (`git reset --merge <the base's commit before the merge>` while
+nothing is pushed, which also drops a `chore: regenerate` commit, else `git revert` that commit and
+`git revert -m 1 <merge>`; `reset --hard` is blocked by the guards). An undo doesn't undo a `post_merge` step's side
+effects outside git (a reseeded table): say which ran, and rerun them after the undo. For a sub-story of a grouped entry, `tick` only adds a note. Tick the
 group once every sub-story is merged.
 
 ## 5. Hand over
@@ -116,6 +142,8 @@ git branch -d story/<ID>-<slug>       # lowercase -d refuses to delete an unmerg
 python3 ${CLAUDE_PLUGIN_ROOT}/scripts/workers.py forget <ID>
 ```
 
-Worktrees branch from the local HEAD, so dependent stories can start without a push. Offer to push the base branch;
-after a push, watch the CI run (`gh run watch <id> --exit-status`) and report its result per job. Then run
-`backlog.py status` and name the stories this merge has just unblocked.
+Worktrees branch from the local HEAD, so dependent stories can start without a push. Push the base branch if the
+user said so at the merge, else offer to. After a push, watch the CI run with `gh run watch <id> --exit-status`
+as a background command (it notifies you when it exits, at no model cost; no agent needed), and report its
+result per job when it does. Meanwhile run `backlog.py status` and name the stories this merge has just
+unblocked.

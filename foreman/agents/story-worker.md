@@ -53,6 +53,8 @@ Read these, in order:
    `rg -n '^#' <file>` (or search its heading text), then `Read` just that line range. You can't start an agent, so
    you can't hand this to `doc-reader`; a hook may also block reading the whole file past a configured size.
 4. The files in its *Input*
+5. The file named by `review_checklist` in `.claude/foreman.json`, if set: the findings that reviews of earlier
+   stories kept sending back. Write your code so none of them applies.
 
 Then read the existing code your story builds on, and match its style, naming and comment density. Check library
 APIs against current documentation (for example with context7) before writing code against them.
@@ -79,7 +81,11 @@ APIs against current documentation (for example with context7) before writing co
 
 ## 4. Check, then commit
 
-Run every command in `checks`. All of them must pass. Then go through the DoD line by line and gather the evidence for each claim.
+With a `review_checklist`, first stage everything (`git add -A`) and read your whole diff, new files included
+(`git diff --staged <BASE_SHA>`), against each item that applies to it. Fix what you find.
+Then run every command in `checks`. All of them must pass. Then go through the DoD line by line and gather the evidence for each claim.
+Keep check output short in your context: run the checks with their quiet flags (for example `pytest -q`), and
+diagnose a failure with the failing test alone; once it passes, rerun every check.
 Commit on your branch with Conventional Commits messages. **Do not** push, merge, rebase onto the base branch,
 or edit `docs/BACKLOG.md`.
 
@@ -97,6 +103,7 @@ DoD evidence
 
 Checks: <each command: pass/fail, test counts; each failure marked "mine" or "pre-existing at BASE_SHA">
 Cost: <paid calls made, tokens and $; or "none">
+Checklist: <items that applied, and any hit you left in place, with why; or "no review_checklist">
 
 Needs user (if any): <exactly what to review, decide or run: one question each, with your recommendation;
                       commands as one `!` line>
