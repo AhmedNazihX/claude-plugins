@@ -26,13 +26,23 @@ the fix, does the test fail?"): then audit the tests those commits added or chan
 2. **Read each test.** It must assert the claim's behaviour, not just that code runs. A test that only asserts on a
    mock it configured itself, or asserts nothing, or is skipped / xfail, is **WEAK**.
 3. **Make a scratch copy set up like the worker's:**
+   Run `mktemp -d` on its own and note the path it prints; each Bash call is a fresh shell, so use that literal
+   path (`<S>` below is `<that path>/scratch`) in every later command, never a variable. Then, in one command:
    ```bash
-   S=$(mktemp -d)/scratch
-   git worktree add --no-checkout --detach "$S" story/<ID>-<slug>
-   git -C "$S" sparse-checkout set --no-cone '/*' '!/<deny>/' '/<allow>'   # only with a deny list
-   git -C "$S" checkout --detach story/<ID>-<slug>
+   git worktree add --no-checkout --detach "<S>" story/<ID>-<slug> \
+     && git -C "<S>" sparse-checkout set --no-cone '/*' '!/<deny path>' … '/<allow path>' … \
+     && git -C "<S>" checkout --detach story/<ID>-<slug>
    ```
-   Link each `link_files` entry from the main checkout (`ln -s`), and export `env` in each command.
+   Leave out the `sparse-checkout` line without a deny list. Write each pattern without a trailing `/` (a trailing
+   slash matches only folders, so a denied file would stay). If the command fails, remove what it created (step 6)
+   and report it; never run
+   a `git -C` with an empty or unchecked path, which would act on the main checkout. With a deny list, check with
+   `git -C "<S>" sparse-checkout list` and the Glob tool that every denied path, files included, is absent; if one
+   is present, remove the scratch worktree and report BLOCKED instead of auditing.
+   Link each `link_files` entry that exists in the main checkout (check with a lone `test -e "<main>/<path>"`) with
+   a lone `ln -s "<main>/<path>" "<S>/<path>"` (a path in
+   `link_files` may be a secrets file: a command that names one runs alone, nothing chained or piped, and secrets
+   files are never read), and export `env` in each command.
 4. **Baseline.** Run the covering tests in the scratch copy **unchanged**. They must pass. If one fails, the
    copy isn't like the worker's (a missing file, a service not running): mark its claims **N/A** with the error,
    and don't mutate for them, since a failure would prove nothing.
@@ -41,9 +51,9 @@ the fix, does the test fail?"): then audit the tests those commits added or chan
    it), delete the guard, invert the condition, return early. Run only the covering tests. They must **fail**, and
    fail on an assertion about the claim, not with an import or setup error.
    - Fails that way → **PROVEN**. Passes → **FALSE PASS**. Errors for another reason → **N/A** (say why).
-   - Restore the file (`git -C "$S" checkout -- <file>`) before the next mutation.
-6. **Clean up, always** (also after an error): `git worktree remove "$S"`; if it refuses because of test artifacts,
-   `rm -rf "$S"` and `git worktree prune`. Confirm the story's worktree status equals step 0's.
+   - Restore the file (`git -C "<S>" checkout -- <file>`) before the next mutation.
+6. **Clean up, always** (also after an error): `git worktree remove "<S>"`; if it refuses because of test artifacts,
+   `rm -rf "<S>"` and `git worktree prune`. Confirm the story's worktree status equals step 0's.
 
 Keep it cheap: at most one or two mutations per claim, only the covering tests, no live or paid calls (tests use
 recorded responses; if a covering test would call a live service, mark it N/A and say why).

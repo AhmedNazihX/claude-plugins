@@ -37,11 +37,11 @@ be a real merge, which is fine unless files conflict.
 
 - **`foreman:dod-verifier`**: "Verify story `<ID>` at worktree `<path>` (branch `story/<ID>-<slug>`). User approvals so
   far: <each approval the user gave for this story, with its date, or 'none'>. Known failures that aren't this
-  story's: <if any, with why>."
+  story's: <if any, with why>. Pending the orchestrator's recording (not open): <DoD items, or 'none'>."
 - Every agent in `reviewers`: "Review the diff `<base>...story/<ID>-<slug>`." Run it in the worktree, if one exists.
 - Every agent in `lanes.<lane>.reviewers` for this story's lane: "Audit branch `story/<ID>-<slug>`."
 - **`foreman:test-auditor`**, when the DoD rests on tests: "Audit whether the tests of story `<ID>` (worktree
-  `<path>`) prove its DoD." Run it again after a fix round that changed tests or the code they cover.
+  `<path>`) prove its DoD. Tests waiting for the orchestrator's recording (pending, not weak): <tests, or 'none'>." Run it again after a fix round that changed tests or the code they cover.
 
 `dod-verifier` and `test-auditor` run on Sonnet (their agent files say so): their work is checklist and mutation
 work, and on paired stories their verdicts matched Opus. Launch `dod-verifier` with `model: "opus"` when a DoD item
@@ -72,6 +72,7 @@ When any review is back with a FAIL, a critical or major finding, or minor findi
   regressions.
 - Severity labels (the security reviewer's) map onto this: CRITICAL and HIGH are major and are fixed before the
   merge; MEDIUM is fixed, or deferred with the user's agreement; LOW is minor.
+- A DoD item that waits only on the recording (see Paid recordings last) isn't open and gets no fix round.
 - Repeat until the DoD is DONE and no critical or major finding is open, with one exception: if the reviews of
   the third round's fixes find new edge cases of the same kind (each fix exposing the next case), don't send a
   fourth round. Tell the user, with a simpler design that removes the class of case, and let them choose. Minor
@@ -80,6 +81,17 @@ When any review is back with a FAIL, a critical or major finding, or minor findi
   caught in its own diff, it isn't on the list yet, and the same kind was found in an earlier story too, add one
   imperative line for it (with both story IDs) in the hand-over commit of step 5. One-off findings stay off the
   list: every worker reads all of it.
+- **Paid recordings last.** When the story's tests replay recorded responses from a paid service (model calls,
+  snapshots of a hosted API), a later fix that changes the request makes the recording stale. So record once, after
+  every review and fix round is done and a no-cost check passes (for example the inputs the recording will send
+  look right for every case), before step 4. You run it in the story's worktree, not the worker, within
+  `cost_cap_usd` or the user's go-ahead above it. Don't read the recording run's totals if the tests were marked
+  as waiting for it: remove those marks (only on the tests just recorded; the worker's report names them), run the
+  tests again without recording, and report that run. Commit the recordings and the removed marks on the story
+  branch (`git -C <worktree> commit`), then rerun the checks, `dod-verifier` and `test-auditor` on that commit
+  (replays are free). When a recording fails,
+  diagnose it from what was recorded before spending more; don't keep re-recording in the hope that a case passes,
+  since one lucky sample proves nothing. Never trim the review panel to save the recording's cost.
 
 ## 4. Merge with the user's go-ahead
 

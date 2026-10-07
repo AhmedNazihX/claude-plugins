@@ -27,19 +27,31 @@ Run each step below as its own tool call, and wait for its result before the nex
 parallel batch: if the sparse checkout is refused, the branch must not have been renamed yet.
 
 1. **Check the base.** Run `git merge-base --is-ancestor <BASE_SHA> HEAD`. If it fails, stop and report `BLOCKED: wrong base`.
-2. **Sparse checkout,** only if `DENY` isn't empty. Do this *before* renaming the branch: after the rename, the lane
-   guard blocks every command that mentions a denied folder, including this one.
-   `git sparse-checkout set --no-cone '/*' '!/<deny>/' … '/<allow>' …`
-   Then check that the denied folders are gone, apart from the allowed exceptions. If the command is blocked,
+2. **Sparse checkout,** only if `DENY` isn't empty. Do this *before* renaming the branch: on a story branch the
+   lane guard blocks every `sparse-checkout` command except `list`.
+   Write the patterns, one per line (`/*`, then `!/<path>` for each `DENY` path, then `/<path>` for each `ALLOW`
+   path, never with a trailing `/`: a trailing slash matches only folders, so a denied file would stay), with the
+   Write tool (read it first if it already exists), to a file named for your story outside the worktree (for example `<your scratchpad>/sparse-<STORY>.txt`;
+   other workers start at the same moment, so never a shared name). Then run, as one bare command with no `cd` and
+   nothing chained: `git sparse-checkout set --no-cone --stdin < <that file>`. Patterns on the command line can be
+   refused by the harness's worktree check (it may read a folder name in them as a command); through `--stdin` they
+   haven't been. If the `--stdin` form is refused too, report it like any block.
+   Then check, with `git sparse-checkout list` and the Glob tool, that **every** `DENY` path, files included, is
+   gone, and every `ALLOW` path is there. If the command is blocked, or the check finds a denied path present,
    stop at once, before step 3: don't rename the branch, don't retry variants, and don't read, list or search
-   anything else. Report `BLOCKED: sparse checkout` with the exact command and the guard's message. A worktree you
-   leave unchanged is removed when you stop, so the orchestrator relaunches the story rather than resuming you.
+   anything else. Report `BLOCKED: sparse checkout` with the exact command, the patterns file's path and contents,
+   and the guard's message or what the check found. A worktree you leave unchanged is removed when you stop, so the orchestrator relaunches the story rather
+   than resuming you.
 3. **Rename the branch.** `git branch -m story/<STORY>-<SLUG>`
    With `CONTINUE`, don't rename: note the current branch name, run `git switch <branch>`, and check that
    `git rev-parse HEAD` is the given head sha (if either fails, stop and report `BLOCKED: continue` with the
    output). Your worktree is now on the story branch with its commits. Put the old branch name in your report, so
    the orchestrator can delete it. Then do the task you were given, not the whole story again.
-4. **Link the local files.** For each path in `link_files` that exists in `MAIN`, run `ln -s "<MAIN>/<path>" <path>`.
+4. **Link the local files.** For each path in `link_files`, first check it exists in `MAIN` with a lone
+   `test -e "<MAIN>/<path>"`, then link it with a lone `ln -s "<MAIN>/<path>" <path>`. A path in `link_files` may be
+   a secrets file, and a command that names one runs **alone**, with nothing chained or piped (no `&&`, `;`, `|`,
+   loop or `cd`): secrets files are never read, and the project's guard refuses a command that could read one.
+   Don't list or read a linked secrets file to check it; the project's own commands show whether its settings load.
    Never open, print or copy secret files. Export each `env` entry in every shell command that needs it, with
    `{MAIN}` replaced by the main checkout's path. Each Bash call starts a fresh shell, so export them each time.
 
@@ -66,6 +78,10 @@ APIs against current documentation (for example with context7) before writing co
   migrations and other shared resources, as given in `CLAUDE.md`.
 - Hooks enforce the project's gates and lane rules. If a hook or a permission check blocks you, don't look for a
   way around it. Stop and report the block with the exact command, as one line (several commands chained with `&&`).
+- **Recordings are the orchestrator's.** Don't record the responses your tests replay (cassettes, snapshots of a
+  paid service): a review fix would make them stale. Write the tests, mark what needs a recording, and put the
+  record command and the marked tests under "Needs user"; the orchestrator records after the reviews. A story whose
+  only open items wait for that recording is still DONE.
 - **Paid calls:** estimate the cost before any live call (tokens × price, or the provider's rate). Spend up to
   `COST_CAP_USD` in total, and log what you spent. Above it, or for a full run the DoD asks for, stop and report
   NEEDS USER with the estimate and the exact command. Tests use recorded responses, never live calls.

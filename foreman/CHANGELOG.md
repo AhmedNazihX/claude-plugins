@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.9.0 (2026-10-07)
+
+- Worktree setup that no longer needs the user: workers pass the sparse-checkout patterns through `--stdin` from a
+  per-story file, since patterns on the command line could be refused by the harness's worktree check, and make each
+  `link_files` link as a lone `ln -s` after a lone `test -e`, since a secrets guard blocks a command that names a
+  secrets file next to any reading command. `story-start` names those forms when it relaunches a worker that stopped
+  at setup.
+- Fixed: the sparse-checkout template wrote `!/<deny>/` with a trailing slash, which matches only folders, so a
+  denied **file** (such as a split file) stayed checked out. Patterns now never end in `/`, and the worker (and the
+  test-auditor) checks that every denied path, files included, is gone, stopping before the branch rename if not.
+- The test-auditor's scratch copy uses the literal path `mktemp -d` printed (a variable doesn't survive between
+  Bash calls, and `git -C ""` acts on the main checkout) and stops if the setup fails.
+- `story-finish` › Paid recordings last: record once, after every review and fix round and a no-cost check, before
+  the merge step; the orchestrator runs it, commits the recordings and re-verifies; diagnose a failed recording from
+  what was recorded instead of re-recording until a case passes. `story-worker` leaves recordings to the
+  orchestrator, and a story waiting only on one is DONE; a DoD item pending the recording gets no fix round.
+- `story-start`: a setup block is relaunched (with the right form named), then asked about; the `!` line route is
+  for blocks after the worker's first edit.
+
 ## 0.8.0 (2026-10-07)
 
 Cost and quality changes, from an analysis of two weeks of transcripts (about 420 reviewer runs, 80 of them on
