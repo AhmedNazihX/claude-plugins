@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.9.1 (2026-10-07)
+
+- `story-finish`: after a push, a background Haiku agent watches the CI runs and reports each job, with the failing
+  step and error for a failed one (user's choice; replaces 0.8.0's bare `gh run watch`).
+
 ## 0.9.0 (2026-10-07)
 
 - Worktree setup that no longer needs the user: workers pass the sparse-checkout patterns through `--stdin` from a

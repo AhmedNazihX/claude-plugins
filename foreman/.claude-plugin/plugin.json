@@ -1,6 +1,6 @@
 {
   "name": "foreman",
-  "version": "0.9.0",
+  "version": "0.9.1",
   "description": "From an idea to a merged backlog: interview the user, write the design, break it into atomic stories, and run them with parallel worktree agents that are verified, reviewed and merged with the user's go-ahead.",
   "author": {
     "name": "Ahmed Nazih"
