@@ -155,8 +155,8 @@ python3 ${CLAUDE_PLUGIN_ROOT}/scripts/workers.py forget <ID>
 ```
 
 Worktrees branch from the local HEAD, so dependent stories can start without a push. Push the base branch if the
-user said so at the merge, else offer to. After a push, hand the CI runs to a background watcher agent on Haiku
-(`model: "haiku"`): it waits with `gh run watch <id> --exit-status`, then reports each run's and job's conclusion,
-and for a failed job the failing step or test and its error from `gh run view <id> --log-failed` (no fixes, no
-edits). Relay its report per job when it arrives. Meanwhile run `backlog.py status` and name the stories this
-merge has just unblocked.
+user said so at the merge, else offer to. After a push, if the base branch has CI (`.github/workflows/*.yml` or
+`*.yaml`), launch `foreman:ci-watcher` in the background with the repo path and the pushed head's full sha
+(`git rev-parse <base>`: the last commit pushed, which is the hand-over commit, not the merge), and relay
+its report per job when it arrives; without workflows, say there is no CI to watch. Meanwhile run
+`backlog.py status` and name the stories this merge has just unblocked.

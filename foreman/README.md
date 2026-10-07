@@ -57,8 +57,8 @@ before DONE, and the list grows when the same kind of major finding comes back i
 (responses the tests replay) are made once, by the orchestrator, after every review round, so a fix never makes
 them stale. Then you're asked to merge (and whether to push). After the merge, the config's `post_merge` steps
 regenerate what the merge left stale, the checks run on the base branch, the story is ticked, and every follow-up
-is written as a note on the backlog story it affects, so the next worker reads it. After a push, a Haiku agent
-watches CI and reports each job.
+is written as a note on the backlog story it affects, so the next worker reads it. After a push, `ci-watcher`
+(Haiku, read-only) watches the repo's GitHub Actions runs and reports each job; a repo without workflows skips it.
 
 ## What stays with you
 
@@ -86,7 +86,7 @@ relevant passages, and `doc-guard.sh` blocks reading one whole past the config's
 | Part | Items |
 | --- | --- |
 | Skills | `next`, `kickoff`, `work-breakdown`, `setup`, `guardrails`, `status`, `story-start` (with `--continue`), `story-finish`, `decision`, `handover` |
-| Agents | `story-worker`, `dod-verifier`, `diff-reviewer`, `security-reviewer`, `test-auditor`, `lane-auditor`, `backlog-reviewer`, `doc-reader` |
+| Agents | `story-worker`, `dod-verifier`, `diff-reviewer`, `security-reviewer`, `test-auditor`, `lane-auditor`, `backlog-reviewer`, `doc-reader`, `ci-watcher` |
 | Hooks | `gate.sh` (nothing under a path until a given file is committed), `lane-guard.sh` (a lane never sees its denied folders), `worker-guard.sh` (a worker never pushes, rebases, merges another branch, moves to another branch or edits the backlog; its one allowed move is `git switch` onto a story branch when continuing), `format.sh` (formats edited files with the project's formatter), `doc-guard.sh` (no whole `Read` of a long `.md` file) |
 | Scripts | `backlog.py` (check, plan, status, show, deps, info, tick, note, set-deps, add, graph), `workers.py` (record, set, list, show, forget, context) |
 
@@ -116,7 +116,7 @@ claude plugin validate .
 
 ## Version
 
-0.9.1. See [CHANGELOG.md](CHANGELOG.md), which also has the migration steps for projects that used the plugin under
+0.10.0. See [CHANGELOG.md](CHANGELOG.md), which also has the migration steps for projects that used the plugin under
 its old name, `story-workflow`.
 
 ## Credits
