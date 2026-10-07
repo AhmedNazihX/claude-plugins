@@ -6,7 +6,8 @@
 # switch it off. There it blocks what only the orchestrator may do:
 #   - push, rebase, pull (except `git pull <remote> <base>`), merging anything but the base branch (`git merge
 #     <base>` stays allowed: story-finish asks for it to resolve conflicts), moving to another branch or commit,
-#     creating branches, `branch -f` and `update-ref`;
+#     creating branches, `branch -f` and `update-ref`. One move is allowed: `git switch story/<ID>-<slug>` from a
+#     branch that isn't a story branch, so a relaunched worker can continue a story (story-start › Continue);
 #   - editing docs/BACKLOG.md (file tools, shell writes, or backlog.py tick / note / set-deps / add).
 # Text inside quotes (commit messages, echo) is ignored. The base branch comes from .claude/foreman.json
 # (`base_branch`, default main). Shell checks are best effort.
@@ -48,6 +49,7 @@ case "$TOOL" in
     if echo "$LOWER" | grep -qE '(>+|(^|[[:space:];&|])tee([[:space:]]+-a)?|(^|[[:space:];&|])(sed|perl)[[:space:]]+(-[a-z]*i|--in-place))[^;&|]*docs/backlog\.md'; then
       block "writing docs/BACKLOG.md."
     fi
+    SWITCHED=""
     while IFS= read -r part; do
       read -ra T <<<"$part"
       i=0
@@ -110,6 +112,14 @@ case "$TOOL" in
           t=${TARGETS[0]}
           [ -e "$TOP/$t" ] || [ -e "${CWD:-$TOP}/$t" ] && continue # a path: restoring files is fine
           if git -C "$TOP" rev-parse --verify --quiet "$t^{commit}" >/dev/null; then
+            # Continue a story: a fresh worktree (not yet on a story branch) switches onto an existing story branch,
+            # in its own checkout (no `git -C`) and once per command ($BRANCH is read once, before any switch).
+            if [ "$SUB" = switch ] && [ -z "$GDIR" ] && [ -z "$SWITCHED" ] &&
+              [[ "$t" =~ ^story/[A-Z]{1,3}[0-9]+[a-z]?- ]] && [[ ! "$BRANCH" =~ ^story/ ]] &&
+              git -C "$TOP" show-ref --verify --quiet "refs/heads/$t"; then
+              SWITCHED=1
+              continue
+            fi
             block "git $SUB $t (a worker stays on its story branch; check old commits in a scratch worktree)."
           fi ;;
       esac

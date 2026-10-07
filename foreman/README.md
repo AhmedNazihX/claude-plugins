@@ -17,7 +17,7 @@ DESIGN.md     BACKLOG.md                                        ready       agen
 | Skills | `next`, `kickoff`, `work-breakdown`, `setup`, `guardrails`, `status`, `story-start`, `story-finish`, `decision`, `handover` |
 | Agents | `story-worker` (one story, own worktree), `dod-verifier`, `diff-reviewer`, `security-reviewer`, `backlog-reviewer`, `lane-auditor`, `test-auditor`, `doc-reader` (looks up a fact in a long `.md` file instead of loading it whole) |
 | Hooks | `gate.sh` (nothing under a path until a file is committed), `lane-guard.sh` (a lane never sees some folders), `format.sh` (formats edited files with the project's formatter, per folder), `worker-guard.sh` (a worker subagent never pushes, rebases, merges other branches or edits the backlog), `doc-guard.sh` (a long `.md` file is never `Read` whole) |
-| Scripts | `scripts/backlog.py`: check, plan, status, show, deps, info, tick, note, set-deps, add, graph; `scripts/workers.py`: a registry of the story workers in flight (agent id, base, worktree, brief, state) in `.claude/worktrees/workers.json`, so a cleared session can resume them (stdlib only) |
+| Scripts | `scripts/backlog.py`: check, plan, status, show, deps, info, tick, note, set-deps, add, graph; `scripts/workers.py`: a registry of the story workers in flight (agent id, base, worktree, brief, state) in `.claude/worktrees/workers.json`, so a cleared session can find them and continue their stories with `story-start --continue` (stdlib only) |
 
 ## Long documents stay out of context
 

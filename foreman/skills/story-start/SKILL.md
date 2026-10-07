@@ -1,13 +1,13 @@
 ---
 name: story-start
-description: Starts one or more backlog stories — checks their deps and the parallel-work rules (Solo, shared Resources, lane isolation), then launches one story-worker agent per story in its own git worktree on a story/<ID>-<slug> branch. Use when the user says to start, launch, kick off or work on a story or a wave ("/story-start C1", "start F2 F3 F4").
-argument-hint: "<ID> [ID ...]"
+description: Starts one or more backlog stories — checks their deps and the parallel-work rules (Solo, shared Resources, lane isolation), then launches one story-worker agent per story in its own git worktree on a story/<ID>-<slug> branch; with --continue, puts a fresh worker on a story branch whose worker is gone. Use when the user says to start, launch, kick off or work on a story or a wave ("/story-start C1", "start F2 F3 F4").
+argument-hint: "<ID> [ID ...] | --continue <ID>"
 ---
 
 # Start stories: $ARGUMENTS
 
 You are the **orchestrator**, the main session. You don't implement stories. You check that each one can start,
-then launch one `foreman:story-worker` agent per story. Settings: `.claude/foreman.json` (`base_branch`, `lanes`, `stories`).
+then launch one `foreman:story-worker` agent per story. With `--continue <ID>`, skip to section 5. Settings: `.claude/foreman.json` (`base_branch`, `lanes`, `stories`).
 
 ## 1. Check the whole set before launching anything
 
@@ -101,3 +101,36 @@ edit), its worktree is removed when it stops, so a `!` line aimed at that path f
 `git branch --list 'story/<ID>-*'`, delete an empty leftover story branch with `git branch -d` (it has no commits
 past the base), and relaunch the story with a fresh worker. If the same guard refuses the sparse checkout again,
 show the user the guard's message and ask how to proceed; don't work around it.
+
+## 5. Continue a story whose worker is gone (`--continue <ID>`)
+
+An agent id only reaches its worker from the session that launched it: after a `/clear`, `/compact` or a new
+session, SendMessage to a recorded id fails ("No transcript found"). The story lives on in its branch and worktree.
+A fresh worker always gets a new worktree, and a branch can be checked out in one worktree only, so free the branch
+first. Do this only for a worker that has stopped: its recorded state is `reported`, `waiting-user` or `fix-round`
+with its report in, never `running`. If you're not sure it stopped, ask the user. From the main checkout:
+
+```bash
+python3 ${CLAUDE_PLUGIN_ROOT}/scripts/workers.py show <ID>     # brief, worktree, base
+git -C <old worktree> status --porcelain                       # must be empty
+git -C <old worktree> log -1 --format=%H                       # HEAD_SHA
+git worktree remove <old worktree>                             # keeps the branch; never --force
+```
+
+If `status` shows changes, stop: they are the old worker's uncommitted work. Show them to the user and ask whether
+to commit them (as the user, with a `!` line) or drop them. Never remove the worktree while it has changes.
+If `workers.py list` says `worktree GONE`, skip these three commands: take `HEAD_SHA` from
+`git rev-parse story/<ID>-<slug>`; there is nothing to remove.
+
+Then launch one `foreman:story-worker` with the recorded brief (same `STORY`, `SLUG`, `BASE_SHA`, `DENY`, `ALLOW`;
+`PARALLEL` as it is now), plus:
+
+```
+CONTINUE: story/<ID>-<slug> <HEAD_SHA>
+Story notes: <the story's backlog notes since launch, from `backlog.py show <ID>`>
+Task: <what to do now: the fix round's findings, the user's decisions, or "finish the story">
+```
+
+`workers.py record` it again with the new agent id and worktree (the same `record` call as in section 3, with this
+prompt as the brief). When it reports, delete the leftover branch it names with `git branch -d <branch>` if it still
+exists (it points at a base-branch commit, so `-d` is enough). If `-d` refuses, leave the branch and tell the user.

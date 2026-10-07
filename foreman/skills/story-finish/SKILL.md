@@ -26,7 +26,7 @@ git merge-tree --write-tree <base> story/<ID>-<slug> >/dev/null && echo "merges 
 ```
 
 If there's no branch or no commits, stop and report. If `merge-tree` reports conflicts, ask the worker (SendMessage,
-or a fix in the same worktree) to run `git merge <base>` in its worktree, resolve the conflicts, rerun `checks` and
+or `story-start --continue <ID>` when its agent id no longer answers) to run `git merge <base>` in its worktree, resolve the conflicts, rerun `checks` and
 commit; then review the new diff. Never rebase a story branch.
 If the diff touches `.claude/foreman.json`, `.claude/settings*.json` or `.claude/hooks/`, say so to the user
 before the merge: `checks` and `format` are commands the hooks and agents run. If the worker's commit was blocked, give the user the exact
@@ -51,9 +51,9 @@ When any review is back with a FAIL, a critical or major finding, or minor findi
 - Wait for all the reviews of this round, then send **one** message to the worker with every finding: file and
   line, the failure, and the fix direction. Include the user's decisions on the worker's questions, and anything a
   later story now needs. Find the worker with `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/workers.py show <ID>` and
-  SendMessage to its `agent_id` (this works from a cleared session too). If that fails, start a fresh
-  `foreman:story-worker` in the same worktree: give it the recorded brief, the story's backlog notes, the branch
-  head, and the findings, then `workers.py record` it again with the new agent id. Mark the round with
+  SendMessage to its `agent_id` (this only works in the session that launched it). If that fails ("No
+  transcript found", after a `/clear` or in a new session), follow `story-start` › Continue (`--continue <ID>`)
+  with the findings as the task. Mark the round with
   `workers.py set <ID> fix-round`, and `set <ID> reported` when the worker reports back.
 - Decisions that belong to the user (a trade-off, a label, a wording, a paid run) go to the user first, **one
   question at a time**, with your recommendation and why. Legal or domain decisions quote the source verbatim

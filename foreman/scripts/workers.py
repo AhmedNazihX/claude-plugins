@@ -16,8 +16,9 @@ Usage (from anywhere inside the repo, the main checkout or a story worktree):
   workers.py forget <ID> remove the entry (after the merge and the worktree cleanup)
 Options: --registry PATH (default: <main checkout>/.claude/worktrees/workers.json)
 
-A new session resumes a worker with SendMessage to the recorded agent id. If that fails (the agent is gone),
-it starts a fresh worker in the same worktree with `show <ID>`'s brief plus the story's backlog notes.
+An agent id reaches its worker only from the session that launched it. A new session continues the story with
+a fresh worker (story-start --continue): it removes the old, clean worktree and the new worker switches onto the
+story branch, with `show <ID>`'s brief plus the story's backlog notes.
 """
 
 from __future__ import annotations
