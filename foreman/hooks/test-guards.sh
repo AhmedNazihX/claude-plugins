@@ -157,6 +157,19 @@ git -C "$W" checkout -q --detach 2>/dev/null
 run "$WG" 2 "$(bash_in "$W" "git push origin HEAD:main")"                 "a detached worktree still can't push"
 run "$WG" 2 "$(file_in Edit "$W" "$W/docs/BACKLOG.md")"                   "a detached worktree still can't edit the backlog"
 git -C "$W" checkout -q story/B4-cases 2>/dev/null
+# Continue a story (0.7.0): a relaunched worker's fresh worktree switches onto the existing story branch, once.
+FRESH="$R/.claude/worktrees/agent-fresh"
+git -C "$R" worktree add -q -b worktree-agent-fresh "$FRESH" 2>/dev/null
+run "$WG" 0 "$(bash_in "$FRESH" "git switch story/C2-guidelines")"        "a fresh worker switches onto a story branch"
+run "$WG" 2 "$(bash_in "$FRESH" "git checkout story/C2-guidelines")"      "…but not with checkout"
+run "$WG" 2 "$(bash_in "$FRESH" "git switch main")"                       "a fresh worker can't switch to main"
+run "$WG" 2 "$(bash_in "$FRESH" "git switch -c story/C2-guidelines-2")"   "a fresh worker can't create a story branch"
+run "$WG" 2 "$(bash_in "$W" "git switch story/C2-guidelines")"            "a worker on a story branch can't switch stories"
+# Found in the 0.7.0 review.
+run "$WG" 2 "$(bash_in "$FRESH" "git -C $W switch story/C2-guidelines")"  "a fresh worker can't switch another worktree with -C"
+run "$WG" 2 "$(bash_in "$FRESH" "git switch story/C2-guidelines && git switch story/C1-parser")" \
+  "a fresh worker can't chain two switches"
+git -C "$R" worktree remove "$FRESH" 2>/dev/null
 # Found in the 0.3.4 trial: the orchestrator's shell was still in a worktree after `cd <worktree> && uv run pytest`.
 MERGE="git merge --no-ff story/B4-cases -m 'merge: story B4'"
 run "$WG" 0 "$(jq -nc --arg c "cd $R && $MERGE" --arg d "$W" '{tool_name:"Bash",cwd:$d,tool_input:{command:$c}}')" \

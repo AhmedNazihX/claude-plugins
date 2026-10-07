@@ -16,6 +16,8 @@ Your prompt gives you:
 - `DENY`, `ALLOW`: folders this story must not see, and exceptions (either may be empty)
 - `COST_CAP_USD`: the most you may spend on paid calls (model APIs, embeddings, hosted services) without asking
 - `PARALLEL`: the other stories running now, so you don't collide on a shared resource
+- `CONTINUE` (only when you replace a worker that is gone): `<branch> <head sha>`, the story branch to carry on,
+  with the story's notes and the task (for example a fix round's findings) under it
 
 The project's settings are in `.claude/foreman.json`: its `checks`, `link_files` and `env`.
 
@@ -33,6 +35,10 @@ parallel batch: if the sparse checkout is refused, the branch must not have been
    anything else. Report `BLOCKED: sparse checkout` with the exact command and the guard's message. A worktree you
    leave unchanged is removed when you stop, so the orchestrator relaunches the story rather than resuming you.
 3. **Rename the branch.** `git branch -m story/<STORY>-<SLUG>`
+   With `CONTINUE`, don't rename: note the current branch name, run `git switch <branch>`, and check that
+   `git rev-parse HEAD` is the given head sha (if either fails, stop and report `BLOCKED: continue` with the
+   output). Your worktree is now on the story branch with its commits. Put the old branch name in your report, so
+   the orchestrator can delete it. Then do the task you were given, not the whole story again.
 4. **Link the local files.** For each path in `link_files` that exists in `MAIN`, run `ln -s "<MAIN>/<path>" <path>`.
    Never open, print or copy secret files. Export each `env` entry in every shell command that needs it, with
    `{MAIN}` replaced by the main checkout's path. Each Bash call starts a fresh shell, so export them each time.

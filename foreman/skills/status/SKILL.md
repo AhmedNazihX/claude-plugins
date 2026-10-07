@@ -29,7 +29,8 @@ Settings: `.claude/foreman.json` (`base_branch`, `max_review_stories`, default 2
    - **Rules:** any entry in the config's `guardrails` with an empty `enforced_by` and no `note`, and any decision
      record newer than the registry that states a rule. Offer the `guardrails` skill for them.
    - **In progress:** each story with its worktree path, if it has one, and its recorded worker (state, agent id,
-     what it waits on). A worker recorded in an earlier session is resumed with SendMessage to that agent id; a
+     what it waits on). A worker recorded in an earlier session can't be reached by its agent id (ids only work in
+     the session that launched them): continue it with `/foreman:story-start --continue <ID>` when it has work to do. A
      `worktree GONE` entry or a story branch with no record is something to reconcile (relaunch, or `forget`).
    - **Ready:** a table with ID, title, type and lane. Mark `human` and `mixed` stories (they need the user's
      time), stories with a `<resource>?` hint (they may change a shared resource: read the story to confirm), and

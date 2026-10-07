@@ -23,9 +23,10 @@ python3 ${CLAUDE_PLUGIN_ROOT}/scripts/workers.py list   # the story workers on r
 
 Also list agents you started that haven't reported (reviewers aren't in the registry). For each item in flight, say
 what it is and what it waits on. Don't clear with an agent **running**: its report would arrive in a session that
-doesn't know the story. Workers that have reported and wait on a review round, a recording or the user can stay
-open across a clear: make sure each one is in the registry with its current state (`workers.py set <ID> <state>
---note "<what it waits on>"`, `record` any that are missing), so the next session can resume it by its agent id.
+doesn't know the story. A worker that has reported and waits on a review round, a recording or the user can be left
+across a clear, but its agent id won't reach it from the next session: make sure it's in the registry with its
+current state (`workers.py set <ID> <state> --note "<what it waits on>"`, `record` any that are missing) and has
+committed everything, so the next session can continue the story with `/foreman:story-start --continue <ID>`.
 
 ## 2. Move what only the conversation knows
 
