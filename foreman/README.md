@@ -53,10 +53,12 @@ Findings go back to the worker as **one** fix round; a major finding gets its fi
 the loop repeats until the DoD is met and nothing major is open. A worker that has sat idle with a large context is
 replaced by a fresh one for the fix round (`workers.py context` decides), and a third round that still opens new
 edge cases goes to you with a simpler design. Workers check their diff against the project's `review_checklist`
-before DONE, and the list grows when the same kind of major finding comes back in a second story. Then you're asked to merge (and whether to
-push). After the merge, the config's `post_merge` steps regenerate what the merge left stale, the checks run on the
-base branch, the story is ticked, and every follow-up is written as a note on the backlog story it affects, so the
-next worker reads it.
+before DONE, and the list grows when the same kind of major finding comes back in a second story. Paid recordings
+(responses the tests replay) are made once, by the orchestrator, after every review round, so a fix never makes
+them stale. Then you're asked to merge (and whether to push). After the merge, the config's `post_merge` steps
+regenerate what the merge left stale, the checks run on the base branch, the story is ticked, and every follow-up
+is written as a note on the backlog story it affects, so the next worker reads it. After a push, a Haiku agent
+watches CI and reports each job.
 
 ## What stays with you
 
@@ -86,7 +88,7 @@ relevant passages, and `doc-guard.sh` blocks reading one whole past the config's
 | Skills | `next`, `kickoff`, `work-breakdown`, `setup`, `guardrails`, `status`, `story-start` (with `--continue`), `story-finish`, `decision`, `handover` |
 | Agents | `story-worker`, `dod-verifier`, `diff-reviewer`, `security-reviewer`, `test-auditor`, `lane-auditor`, `backlog-reviewer`, `doc-reader` |
 | Hooks | `gate.sh` (nothing under a path until a given file is committed), `lane-guard.sh` (a lane never sees its denied folders), `worker-guard.sh` (a worker never pushes, rebases, merges another branch, moves to another branch or edits the backlog; its one allowed move is `git switch` onto a story branch when continuing), `format.sh` (formats edited files with the project's formatter), `doc-guard.sh` (no whole `Read` of a long `.md` file) |
-| Scripts | `backlog.py` (check, plan, status, show, deps, info, tick, note, set-deps, add, graph), `workers.py` (record, set, list, show, forget) |
+| Scripts | `backlog.py` (check, plan, status, show, deps, info, tick, note, set-deps, add, graph), `workers.py` (record, set, list, show, forget, context) |
 
 Each project keeps only its own facts: `docs/DESIGN.md`, `docs/BACKLOG.md`, `docs/decisions/`,
 `.claude/foreman.json`, and any project-specific skills, agents and rules.
@@ -96,8 +98,10 @@ Each project keeps only its own facts: `docs/DESIGN.md`, `docs/BACKLOG.md`, `doc
 - Claude Code loads skills and agent definitions once per session. After updating the plugin, start a new session
   before relying on new skill or agent behaviour (hooks take effect at once).
 - `doc-guard.sh` guards the `Read` tool only; a shell command that prints a file isn't checked.
-- In a lane with denied folders, the worker's sparse checkout must run as one bare `git sparse-checkout set …`
-  command: Claude Code's worktree isolation check refuses it when it is chained after a `cd`.
+- In a lane with denied folders, the worker passes the sparse-checkout patterns through `--stdin` from a
+  per-story file: Claude Code's worktree isolation check could refuse patterns on the command line. Each
+  `link_files` link runs as a lone command, since the secrets guard refuses a command that names a secrets file
+  next to any reading command.
 - Hook checks of shell commands are best effort; file-tool checks are exact.
 
 ## Tests
@@ -112,7 +116,7 @@ claude plugin validate .
 
 ## Version
 
-0.7.0. See [CHANGELOG.md](CHANGELOG.md), which also has the migration steps for projects that used the plugin under
+0.9.1. See [CHANGELOG.md](CHANGELOG.md), which also has the migration steps for projects that used the plugin under
 its old name, `story-workflow`.
 
 ## Credits
