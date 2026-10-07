@@ -48,9 +48,13 @@ Relay each result as it arrives, in a few lines: the verdict, then the critical 
 ## 3. Fix rounds
 
 When any review is back with a FAIL, a critical or major finding, or minor findings worth fixing:
-- Wait for all the reviews of this round, then send **one** message to the worker (SendMessage, if it's still
-  available; otherwise start a fix in the same worktree) with every finding: file and line, the failure, and the
-  fix direction. Include the user's decisions on the worker's questions, and anything a later story now needs.
+- Wait for all the reviews of this round, then send **one** message to the worker with every finding: file and
+  line, the failure, and the fix direction. Include the user's decisions on the worker's questions, and anything a
+  later story now needs. Find the worker with `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/workers.py show <ID>` and
+  SendMessage to its `agent_id` (this works from a cleared session too). If that fails, start a fresh
+  `foreman:story-worker` in the same worktree: give it the recorded brief, the story's backlog notes, the branch
+  head, and the findings, then `workers.py record` it again with the new agent id. Mark the round with
+  `workers.py set <ID> fix-round`, and `set <ID> reported` when the worker reports back.
 - Decisions that belong to the user (a trade-off, a label, a wording, a paid run) go to the user first, **one
   question at a time**, with your recommendation and why. Legal or domain decisions quote the source verbatim
   with its page and heading.
@@ -109,6 +113,7 @@ for that rule, so its mechanism and test change with it.
 ```bash
 git worktree remove <path>
 git branch -d story/<ID>-<slug>       # lowercase -d refuses to delete an unmerged branch
+python3 ${CLAUDE_PLUGIN_ROOT}/scripts/workers.py forget <ID>
 ```
 
 Worktrees branch from the local HEAD, so dependent stories can start without a push. Offer to push the base branch;

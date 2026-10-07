@@ -71,6 +71,19 @@ Follow your agent instructions: set up the worktree, load context, implement, ch
 
 Never paste secret files, or the contents of denied folders, into a prompt.
 
+**Record each worker** right after launching it, so a cleared or new session can find it again (the agent id is in
+the Agent tool's result; the worktree is the `.claude/worktrees/agent-<agent-id>` entry in `git worktree list`):
+
+```bash
+python3 ${CLAUDE_PLUGIN_ROOT}/scripts/workers.py record <ID> --agent <agent-id> --base <BASE_SHA> \
+  --worktree <worktree path> --brief - <<'BRIEF'
+<the exact prompt you sent>
+BRIEF
+```
+
+Keep the record current as the story moves: `workers.py set <ID> reported|fix-round|waiting-user` (with
+`--note "<what it waits on>"`), and `workers.py forget <ID>` once the story is merged and its worktree removed.
+
 ## 4. Tell the user
 
 Give one line per launched story, then any refused stories and why. Relay each worker's final status

@@ -17,8 +17,15 @@ git branch --list 'story/*' 'planning/*'        # branches not merged yet
 git log --oneline origin/<base>..<base>         # unpushed commits
 ```
 
-Also list agents you started that haven't reported. For each item in flight, say what it is and what it waits on.
-Don't clear with a worker running: its report would arrive in a session that doesn't know the story.
+```bash
+python3 ${CLAUDE_PLUGIN_ROOT}/scripts/workers.py list   # the story workers on record, their state and agent id
+```
+
+Also list agents you started that haven't reported (reviewers aren't in the registry). For each item in flight, say
+what it is and what it waits on. Don't clear with an agent **running**: its report would arrive in a session that
+doesn't know the story. Workers that have reported and wait on a review round, a recording or the user can stay
+open across a clear: make sure each one is in the registry with its current state (`workers.py set <ID> <state>
+--note "<what it waits on>"`, `record` any that are missing), so the next session can resume it by its agent id.
 
 ## 2. Move what only the conversation knows
 
