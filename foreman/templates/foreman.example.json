@@ -74,6 +74,13 @@
   ],
   "cost_cap_usd": 0.5,
   "max_review_stories": 2,
+  "review_checklist": "docs/REVIEW_CHECKLIST.md",
+  "post_merge": [
+    {
+      "when": ["backend/uv.lock"],
+      "run": "cd backend && uv sync"
+    }
+  ],
   "docs": {
     "max_bytes": 20000,
     "exclude": []

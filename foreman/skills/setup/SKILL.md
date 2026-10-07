@@ -39,6 +39,8 @@ Detect what you can; ask only for the rest, **one question at a time**, with a r
 | `isolation` | For lanes with a deny list: the project's own isolation test command (`test`), the design section that states the rules (`design_section`), and folders that must never be tracked (`private`). The `lane-auditor` reads it |
 | `decisions.reserved` | Decision numbers the backlog reserves for specific stories, e.g. `{"003": "X1 model choice"}` |
 | `max_review_stories` | How many `mixed`/`human` stories `status` may put in one launch set (default 2) |
+| `review_checklist` | Path of a project file of one-line checks that workers run against their own diff before DONE (e.g. `docs/REVIEW_CHECKLIST.md`). Start it empty or leave the key out; `story-finish` adds a line when the same kind of major finding comes back in a second story |
+| `post_merge` | Commands `story-finish` runs after a merge, when the merged files match: `[{"when": ["<glob>"], "run": "<command>"}]`, e.g. regenerating a lockfile-derived manifest or reseeding a table. Empty if a merge never leaves anything stale |
 | `docs` | `{"max_bytes": 20000, "exclude": []}`: blocks loading a `.md` file whole past `max_bytes` (the `doc-reader` agent or a search-and-range read is the way around it), so a growing backlog or design doc never fills an agent's context |
 
 Find `lanes` and `gates` candidates in the design's Gates and Data sections and the backlog's gate stories.

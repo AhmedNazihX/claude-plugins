@@ -47,10 +47,16 @@ When a worker reports DONE, `story-finish` runs the review panel in parallel, in
 | `test-auditor` | that the tests prove the DoD: it breaks the code on purpose in a scratch copy and confirms a test fails |
 | lane reviewers | per-lane rules from the config, e.g. `lane-auditor` for folders a lane must never read |
 
+`dod-verifier` and `test-auditor` run on Sonnet; the others, and the workers, on the session's model.
+
 Findings go back to the worker as **one** fix round; a major finding gets its fix re-reviewed for regressions, and
-the loop repeats until the DoD is met and nothing major is open. Then you're asked to merge. After the merge, the
-checks run on the base branch, the story is ticked, and every follow-up is written as a note on the backlog story it
-affects, so the next worker reads it.
+the loop repeats until the DoD is met and nothing major is open. A worker that has sat idle with a large context is
+replaced by a fresh one for the fix round (`workers.py context` decides), and a third round that still opens new
+edge cases goes to you with a simpler design. Workers check their diff against the project's `review_checklist`
+before DONE, and the list grows when the same kind of major finding comes back in a second story. Then you're asked to merge (and whether to
+push). After the merge, the config's `post_merge` steps regenerate what the merge left stale, the checks run on the
+base branch, the story is ticked, and every follow-up is written as a note on the backlog story it affects, so the
+next worker reads it.
 
 ## What stays with you
 

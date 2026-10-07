@@ -14,7 +14,11 @@ Usage (from anywhere inside the repo, the main checkout or a story worktree):
                          one line per worker: story, state, agent, branch, worktree (and whether it still exists)
   workers.py show <ID>   the whole entry, the launch brief included
   workers.py forget <ID> remove the entry (after the merge and the worktree cleanup)
+  workers.py context <ID>
+                         the worker's context size and idle time, from its transcript, and whether a fix round
+                         should resume it or start a fresh worker (story-start --continue)
 Options: --registry PATH (default: <main checkout>/.claude/worktrees/workers.json)
+         --transcripts DIR (default: ~/.claude/projects; where `context` looks for agent-<id>.jsonl)
 
 An agent id reaches its worker only from the session that launched it. A new session continues the story with
 a fresh worker (story-start --continue): it removes the old, clean worktree and the new worker switches onto the
@@ -24,6 +28,7 @@ story branch, with `show <ID>`'s brief plus the story's backlog notes.
 from __future__ import annotations
 
 import json
+import re
 import subprocess
 import sys
 from datetime import datetime, timezone
@@ -31,6 +36,11 @@ from pathlib import Path
 
 STATES = ("running", "reported", "fix-round", "waiting-user", "merged")
 REGISTRY_NAME = Path(".claude") / "worktrees" / "workers.json"
+# A subagent's prompt cache lives 5 minutes. Resuming a worker idle for longer rewrites its whole context to the
+# cache; above FRESH_WORKER_TOKENS a fresh worker with a short brief costs less and carries no stale context.
+CACHE_TTL_MINUTES = 5
+FRESH_WORKER_TOKENS = 150_000
+AGENT_ID = re.compile(r"[A-Za-z0-9_-]+")
 
 
 def main_checkout() -> Path:
@@ -90,6 +100,8 @@ def cmd_record(data: dict[str, dict[str, object]], sid: str, args: list[str]) ->
     agent, base = option(args, "--agent"), option(args, "--base")
     if not agent or not base:
         raise SystemExit("record needs --agent <agent-id> and --base <sha>")
+    if not AGENT_ID.fullmatch(agent):
+        raise SystemExit(f"--agent {agent!r}: an agent id has only letters, digits, '-' and '_'")
     data[sid] = {
         "story": sid,
         "agent_id": agent,
@@ -147,9 +159,54 @@ def cmd_show(data: dict[str, dict[str, object]], sid: str) -> None:
     print("\nbrief:\n" + (str(brief) or "(none recorded)"))
 
 
+def turn_of(line: str) -> tuple[int, datetime] | None:
+    """A transcript line's context size (input + cache tokens) and time, if it is a real model turn.
+
+    Error and limit records (model "<synthetic>", all usage 0) and malformed lines are not turns."""
+    try:
+        record = json.loads(line)
+        message = record["message"]
+        usage = message["usage"]
+        tokens = sum(int(usage.get(k) or 0) for k in
+                     ("input_tokens", "cache_creation_input_tokens", "cache_read_input_tokens"))
+        at = datetime.fromisoformat(str(record["timestamp"]).replace("Z", "+00:00"))
+    except (ValueError, TypeError, KeyError, AttributeError, OverflowError):
+        return None
+    if tokens == 0 or at.tzinfo is None:
+        return None
+    return tokens, at
+
+
+def last_turn(transcript: Path) -> tuple[int, datetime] | None:
+    """The context size and time of the transcript's last real model turn."""
+    turns = (turn_of(line) for line in transcript.read_text(encoding="utf-8", errors="replace").splitlines())
+    found = None
+    for turn in turns:
+        found = turn or found
+    return found
+
+
+def cmd_context(data: dict[str, dict[str, object]], sid: str, root: Path) -> None:
+    agent = str(entry(data, sid)["agent_id"])
+    if not AGENT_ID.fullmatch(agent):
+        raise SystemExit(f"{sid}: recorded agent id {agent!r} isn't a plain id")
+    matches = sorted(root.glob(f"*/*/subagents/agent-{agent}.jsonl"), key=lambda p: p.stat().st_mtime)
+    turn = last_turn(matches[-1]) if matches else None
+    if turn is None:
+        print(f"{sid}: no transcript with usage found for agent {agent}; resume it (SendMessage) as usual.")
+        return
+    tokens, at = turn
+    idle = (datetime.now(timezone.utc) - at).total_seconds() / 60
+    fresh = idle >= CACHE_TTL_MINUTES and tokens >= FRESH_WORKER_TOKENS
+    advice = ("fresh: story-start --continue with the findings as the task" if fresh
+              else "resume: SendMessage to the agent")
+    print(f"{sid}: context {tokens // 1000}K tokens, idle {idle:.0f} min -> {advice}")
+
+
 def main(argv: list[str]) -> None:
     args = list(argv)
     registry = option(args, "--registry")
+    transcripts = Path(option(args, "--transcripts") or Path.home() / ".claude" / "projects")
     path = Path(registry) if registry else main_checkout() / REGISTRY_NAME
     if not args:
         raise SystemExit(__doc__)
@@ -167,6 +224,9 @@ def main(argv: list[str]) -> None:
         cmd_set(data, sid, rest)
     elif command == "show":
         cmd_show(data, sid)
+        return
+    elif command == "context":
+        cmd_context(data, sid, transcripts)
         return
     elif command == "forget":
         entry(data, sid)
