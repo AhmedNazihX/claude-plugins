@@ -90,14 +90,16 @@ Give one line per launched story, then any refused stories and why. Relay each w
 (DONE / BLOCKED / NEEDS USER) as it arrives, and follow `story-finish` for a DONE (its reviews start without
 asking). Don't merge anything here.
 
-**When a worker is blocked by a permission check** (for example the sparse checkout in a worktree with a `DENY`
-list), never run the command yourself to get past the check: give the user the exact command as **one** line
+**When a worker is blocked by a permission check after its first edit**, never run the command yourself to get
+past the check: give the user the exact command as **one** line
 starting with `!`, with several commands chained by `&&` (lines pasted together after one `!` run as shell negation
-and fail silently). After the user runs it, check its effect (for example `git sparse-checkout list` and that the
-denied folders are gone), then tell the worker to continue.
+and fail silently). After the user runs it, check its effect (for example that the file or
+setting the command was meant to create is there), then tell the worker to continue.
 
 **When a worker stops at setup with nothing changed** (`BLOCKED: sparse checkout`, or any stop before its first
-edit), its worktree is removed when it stops, so a `!` line aimed at that path fails. Check `git worktree list` and
+edit), its worktree is removed when it stops, so a `!` line aimed at that path fails. First check it used the forms
+in `story-worker` › Set up (patterns through `--stdin` from a per-story file, each link as a lone command); if it
+didn't, say in the relaunch prompt which form to use. Check `git worktree list` and
 `git branch --list 'story/<ID>-*'`, delete an empty leftover story branch with `git branch -d` (it has no commits
 past the base), and relaunch the story with a fresh worker. If the same guard refuses the sparse checkout again,
 show the user the guard's message and ask how to proceed; don't work around it.
