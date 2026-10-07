@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.10.0 (2026-10-07)
+
+- New agent `ci-watcher` (Haiku, Bash only, read-only): waits for a pushed commit's GitHub Actions runs and reports
+  each run's and job's conclusion, with the failing step and error for a failed job. `story-finish` launches it
+  after a push when the base branch has `.github/workflows/`, and says there's no CI to watch otherwise.
+
 ## 0.9.1 (2026-10-07)
 
 - `story-finish`: after a push, a background Haiku agent watches the CI runs and reports each job, with the failing
