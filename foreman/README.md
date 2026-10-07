@@ -1,78 +1,113 @@
 # foreman
 
-A Claude Code plugin that takes a project from an idea to merged work:
+A Claude Code plugin that takes a project from an idea to merged, reviewed work. Agents build stories in parallel,
+each in its own git worktree; every story is verified and reviewed before anything is merged, and you stay in charge
+of the decisions, the spending and the merges.
 
 ```
-kickoff ──► work-breakdown ──► backlog-reviewer ──► setup ──► status ──► story-start ──► story-finish
-intent →      DESIGN.md →        critique            config     what's      one worktree     verify, review,
-DESIGN.md     BACKLOG.md                                        ready       agent per story  merge, hand over
+kickoff ──► work-breakdown ──► backlog-reviewer ──► setup ──► status ──► story-start ──► story-finish ──► handover
+intent →      DESIGN.md →        critique            config     what's      one worktree     verify, review,   safe to
+DESIGN.md     BACKLOG.md                                        ready       agent per story  fix, merge        clear
 ```
 
 `/foreman:next` looks at the repo and runs the right step, so it is the only command you need to remember.
+
+## Quick start
+
+Needs `git`, `jq` (the hooks) and `python3` (the scripts, standard library only).
+
+```bash
+claude plugin marketplace add AhmedNazihX/claude-plugins
+claude plugin install foreman@nazihx     # also installs git-guardrails, which foreman depends on
+```
+
+Then, in a repo: `/foreman:next`.
+
+## How a project runs
+
+**Planning.** `kickoff` interviews you, one question at a time, and writes `docs/DESIGN.md` for you to approve.
+`work-breakdown` turns it into `docs/BACKLOG.md`: atomic stories, each with its deps, inputs, outputs and a
+Definition of Done (DoD) that can be checked. `backlog-reviewer` critiques the backlog in a fresh context. `setup`
+writes `.claude/foreman.json` (the project's checks, reviewers, lanes, gates and cost cap), and `guardrails` turns
+the design's rules into hooks, tests or reviewer agents.
+
+**Stories.** `status` shows what is done, in progress, ready and blocked, and suggests the next wave. `story-start`
+launches one `story-worker` per story, each on a `story/<ID>-<slug>` branch in its own worktree, after checking deps,
+shared resources (two stories that change the same database schema never run together) and solo stories.
+
+## What a story goes through
+
+When a worker reports DONE, `story-finish` runs the review panel in parallel, in fresh contexts:
+
+| Reviewer | Checks |
+| --- | --- |
+| `dod-verifier` | every Output and DoD item against the repo, and the project's checks |
+| `diff-reviewer` | dead code, duplication, over-engineering, silent behaviour changes |
+| `security-reviewer` | the diff against the project's own threat model |
+| `test-auditor` | that the tests prove the DoD: it breaks the code on purpose in a scratch copy and confirms a test fails |
+| lane reviewers | per-lane rules from the config, e.g. `lane-auditor` for folders a lane must never read |
+
+Findings go back to the worker as **one** fix round; a major finding gets its fix re-reviewed for regressions, and
+the loop repeats until the DoD is met and nothing major is open. Then you're asked to merge. After the merge, the
+checks run on the base branch, the story is ticked, and every follow-up is written as a note on the backlog story it
+affects, so the next worker reads it.
+
+## What stays with you
+
+- Approving the design, and every decision a review raises that is yours: a trade-off, a label, a wording. They
+  come one question at a time, each with a recommendation.
+- Anything that costs money: a worker spends up to the config's `cost_cap_usd` without asking; above it, or for a
+  full run, it stops and reports the estimate and the exact command for you to approve.
+- Every merge and every push.
+
+## Sessions: clear whenever you like
+
+The conversation is not where the work lives. Before a `/clear`, `handover` moves open follow-ups and your decisions
+onto the backlog stories they affect and checks that nothing is running. `scripts/workers.py` keeps a registry of
+the workers in flight (`.claude/worktrees/workers.json`).
+
+An agent can only be messaged from the session that launched it. To pick up a story in a new session, run
+`/foreman:story-start --continue <ID>`: the stopped worker's clean worktree is removed (the branch stays), and a
+fresh worker switches onto the story branch and carries on from its head.
+
+Long documents stay out of context too: `doc-reader` answers a question about a long `.md` file by quoting only the
+relevant passages, and `doc-guard.sh` blocks reading one whole past the config's `docs.max_bytes`.
 
 ## What's in it
 
 | Part | Items |
 | --- | --- |
-| Skills | `next`, `kickoff`, `work-breakdown`, `setup`, `guardrails`, `status`, `story-start`, `story-finish`, `decision`, `handover` |
-| Agents | `story-worker` (one story, own worktree), `dod-verifier`, `diff-reviewer`, `security-reviewer`, `backlog-reviewer`, `lane-auditor`, `test-auditor`, `doc-reader` (looks up a fact in a long `.md` file instead of loading it whole) |
-| Hooks | `gate.sh` (nothing under a path until a file is committed), `lane-guard.sh` (a lane never sees some folders), `format.sh` (formats edited files with the project's formatter, per folder), `worker-guard.sh` (a worker subagent never pushes, rebases, merges other branches or edits the backlog), `doc-guard.sh` (a long `.md` file is never `Read` whole) |
-| Scripts | `scripts/backlog.py`: check, plan, status, show, deps, info, tick, note, set-deps, add, graph; `scripts/workers.py`: a registry of the story workers in flight (agent id, base, worktree, brief, state) in `.claude/worktrees/workers.json`, so a cleared session can find them and continue their stories with `story-start --continue` (stdlib only) |
-
-## Long documents stay out of context
-
-A backlog, a design document or a decision log grows over a project's life — a backlog alone can pass 150 KB
-(about 38k tokens), which is real context budget spent before any work starts. Two things keep that out of an
-agent's context:
-
-- **`doc-reader`** (an agent, read-only, no Bash, so only the main session can launch it): answer a question about
-  a long `.md` document by searching it (Grep) and quoting only the relevant passages with `file:line`, instead of
-  reading the whole thing. Subagents can't start it, so they search with `rg` and `Read` a line range themselves.
-- **`doc-guard.sh`** (a hook): once `.claude/foreman.json` has a `docs` key (`{"max_bytes": 20000, "exclude": []}`,
-  written by `setup`), it blocks `Read`ing a `.md` file whole past `max_bytes`, in the main session or a subagent
-  alike; a ranged `Read` (`offset`/`limit`) under the limit is fine. It guards the `Read` tool only — it does not
-  look at `Bash` at all, so a shell command that cats or greps a file isn't checked. Parsing shell commands for
-  this (quoting, redirects, pipes, `cd`, subshells, …) kept finding a new bypass or a new performance cliff without
-  ever becoming exact, for a part of the guard that was never the main point: `doc-reader` and the project's own
-  rule against reading a long file whole are what cover a shell-based lookup instead.
+| Skills | `next`, `kickoff`, `work-breakdown`, `setup`, `guardrails`, `status`, `story-start` (with `--continue`), `story-finish`, `decision`, `handover` |
+| Agents | `story-worker`, `dod-verifier`, `diff-reviewer`, `security-reviewer`, `test-auditor`, `lane-auditor`, `backlog-reviewer`, `doc-reader` |
+| Hooks | `gate.sh` (nothing under a path until a given file is committed), `lane-guard.sh` (a lane never sees its denied folders), `worker-guard.sh` (a worker never pushes, rebases, merges another branch, moves to another branch or edits the backlog; its one allowed move is `git switch` onto a story branch when continuing), `format.sh` (formats edited files with the project's formatter), `doc-guard.sh` (no whole `Read` of a long `.md` file) |
+| Scripts | `backlog.py` (check, plan, status, show, deps, info, tick, note, set-deps, add, graph), `workers.py` (record, set, list, show, forget) |
 
 Each project keeps only its own facts: `docs/DESIGN.md`, `docs/BACKLOG.md`, `docs/decisions/`,
 `.claude/foreman.json`, and any project-specific skills, agents and rules.
 
-## Install
+## Known limits
 
-```bash
-claude plugin marketplace add AhmedNazihX/claude-plugins     # from GitHub
-# or, from a local clone (for development): claude plugin marketplace add ./claude-plugins
-claude plugin install foreman@nazihx     # also installs git-guardrails (a dependency)
-```
-
-Then, in a repo: `/foreman:next`.
+- Claude Code loads skills and agent definitions once per session. After updating the plugin, start a new session
+  before relying on new skill or agent behaviour (hooks take effect at once).
+- `doc-guard.sh` guards the `Read` tool only; a shell command that prints a file isn't checked.
+- In a lane with denied folders, the worker's sparse checkout must run as one bare `git sparse-checkout set …`
+  command: Claude Code's worktree isolation check refuses it when it is chained after a `cd`.
+- Hook checks of shell commands are best effort; file-tool checks are exact.
 
 ## Tests
 
 ```bash
 python3 -m unittest discover -s tests     # backlog.py, workers.py
-bash hooks/test-guards.sh                 # gate and lane-guard hooks
+bash hooks/test-guards.sh                 # gate, lane-guard and worker-guard hooks
 bash hooks/test-format.sh                 # formatter hook
 bash hooks/test-doc-guard.sh              # doc guard hook
 claude plugin validate .
 ```
 
-## Status
+## Version
 
-Draft 0.5.0. See `docs/foreman-merge-plan.md` (marketplace root) for what is ported, what is new and what is left.
-
-## Renamed from story-workflow (0.4.0)
-
-This plugin was released as `story-workflow` up to 0.3.5. In 0.4.0 the plugin, its namespace (`story-workflow:` →
-`foreman:`) and its config file (`.claude/story-workflow.json` → `.claude/foreman.json`) were renamed. The old
-config file is not read any more, so an existing project needs these steps:
-
-1. `git mv .claude/story-workflow.json .claude/foreman.json`
-2. Replace `story-workflow:` with `foreman:` in the config's `reviewers` (and any `lanes.<lane>.reviewers` or
-   `guardrails` › `enforced_by` entries) and in the project's CLAUDE.md section.
-3. Reinstall: `claude plugin uninstall story-workflow@nazihx`, then `claude plugin install foreman@nazihx`.
+0.7.0. See [CHANGELOG.md](CHANGELOG.md), which also has the migration steps for projects that used the plugin under
+its old name, `story-workflow`.
 
 ## Credits
 

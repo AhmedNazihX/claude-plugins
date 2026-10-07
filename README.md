@@ -17,7 +17,8 @@ claude plugin install foreman@nazihx
 `foreman`'s backlog script needs `python3` (standard library only).
 
 Tests: `python3 -m unittest discover -s foreman/tests`, `bash foreman/hooks/test-guards.sh`,
-`bash foreman/hooks/test-format.sh`, `bash git-guardrails/tests/test-guards.sh`, and `claude plugin validate`
+`bash foreman/hooks/test-format.sh`,
+`bash foreman/hooks/test-doc-guard.sh`, `bash git-guardrails/tests/test-guards.sh`, and `claude plugin validate`
 on the root and each plugin.
 
 Licence: MIT (`LICENSE`). Code adapted from upstream keeps its own notice in each plugin's `LICENSE-upstream`.
