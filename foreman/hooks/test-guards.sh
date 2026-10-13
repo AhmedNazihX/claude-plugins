@@ -43,8 +43,9 @@ run() {  # run <hook> <expected exit> <json> <label>
   local c=$?
   if [ "$c" = "$2" ]; then echo "  ok    $4"; else echo "  FAIL  $4 (exit $c, want $2)"; FAILS=$((FAILS + 1)); fi
 }
-bash_in() { jq -nc --arg c "$2" --arg d "$1" '{tool_name:"Bash",cwd:$d,tool_input:{command:$c}}'; }
-file_in() { jq -nc --arg t "$1" --arg d "$2" --arg p "$3" '{tool_name:$t,cwd:$d,tool_input:{file_path:$p,content:"x"}}'; }
+# Subagent input (agent_id set): the lane guard applies only to subagents; the gate applies to every session.
+bash_in() { jq -nc --arg c "$2" --arg d "$1" '{tool_name:"Bash",cwd:$d,agent_id:"a1",tool_input:{command:$c}}'; }
+file_in() { jq -nc --arg t "$1" --arg d "$2" --arg p "$3" '{tool_name:$t,cwd:$d,agent_id:"a1",tool_input:{file_path:$p,content:"x"}}'; }
 
 echo "gate, before eval/split.json is committed"
 BRACE='mkdir -p src/app/{models,engine}'   # bash 3.2 brace-expands literals inside "$(...)"
@@ -72,8 +73,8 @@ run "$GUARD" 2 "$(file_in Read "$W" "$R/eval/cases.json")"               "Read m
 run "$GUARD" 2 "$(file_in Read "$W" "$W/eval/cases.json")"               "Read worktree's eval (absolute)"
 run "$GUARD" 2 "$(file_in Read "$W" "eval/split.json")"                  "Read eval (relative)"
 run "$GUARD" 0 "$(file_in Read "$W" "$W/src/app/eval/__init__.py")"      "Read a package that is also named eval"
-run "$GUARD" 2 "$(jq -nc --arg d "$W" --arg p "$R/eval" '{tool_name:"Grep",cwd:$d,tool_input:{pattern:"x",path:$p}}')" "Grep in eval"
-run "$GUARD" 2 "$(jq -nc --arg d "$W" '{tool_name:"Glob",cwd:$d,tool_input:{pattern:"**/eval/**"}}')" "Glob **/eval/**"
+run "$GUARD" 2 "$(jq -nc --arg d "$W" --arg p "$R/eval" '{tool_name:"Grep",cwd:$d,agent_id:"a1",tool_input:{pattern:"x",path:$p}}')" "Grep in eval"
+run "$GUARD" 2 "$(jq -nc --arg d "$W" '{tool_name:"Glob",cwd:$d,agent_id:"a1",tool_input:{pattern:"**/eval/**"}}')" "Glob **/eval/**"
 run "$GUARD" 2 "$(bash_in "$W" "cat eval/cases.json")"                   "cat eval/…"
 run "$GUARD" 2 "$(bash_in "$W" "ls $R/eval")"                            "ls main checkout's eval"
 run "$GUARD" 2 "$(bash_in "$W" "grep -rn x eval")"                       "grep -rn x eval"
@@ -87,14 +88,20 @@ run "$GUARD" 0 "$(bash_in "$W" $'cat > n.md <<\'EOF\'\neval/x\nEOF')"   "heredoc
 # Found in the 2026-09-30 review: other checkouts of the repo aren't sparse.
 S="$TMP/scratch"
 git -C "$R" worktree add -q --detach "$S" 2>/dev/null
-run "$GUARD" 2 "$(jq -nc --arg d "$W" --arg p "$R" '{tool_name:"Grep",cwd:$d,tool_input:{pattern:"x",path:$p}}')" "Grep over the main checkout's root"
+run "$GUARD" 2 "$(jq -nc --arg d "$W" --arg p "$R" '{tool_name:"Grep",cwd:$d,agent_id:"a1",tool_input:{pattern:"x",path:$p}}')" "Grep over the main checkout's root"
 run "$GUARD" 2 "$(file_in Read "$W" "$S/eval/cases.json")"               "Read eval in a scratch worktree"
 run "$GUARD" 2 "$(bash_in "$W" "grep -rn x $R")"                          "grep -rn over the main checkout"
 run "$GUARD" 2 "$(bash_in "$W" "cat $S/eval/cases.json")"                 "cat eval in a scratch worktree"
-run "$GUARD" 0 "$(jq -nc --arg d "$W" --arg p "$W" '{tool_name:"Grep",cwd:$d,tool_input:{pattern:"x",path:$p}}')" "Grep over its own worktree"
+run "$GUARD" 0 "$(jq -nc --arg d "$W" --arg p "$W" '{tool_name:"Grep",cwd:$d,agent_id:"a1",tool_input:{pattern:"x",path:$p}}')" "Grep over its own worktree"
 run "$GUARD" 0 "$(bash_in "$W" 'eval "$(ssh-agent -s)"')"                "the shell's eval builtin"
 run "$GUARD" 0 "$(bash_in "$W" "uv run pytest -k eval")"                  "pytest -k eval (an option value)"
 run "$GUARD" 2 "$(bash_in "$W" "ls eval")"                                "ls eval (a bare folder name)"
+# 2026-10-13: the orchestrator's shell, left inside this worktree, was treated as story C1's worker and locked out
+# of the main checkout. The main thread's input has no agent_id, so the guard lets it through.
+main_bash() { jq -nc --arg c "$2" --arg d "$1" '{tool_name:"Bash",cwd:$d,tool_input:{command:$c}}'; }
+run "$GUARD" 0 "$(main_bash "$W" "cd $R && git status")"                  "the main thread in the worktree reaches main"
+run "$GUARD" 0 "$(main_bash "$W" "cat $R/eval/cases.json")"               "the main thread in the worktree reads main's eval"
+run "$GUARD" 2 "$(bash_in "$W" "cd $R && git status")"                    "a worker in the worktree can't reach main"
 git -C "$R" worktree remove "$S" 2>/dev/null
 
 git -C "$W" checkout -q -b story/C2-guidelines

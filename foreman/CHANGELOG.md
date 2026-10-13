@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.10.1 (2026-10-13)
+
+- `lane-guard`: applies to subagents only, like `worker-guard` (the hook input carries `agent_id`; the main
+  thread's doesn't). A shell the orchestrator left inside a story worktree no longer makes the guard treat it as
+  that story's worker and lock it out of the main checkout (user's choice, after it happened five times).
+
 ## 0.10.0 (2026-10-07)
 
 - New agent `ci-watcher` (Haiku, Bash only, read-only): waits for a pushed commit's GitHub Actions runs and reports

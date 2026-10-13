@@ -8,12 +8,16 @@
 # Paths are checked against every checkout of the repo (this worktree, the main checkout, other story worktrees
 # and scratch worktrees), since only this worktree is sparse. File tools are checked exactly; shell commands are
 # best effort: the sparse checkout the worker sets up (and a reviewer agent, if configured) are the backstops.
+# It applies to subagents only, as worker-guard.sh does: their hook input carries `agent_id`, the main thread's
+# doesn't. The main thread is the orchestrator, which works on the base branch; a shell it left inside a story
+# worktree must not make the guard treat it as that story's worker and lock it out of the main checkout.
 
 set -f   # deny/allow entries are paths, never globs
 INPUT=$(cat)
 HOOKS="$(cd "$(dirname "$0")" && pwd)"
 BACKLOG_PY="${CLAUDE_PLUGIN_ROOT:-$HOOKS/..}/scripts/backlog.py"
 command -v jq >/dev/null 2>&1 || { echo "BLOCKED: foreman's lane guard needs jq (brew install jq)." >&2; exit 2; }
+[ -n "$(echo "$INPUT" | jq -r '.agent_id // empty')" ] || exit 0   # the main thread is the orchestrator
 
 TOOL=$(echo "$INPUT" | jq -r '.tool_name // empty')
 CWD=$(echo "$INPUT" | jq -r '.cwd // empty')
