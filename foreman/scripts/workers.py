@@ -6,8 +6,12 @@ The orchestrator's conversation is the only place that knows which agent works o
 (.claude/worktrees/ is gitignored by setup), one entry per story.
 
 Usage (from anywhere inside the repo, the main checkout or a story worktree):
-  workers.py record <ID> --agent <agent-id> --base <sha> [--branch B] [--worktree PATH] [--brief -|FILE]
-                         record a launched worker; --brief - reads the launch prompt from stdin
+  workers.py record <ID> --launching --base <sha> [--replace] [--branch B] [--brief -|FILE]
+                         record a worker about to launch, before the Agent call (no agent id yet); over an
+                         entry that isn't merged or dead only with --replace
+  workers.py record <ID> --agent <agent-id> [--base <sha>] [--branch B] [--worktree PATH] [--brief -|FILE]
+                         record a launched worker, or fill in the agent id of a `launching` entry (which keeps
+                         its base and brief); --brief - reads the launch prompt from stdin
   workers.py set <ID> <state> [--note TEXT]
                          update a worker's state: running, reported, fix-round, waiting-user, merged
   workers.py list [--json]
@@ -20,6 +24,10 @@ Usage (from anywhere inside the repo, the main checkout or a story worktree):
 Options: --registry PATH (default: <main checkout>/.claude/worktrees/workers.json)
          --transcripts DIR (default: ~/.claude/projects; where `context` looks for agent-<id>.jsonl)
 
+Every change (record, set, forget) holds an exclusive lock on workers.json.lock, next to the registry, for its
+whole load-modify-save, and writes through a temp file and a rename. Parallel calls never lose an entry, and a
+reader never sees a half-written file.
+
 An agent id reaches its worker only from the session that launched it. A new session continues the story with
 a fresh worker (story-start --continue): it removes the old, clean worktree and the new worker switches onto the
 story branch, with `show <ID>`'s brief plus the story's backlog notes.
@@ -27,14 +35,24 @@ story branch, with `show <ID>`'s brief plus the story's backlog notes.
 
 from __future__ import annotations
 
+import fcntl
 import json
+import os
 import re
 import subprocess
 import sys
+import tempfile
+from collections.abc import Iterator
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 
 STATES = ("running", "reported", "fix-round", "waiting-user", "merged")
+# Written before the Agent call, so a launch whose agent id never got recorded still shows in `list`.
+# `record --agent` moves it to running.
+LAUNCHING = "launching"
+# States `record --launching` may overwrite without --replace: the old worker is finished.
+REPLACEABLE = ("merged", "dead")
 REGISTRY_NAME = Path(".claude") / "worktrees" / "workers.json"
 # A subagent's prompt cache lives 5 minutes. Resuming a worker idle for longer rewrites its whole context to the
 # cache; above FRESH_WORKER_TOKENS a fresh worker with a short brief costs less and carries no stale context.
@@ -65,11 +83,27 @@ def load(path: Path) -> dict[str, dict[str, object]]:
     return data
 
 
-def save(path: Path, data: dict[str, dict[str, object]]) -> None:
+@contextmanager
+def locked(path: Path) -> Iterator[None]:
+    """Hold an exclusive lock on the registry's lock file. Closing the file releases it."""
     path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_suffix(".tmp")
-    tmp.write_text(json.dumps(data, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-    tmp.replace(path)
+    with open(path.with_name(path.name + ".lock"), "a", encoding="utf-8") as handle:
+        fcntl.flock(handle, fcntl.LOCK_EX)
+        yield
+
+
+def save(path: Path, data: dict[str, dict[str, object]]) -> None:
+    """Write the registry atomically: a temp file in the same folder, flushed, then renamed over it."""
+    fd, tmp = tempfile.mkstemp(dir=path.parent, prefix=path.name + ".", suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            handle.write(json.dumps(data, indent=2, sort_keys=True) + "\n")
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(tmp, path)
+    except BaseException:
+        Path(tmp).unlink(missing_ok=True)
+        raise
 
 
 def entry(data: dict[str, dict[str, object]], sid: str) -> dict[str, object]:
@@ -96,25 +130,50 @@ def read_brief(source: str | None) -> str | None:
     return sys.stdin.read() if source == "-" else Path(source).read_text(encoding="utf-8")
 
 
-def cmd_record(data: dict[str, dict[str, object]], sid: str, args: list[str]) -> None:
-    agent, base = option(args, "--agent"), option(args, "--base")
-    if not agent or not base:
-        raise SystemExit("record needs --agent <agent-id> and --base <sha>")
-    if not AGENT_ID.fullmatch(agent):
-        raise SystemExit(f"--agent {agent!r}: an agent id has only letters, digits, '-' and '_'")
-    data[sid] = {
+def new_entry(sid: str, base: str, branch: str | None, worktree: str | None, brief: str | None) -> dict[str, object]:
+    """A fresh `launching` entry, with no agent id yet."""
+    return {
         "story": sid,
-        "agent_id": agent,
+        "agent_id": "",
         "base_sha": base,
-        "branch": option(args, "--branch") or f"story/{sid}-*",
-        "worktree": option(args, "--worktree") or "",
-        "brief": read_brief(option(args, "--brief")) or "",
-        "state": "running",
+        "branch": branch or f"story/{sid}-*",
+        "worktree": worktree or "",
+        "brief": brief or "",
+        "state": LAUNCHING,
         "note": "",
         "launched": now(),
         "updated": now(),
     }
-    print(f"Recorded {sid}: agent {agent}, base {base[:12]}.")
+
+
+def cmd_record(data: dict[str, dict[str, object]], sid: str, args: list[str], brief: str | None) -> None:
+    launching, replace = "--launching" in args, "--replace" in args
+    agent, base = option(args, "--agent"), option(args, "--base")
+    branch, worktree = option(args, "--branch"), option(args, "--worktree")
+    if launching:
+        if agent or not base:
+            raise SystemExit("record --launching needs --base <sha> and no --agent (the id comes after the launch)")
+        state = data.get(sid, {}).get("state")
+        if state is not None and state not in REPLACEABLE and not replace:
+            raise SystemExit(f"{sid} is {state}: add --replace to launch a new worker over it (story-start --continue)")
+        data[sid] = new_entry(sid, base, branch, worktree, brief)
+        print(f"Recorded {sid}: launching, base {base[:12]}.")
+        return
+    if not agent:
+        raise SystemExit("record needs --agent <agent-id> and --base <sha>")
+    if not AGENT_ID.fullmatch(agent):
+        raise SystemExit(f"--agent {agent!r}: an agent id has only letters, digits, '-' and '_'")
+    previous = data.get(sid)
+    is_filling = previous is not None and previous.get("state") == LAUNCHING
+    if not is_filling and not base:
+        raise SystemExit(f"record needs --agent <agent-id> and --base <sha> ({sid} has no `launching` entry)")
+    if is_filling:
+        given = {"base_sha": base, "branch": branch, "worktree": worktree, "brief": brief}
+        start = {**previous, **{key: value for key, value in given.items() if value is not None}}
+    else:
+        start = new_entry(sid, str(base), branch, worktree, brief)
+    data[sid] = {**start, "agent_id": agent, "state": "running", "updated": now()}
+    print(f"Recorded {sid}: agent {agent}, base {str(data[sid]['base_sha'])[:12]}.")
 
 
 def cmd_set(data: dict[str, dict[str, object]], sid: str, args: list[str]) -> None:
@@ -122,6 +181,8 @@ def cmd_set(data: dict[str, dict[str, object]], sid: str, args: list[str]) -> No
     if len(args) != 1 or args[0] not in STATES:
         raise SystemExit(f"set needs one state: {', '.join(STATES)}")
     e = entry(data, sid)
+    if e.get("state") == LAUNCHING:
+        raise SystemExit(f"{sid} is launching with no agent id: fill it with `record {sid} --agent <id>` first")
     e["state"] = args[0]
     if note is not None:
         e["note"] = note
@@ -145,8 +206,9 @@ def cmd_list(data: dict[str, dict[str, object]], as_json: bool) -> None:
     for sid in sorted(data):
         e = data[sid]
         note = f" — {e['note']}" if e.get("note") else ""
+        agent = f"agent {e['agent_id']}" if e.get("agent_id") else "no agent id yet"
         print(
-            f"{sid}: {e['state']}, agent {e['agent_id']}, {e['branch']}, "
+            f"{sid}: {e['state']}, {agent}, {e['branch']}, "
             f"{worktree_status(str(e.get('worktree', '')))} (updated {e['updated']}){note}"
         )
 
@@ -186,8 +248,16 @@ def last_turn(transcript: Path) -> tuple[int, datetime] | None:
     return found
 
 
+def cmd_forget(data: dict[str, dict[str, object]], sid: str) -> None:
+    entry(data, sid)
+    del data[sid]
+    print(f"Forgot {sid}.")
+
+
 def cmd_context(data: dict[str, dict[str, object]], sid: str, root: Path) -> None:
-    agent = str(entry(data, sid)["agent_id"])
+    agent = str(entry(data, sid).get("agent_id") or "")
+    if not agent:
+        raise SystemExit(f"{sid}: no agent id recorded yet (it is still `launching`)")
     if not AGENT_ID.fullmatch(agent):
         raise SystemExit(f"{sid}: recorded agent id {agent!r} isn't a plain id")
     matches = sorted(root.glob(f"*/*/subagents/agent-{agent}.jsonl"), key=lambda p: p.stat().st_mtime)
@@ -211,30 +281,30 @@ def main(argv: list[str]) -> None:
     if not args:
         raise SystemExit(__doc__)
     command, rest = args[0], args[1:]
-    data = load(path)
     if command == "list":
-        cmd_list(data, "--json" in rest)
+        cmd_list(load(path), "--json" in rest)
         return
     if not rest:
         raise SystemExit(f"{command} needs a story ID")
     sid, rest = rest[0], rest[1:]
-    if command == "record":
-        cmd_record(data, sid, rest)
-    elif command == "set":
-        cmd_set(data, sid, rest)
-    elif command == "show":
-        cmd_show(data, sid)
-        return
+    if command == "show":
+        cmd_show(load(path), sid)
     elif command == "context":
-        cmd_context(data, sid, transcripts)
-        return
-    elif command == "forget":
-        entry(data, sid)
-        del data[sid]
-        print(f"Forgot {sid}.")
+        cmd_context(load(path), sid, transcripts)
+    elif command in ("record", "set", "forget"):
+        # Read the brief before taking the lock: a slow stdin must not hold up the other writers.
+        brief = read_brief(option(rest, "--brief")) if command == "record" else None
+        with locked(path):
+            data = load(path)
+            if command == "record":
+                cmd_record(data, sid, rest, brief)
+            elif command == "set":
+                cmd_set(data, sid, rest)
+            else:
+                cmd_forget(data, sid)
+            save(path, data)
     else:
         raise SystemExit(f"unknown command {command!r}\n{__doc__}")
-    save(path, data)
 
 
 if __name__ == "__main__":

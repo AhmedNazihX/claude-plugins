@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import importlib.util
 import json
 import subprocess
 import sys
 import tempfile
 import unittest
+from unittest import mock
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -80,6 +82,107 @@ class WorkersTest(unittest.TestCase):
         self.assertEqual(self.run_cli("forget", "C9").returncode, 0)
         self.assertEqual(self.entries(), {})
         self.assertNotEqual(self.run_cli("show", "C9").returncode, 0)
+
+    def test_20_concurrent_records_keep_all_20_entries(self) -> None:
+        ids = [f"C{n}" for n in range(20)]
+        procs = [
+            subprocess.Popen(
+                [sys.executable, str(SCRIPT), "--registry", str(self.registry),
+                 "record", sid, "--agent", f"a{n}", "--base", "abc"],
+                stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, cwd=self.tmp.name,
+            )
+            for n, sid in enumerate(ids)
+        ]
+        for proc in procs:
+            _, err = proc.communicate(timeout=60)
+            self.assertEqual(proc.returncode, 0, err)
+        self.assertEqual(sorted(self.entries()), sorted(ids))
+        leftovers = [p.name for p in Path(self.tmp.name).iterdir() if p.name.endswith(".tmp")]
+        self.assertEqual(leftovers, [])
+
+    def test_a_launching_entry_without_an_agent_id_is_listed_as_launching(self) -> None:
+        result = self.run_cli("record", "Q1", "--launching", "--base", "657b3500bc85", "--brief", "-",
+                              stdin="STORY: Q1\n")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        q1 = self.entries()["Q1"]
+        self.assertEqual(q1["state"], "launching")
+        self.assertEqual(q1["agent_id"], "")
+        out = self.run_cli("list").stdout
+        self.assertIn("Q1: launching, no agent id yet, story/Q1-*", out)
+
+    def test_record_with_an_agent_fills_a_launching_entry_and_keeps_its_base_and_brief(self) -> None:
+        self.run_cli("record", "Q1", "--launching", "--base", "657b3500bc85", "--brief", "-", stdin="the brief")
+        launched = self.entries()["Q1"]["launched"]
+        result = self.run_cli("record", "Q1", "--agent", "af2d76", "--worktree", "/repo/.claude/worktrees/agent-af2d76")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        q1 = self.entries()["Q1"]
+        self.assertEqual(q1["agent_id"], "af2d76")
+        self.assertEqual(q1["state"], "running")
+        self.assertEqual(q1["base_sha"], "657b3500bc85")
+        self.assertEqual(q1["brief"], "the brief")
+        self.assertEqual(q1["worktree"], "/repo/.claude/worktrees/agent-af2d76")
+        self.assertEqual(q1["launched"], launched)
+        self.assertIn("Q1: running, agent af2d76", self.run_cli("list").stdout)
+
+    def test_launching_needs_a_base_and_refuses_an_agent(self) -> None:
+        self.assertNotEqual(self.run_cli("record", "Q1", "--launching").returncode, 0)
+        result = self.run_cli("record", "Q1", "--launching", "--base", "abc", "--agent", "a1")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("no --agent", result.stderr)
+        self.assertFalse(self.registry.exists())
+
+    def test_record_without_a_base_needs_a_launching_entry(self) -> None:
+        self.run_cli("record", "Q1", "--agent", "a1", "--base", "abc")
+        self.run_cli("set", "Q1", "reported")
+        result = self.run_cli("record", "Q1", "--agent", "a2")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("no `launching` entry", result.stderr)
+        self.assertEqual(self.entries()["Q1"]["agent_id"], "a1")
+
+    def test_context_of_a_launching_entry_says_there_is_no_agent_yet(self) -> None:
+        self.run_cli("record", "Q1", "--launching", "--base", "abc")
+        result = self.run_cli("--transcripts", self.tmp.name, "context", "Q1")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("no agent id recorded yet", result.stderr)
+
+    def test_launching_over_a_live_entry_is_refused_without_replace(self) -> None:
+        self.run_cli("record", "Q1", "--agent", "a1", "--base", "abc", "--worktree", "/wt/agent-a1")
+        self.run_cli("set", "Q1", "reported")
+        result = self.run_cli("record", "Q1", "--launching", "--base", "def")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("--replace", result.stderr)
+        q1 = self.entries()["Q1"]
+        self.assertEqual((q1["agent_id"], q1["worktree"], q1["state"]), ("a1", "/wt/agent-a1", "reported"))
+
+    def test_launching_with_replace_or_over_a_merged_entry_starts_a_new_entry(self) -> None:
+        self.run_cli("record", "Q1", "--agent", "a1", "--base", "abc")
+        result = self.run_cli("record", "Q1", "--launching", "--replace", "--base", "def")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual((self.entries()["Q1"]["state"], self.entries()["Q1"]["agent_id"]), ("launching", ""))
+        self.run_cli("record", "Q2", "--agent", "a2", "--base", "abc")
+        self.run_cli("set", "Q2", "merged")
+        self.assertEqual(self.run_cli("record", "Q2", "--launching", "--base", "def").returncode, 0)
+        self.assertEqual(self.entries()["Q2"]["state"], "launching")
+
+    def test_set_refuses_a_launching_entry(self) -> None:
+        self.run_cli("record", "Q1", "--launching", "--base", "abc")
+        result = self.run_cli("set", "Q1", "running")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("record Q1 --agent", result.stderr)
+        self.assertEqual(self.entries()["Q1"]["state"], "launching")
+
+    def test_a_failed_save_keeps_the_old_registry_and_leaves_no_temp_file(self) -> None:
+        self.run_cli("record", "Q1", "--agent", "a1", "--base", "abc")
+        before = self.registry.read_text(encoding="utf-8")
+        spec = importlib.util.spec_from_file_location("workers_under_test", SCRIPT)
+        workers = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(workers)
+        with mock.patch.object(workers.os, "replace", side_effect=OSError("disk full")) as replace:
+            with self.assertRaises(OSError):
+                workers.save(self.registry, {"Q9": {"story": "Q9"}})
+        replace.assert_called_once()
+        self.assertEqual(self.registry.read_text(encoding="utf-8"), before)
+        self.assertEqual([p.name for p in Path(self.tmp.name).iterdir() if p.name.endswith(".tmp")], [])
 
     def test_an_empty_registry_lists_no_workers(self) -> None:
         self.assertIn("No workers recorded.", self.run_cli("list").stdout)

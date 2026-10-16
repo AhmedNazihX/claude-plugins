@@ -71,15 +71,26 @@ Follow your agent instructions: set up the worktree, load context, implement, ch
 
 Never paste secret files, or the contents of denied folders, into a prompt.
 
-**Record each worker** right after launching it, so a cleared or new session can find it again (the agent id is in
-the Agent tool's result; the worktree is the `.claude/worktrees/agent-<agent-id>` entry in `git worktree list`):
+**Record each worker as `launching` before the Agent call,** so a cleared or new session can find it again, even
+one that ended mid-launch:
 
 ```bash
-python3 ${CLAUDE_PLUGIN_ROOT}/scripts/workers.py record <ID> --agent <agent-id> --base <BASE_SHA> \
-  --worktree <worktree path> --brief - <<'BRIEF'
-<the exact prompt you sent>
+python3 ${CLAUDE_PLUGIN_ROOT}/scripts/workers.py record <ID> --launching --base <BASE_SHA> --brief - <<'BRIEF'
+<the exact prompt you will send>
 BRIEF
 ```
+
+Then launch all the workers in one message. **Right after, fill in each agent id** (it is in the Agent tool's
+result; the worktree is the `.claude/worktrees/agent-<agent-id>` entry in `git worktree list`). The entry keeps its
+base and brief:
+
+```bash
+python3 ${CLAUDE_PLUGIN_ROOT}/scripts/workers.py record <ID> --agent <agent-id> --worktree <worktree path>
+```
+
+A story that `workers.py list` still shows as `launching, no agent id yet` was never filled in: check
+`git worktree list` for its worker before launching it again. The registry is locked while a call writes it, so
+parallel calls are safe.
 
 Keep the record current as the story moves: `workers.py set <ID> reported|fix-round|waiting-user` (with
 `--note "<what it waits on>"`), and `workers.py forget <ID>` once the story is merged and its worktree removed.
@@ -133,6 +144,7 @@ Story notes: <the story's backlog notes since launch, from `backlog.py show <ID>
 Task: <what to do now: the fix round's findings, the user's decisions, or "finish the story">
 ```
 
-`workers.py record` it again with the new agent id and worktree (the same `record` call as in section 3, with this
-prompt as the brief). When it reports, delete the leftover branch it names with `git branch -d <branch>` if it still
+Record it in the same two steps as in section 3: `record <ID> --launching --replace --base <BASE_SHA>` with this
+prompt as the brief before the Agent call (`--replace` because it replaces the stopped worker's entry), then
+`record <ID> --agent` with the new agent id and worktree. When it reports, delete the leftover branch it names with `git branch -d <branch>` if it still
 exists (it points at a base-branch commit, so `-d` is enough). If `-d` refuses, leave the branch and tell the user.

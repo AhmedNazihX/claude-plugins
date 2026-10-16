@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- `workers.py`: every change holds a file lock on `workers.json.lock` and writes through a temp file and a rename,
+  so parallel `record` calls no longer lose entries. New `launching` state: `record <ID> --launching` before the
+  Agent call, then `record <ID> --agent <id>` fills in the id. `story-start` records both steps.
 - New `scripts/lint.py`: checks agent and skill frontmatter, read-only agents' tools, `foreman:` references,
   hook paths, relative `.md` links, stdlib-only imports and that the version agrees across `plugin.json`, the
   README and this file. The README version line is corrected to 0.10.1.
