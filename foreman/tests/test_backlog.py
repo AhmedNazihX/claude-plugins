@@ -9,6 +9,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest import mock
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -404,6 +405,17 @@ class JsonOutput(unittest.TestCase):
         self.assertEqual(self.ids(data["not_finishable"]), ["A2"])
         self.assertIn("A1's Output creates", data["not_finishable"][0]["gaps"][0])
 
+    def test_status_json_puts_a_story_with_a_live_branch_in_progress(self) -> None:
+        with mock.patch.object(backlog, "branches", return_value={"story/F3-contracts"}):
+            data = backlog.status_data(backlog.Backlog(FIXTURE))
+        self.assertEqual(self.ids(data["in_progress"]), ["F3"])
+        self.assertNotIn("F3", self.ids(data["ready"]) + self.ids(data["blocked"]))
+
+    def test_info_takes_json_and_stays_json(self) -> None:
+        out = run("info", "F3", "--json")
+        self.assertEqual(out.returncode, 0, out.stderr)
+        self.assertEqual(json.loads(out.stdout)["id"], "F3")
+
     def test_plan_json_matches_the_computed_plan(self) -> None:
         out = run("plan", "--json")
         self.assertEqual(out.returncode, 0, out.stderr)
@@ -450,8 +462,8 @@ class HelpAndUsage(unittest.TestCase):
             self.assertTrue(all("backlog.py" in e and name in e for e in examples), examples)
 
     def test_the_docstring_lists_every_command(self) -> None:
-        for name in backlog.COMMANDS:
-            self.assertIn(f"backlog.py {name}", backlog.__doc__)
+        for name, c in backlog.COMMANDS.items():
+            self.assertIn(f"backlog.py {c.usage}", backlog.__doc__, name)
 
     def test_help_alone_prints_the_whole_guide(self) -> None:
         out = self.cli("--help")
@@ -469,8 +481,10 @@ class HelpAndUsage(unittest.TestCase):
         cases = {
             ("show",): "Usage: backlog.py show <ID>",
             ("set-deps", "E2"): "Usage: backlog.py set-deps",
-            ("plan", "--width", "three"): "--width needs a whole number",
-            ("show", "F3", "--json"): "--json works with status, plan and deps",
+            ("plan", "--width", "three"): "backlog.py plan: --width needs a whole number",
+            ("plan", "--width", "²"): "backlog.py plan: --width needs a whole number",
+            ("status", "--width", "x"): "backlog.py status: --width needs a whole number",
+            ("show", "F3", "--json"): "--json works with plan, status, deps, info",
             ("--file", FIXTURE.as_posix(), "add"): "needs --after <ID>",
             ("--file", FIXTURE.as_posix(), "note", "E1", "text", "--from"): "--from needs a story ID",
             ("status", "--file"): "--file needs a path",
@@ -483,6 +497,17 @@ class HelpAndUsage(unittest.TestCase):
                 out = self.cli(*args)
                 self.assert_short_usage_error(out)
                 self.assertIn(expected, out.stderr)
+
+    def test_a_later_help_word_in_a_note_or_outcome_is_text_not_help(self) -> None:
+        with tempfile.TemporaryDirectory() as d:
+            path = Path(d) / "backlog.md"
+            shutil.copy(FIXTURE, path)
+            for args, written in ((("note", "F3", "pass", "-h", "to", "see"), "  pass -h to see"),
+                                  (("tick", "F3", "done", "--help"), "**Outcome:** done --help")):
+                out = run(*args, path=path)
+                self.assertEqual(out.returncode, 0, out.stderr)
+                self.assertNotIn("Usage:", out.stdout)
+                self.assertIn(written, path.read_text(encoding="utf-8"))
 
 
 if __name__ == "__main__":

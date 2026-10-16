@@ -650,7 +650,8 @@ COMMANDS = {
     "show": Command("show <ID>", "Print one story's full entry.", ("backlog.py show C1", "backlog.py show B5b"), 1),
     "deps": Command("deps <ID> [--json]", "List a story's unmet deps; exit 1 if any are unmet.",
                     ("backlog.py deps E1", "backlog.py deps E1 --json"), 1, takes_json=True),
-    "info": Command("info <ID>", "Print one story's fields as JSON.", ("backlog.py info C1", "backlog.py info B5b"), 1),
+    "info": Command("info <ID>", "Print one story's fields as JSON.", ("backlog.py info C1", "backlog.py info B5b"), 1,
+                    takes_json=True),
     "tick": Command("tick <ID> <note>", "Mark a story done and add its outcome note.",
                     ('backlog.py tick C1 "parser merged; 42 tests"', 'backlog.py tick B5b "German cases approved"'), 1),
     "note": Command("note <ID> [--from <SRC>] <text>", "Add a one-line hand-over note to a story.",
@@ -663,6 +664,7 @@ COMMANDS = {
     "graph": Command("graph", "Print the critical path as a Mermaid flowchart.",
                      ("backlog.py graph", "backlog.py graph > docs/critical-path.md")),
 }
+HELP_FLAGS = ("--help", "-h")
 SHORT_USAGE = (f"Usage: backlog.py [--file PATH] <command> ...\nCommands: {', '.join(COMMANDS)}\n"
                "Example: backlog.py status\nMore: backlog.py --help, or backlog.py <command> --help")
 
@@ -691,16 +693,17 @@ def pop_option(argv: list[str], flag: str) -> tuple[str | None, list[str]]:
 
 
 def main(argv: list[str]) -> None:
-    wants_help = any(a in ("--help", "-h") for a in argv)
-    as_json = "--json" in argv
-    argv = [a for a in argv if a not in ("--help", "-h", "--json")]
     file, argv = pop_option(argv, "--file")
     width_text, argv = pop_option(argv, "--width")
+    if argv and argv[0] in HELP_FLAGS:
+        print(__doc__)
+        return
+    # Help only right after the command name: a later "-h" may be a word of a note or an outcome.
+    wants_help = len(argv) > 1 and argv[1] in HELP_FLAGS
+    as_json = "--json" in argv
+    argv = [a for a in argv if a != "--json"]
     cmd, args = (argv[0], argv[1:]) if argv else (None, [])
     if cmd is None or cmd not in COMMANDS:
-        if wants_help and cmd is None:
-            print(__doc__)
-            return
         problem = f"Unknown command '{cmd}'\n" if cmd else "--file needs a path\n" if file == "" else ""
         sys.exit(problem + SHORT_USAGE)
     if wants_help:
@@ -708,10 +711,10 @@ def main(argv: list[str]) -> None:
         return
     if file == "":
         usage_error(cmd, "--file needs a path")
-    if width_text is not None and not width_text.isdigit():
-        usage_error("plan", "--width needs a whole number")
-    if as_json and not COMMANDS[cmd].takes_json and cmd != "info":
-        usage_error(cmd, "--json works with status, plan and deps")
+    if width_text is not None and not (width_text.isascii() and width_text.isdecimal()):
+        usage_error(cmd, "--width needs a whole number")
+    if as_json and not COMMANDS[cmd].takes_json:
+        usage_error(cmd, f"--json works with {', '.join(n for n, c in COMMANDS.items() if c.takes_json)}")
     if len(args) < COMMANDS[cmd].needs:
         usage_error(cmd, "needs a story ID" if COMMANDS[cmd].needs == 1 else "needs a story ID and a value")
     b = Backlog(Path(file) if file else repo_root() / "docs" / "BACKLOG.md")
