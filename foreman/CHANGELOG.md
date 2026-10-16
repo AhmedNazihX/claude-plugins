@@ -5,8 +5,8 @@
 - New `scripts/lint.py`: checks agent and skill frontmatter, read-only agents' tools, `foreman:` references,
   hook paths, relative `.md` links, stdlib-only imports and that the version agrees across `plugin.json`, the
   README and this file. The README version line is corrected to 0.10.1.
-- Decision 003: a plugin `Stop` hook can drive the autopilot loop (live runs on Claude Code 2.1.302). It counts
-  in its own state file and stands aside while background agents run.
+- Decision 003 (proposed): a plugin `Stop` hook loop works headless on Claude Code 2.1.302. B4's hook will count in
+  its own state file and stand aside while background subagents run.
 
 ## 0.10.1 (2026-10-13)
 

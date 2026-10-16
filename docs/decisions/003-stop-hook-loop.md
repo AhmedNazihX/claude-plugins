@@ -2,7 +2,9 @@
 
 - **Date:** 2026-10-16
 - **Story:** X3 (docs/BACKLOG.md)
-- **Status:** accepted (experiment result; B4 is a go, with the conditions under Decision)
+- **Status:** proposed (waiting for the user). Only headless runs were made, autopilot starts from an interactive
+  session, and the result departs from the design: X3 assumed the loop stops on `stop_hook_active`, and this record
+  rejects that.
 
 ## Question
 
@@ -54,8 +56,9 @@ From the env-vars page, `https://code.claude.com/docs/en/env-vars.md`:
 ## The live runs
 
 **Setup.** Claude Code 2.1.302, `claude -p` (headless) with `--plugin-dir` pointing at a throwaway plugin outside
-the repo, `--model haiku`, `--allowedTools Bash` (plus `Agent` for runs 4 to 7). The plugin has one `Stop` hook,
-registered in its `hooks/hooks.json` as `bash "${CLAUDE_PLUGIN_ROOT}/hooks/loop.sh"`. The hook:
+the repo, `--model haiku`, `--allowedTools Bash` (plus `Agent` for runs 4 to 7). No interactive session was run.
+The plugin has one `Stop` hook, registered in its `hooks/hooks.json` as
+`bash "${CLAUDE_PLUGIN_ROOT}/hooks/loop.sh"`. The hook:
 
 - reads `x3-state.json` in the session's `cwd` (`iteration`, `max_iterations`, and switches for each run);
 - with no state file, exits 0 (the session stops);
@@ -68,7 +71,7 @@ registered in its `hooks/hooks.json` as `bash "${CLAUDE_PLUGIN_ROOT}/hooks/loop.
 Each run started with the prompt "Reply with the single word: ok." unless the table says otherwise.
 
 **Run 1: four iterations, ending on the state file.** State `{"iteration":0,"max_iterations":4}`. Session
-`11b58cf8-d969-4c9f-a5a5-4c1f742f034f`, exit 0, `num_turns` 9, result `done`. The hook log:
+`<session>`, exit 0, `num_turns` 9, result `done`. The hook log:
 
 | Time | Iteration before | `stop_hook_active` | Last message | Hook did |
 | --- | --- | --- | --- | --- |
@@ -87,65 +90,100 @@ Each run started with the prompt "Reply with the single word: ok." unless the ta
 | 2 | No tool calls, `max_iterations` 12: each `reason` says "Do not use any tools. Reply with the single word: again." | 9 blocks logged (iterations 1 to 9); the session ended after the 8th continuation. The 9th block was overridden by the cap, and the hook's state still said `iteration: 9`. |
 | 3 | Cancel: at iteration 3 the `reason` says "run `rm x3-state.json`" | Blocks at iterations 1 and 2 (two ticks), then Claude deleted the file; the next Stop found no state and the session ended, result `cancelled`. |
 | 4 | Background subagent: the prompt launches a `general-purpose` subagent with `run_in_background` true that waits 60 s; the hook blocks regardless | The first Stop came while the subagent was running (`background_tasks: [{"type":"subagent","status":"running"}]`). The hook blocked twice and Claude ran both iterations while the subagent was still at work. When the subagent reported, the session woke for a new turn, and that turn's Stop had `stop_hook_active: false`. |
-| 5 | As run 4, but the hook exits 0 (no block, no count) while `background_tasks` is not empty; `max_iterations` 3 | Two Stops while work ran in the background (the hook stood aside). The session waited, woke when the subagent reported at 23:39:37 with an empty `background_tasks`, then ran iterations 1 to 3 and stopped on the state file. |
+| 5 | As run 4, but the hook exits 0 (no block, no count) while `background_tasks` is not empty; `max_iterations` 3 | Two Stops while work ran in the background (the hook stood aside). The second listed only two `shell` tasks that the subagent had started. The session waited, woke when the subagent reported at 23:39:37 with an empty `background_tasks`, then ran iterations 1 to 3 and stopped on the state file. |
 | 6, 7 | Foreground subagent (`run_in_background` false) that waits 45 s | Run 6: the subagent's `sleep 45` was refused by the local harness, so it proved nothing. Run 7 waited with `python3 -c "import time; time.sleep(45)"`: `duration_ms` 61400, no Stop fired during the wait, then iterations 1 to 3 and a clean stop. |
 | 8 | `hookSpecificOutput.additionalContext` instead of `decision: "block"`, `max_iterations` 3 | Same loop: iterations 1 to 3, then a stop on the state file. |
 
-All eight runs exited 0. Their `total_cost_usd` adds up to $0.091, but the CLI was signed in with a claude.ai
-subscription (`claude auth status`: `authMethod: claude.ai`), so no API key was billed.
+All eight runs exited 0. The CLI was signed in with a claude.ai subscription, so no API key was billed.
 
 ## Answers
+
+Answers 2 to 4 rest on headless runs only. An interactive session may differ, above all in how a session idles and
+wakes for a background subagent (runs 4 and 5) and in `stop_hook_active` resetting on that wake.
 
 1. **Yes.** `decision: "block"` with a `reason` continues the same session, and Claude takes the `reason` as its
    next instruction (runs 1, 3, 5, 7). `additionalContext` works the same way and is labelled as feedback, not as an
    error (run 8).
-2. **`stop_hook_active` is a flag, not a counter.** It is `false` on the first Stop of a turn and `true` on every
-   Stop after a hook continued that turn (run 1). It goes back to `false` when the session starts a new turn, for
-   example when a background subagent wakes it (runs 4 and 5). So the hook must keep its own count in the state
-   file. Stopping whenever `stop_hook_active` is `true` would allow one iteration only.
-3. **A foreground subagent wait is fine; a background one is not, unless the hook checks for it.** A foreground
-   subagent keeps the turn open, and no Stop fires until it returns (run 7, a 45 s wait). Background agents (which
-   is how `story-start` launches workers) end the turn while they work. Stop then fires with `background_tasks`
-   listing them. If the hook blocks then, Claude starts the next step while the workers still run (run 4). If the
-   hook stands aside, the session waits and wakes when they report, and the loop picks up (run 5).
-4. **Cancel by deleting the state file.** The next Stop finds nothing and lets the session end (run 3). Pressing
-   Esc also stops a turn, and the docs say Stop does not run after a user interrupt. The cap is a safety net, not a
-   cancel: it ends a turn after 8 continuations in a row without a tool call (run 2), and the hook is not told.
+2. **`stop_hook_active` is a flag, not a counter (headless).** It is `false` on the first Stop of a turn and `true`
+   on every Stop after a hook continued that turn (run 1). In run 4 it went back to `false` on the turn that a
+   background subagent's report started. So the hook must keep its own count in the state file. Stopping whenever
+   `stop_hook_active` is `true` would allow one iteration only.
+3. **A foreground subagent wait is fine; a background one is not, unless the hook checks for it (headless).** A
+   foreground subagent keeps the turn open, and no Stop fires until it returns (run 7, a 45 s wait). A background
+   subagent ends the turn while it works, and Stop fires with it listed in `background_tasks`. If the hook blocks
+   then, Claude starts the next step while the subagent still runs (run 4). If the hook stands aside, the session
+   waits and wakes when it reports, and the loop picks up (run 5). `story-start` does not say `run_in_background`,
+   but the Agent tool of this Claude Code version runs subagents in the background by default; its description in
+   this session reads: "Subagents run in the background; you'll be notified when one completes."
+4. **Only deleting the state file cancels (headless).** The next Stop finds nothing and lets the session end
+   (run 3). Pressing Esc only pauses: the docs say Stop does not run after a user interrupt, so the state file
+   survives, and the loop resumes when the user's next turn ends. The cap is a safety net, not a cancel: it ends a
+   turn after 8 continuations in a row without a tool call (run 2), and the hook is not told.
 
 ## Options
 
 | Option | What was compared or measured | Result | Source |
 | --- | --- | --- | --- |
-| Plugin `Stop` hook with `decision: "block"` | Loops, stops on a state file, cancels by deletion | Works | runs 1, 3, 5, 7 |
+| Plugin `Stop` hook with `decision: "block"` | Run 1: 4 blocks, `stop_hook_active` false, true, true, true; `tick 1` to `tick 4` written; 5th Stop ended on `iteration >= max_iterations` | Works | run 1; runs 3, 5, 7 |
 | Plugin `Stop` hook with `additionalContext` | Same loop, shown as feedback rather than an error | Works | run 8; docs "Stop decision control" |
+| Stop on `stop_hook_active`, as X3 assumed | `true` from the second Stop of a turn on | One iteration only | run 1 |
 | Built-in `/goal` | A session-scoped, prompt-based Stop hook | Not tested: the model, not a script, judges the end, and D17 needs script-checked stop reasons | docs "Stop" (tip) |
-| Headless runner on the Agent SDK | Out of scope for now | Not tested | DESIGN.md › Non-goals |
 
 ## Decision
 
-**Go for B4.** A plugin `Stop` hook that blocks with a fixed prompt and counts iterations in
-`.claude/foreman-autopilot.json` works, with these conditions:
+Go for B4: a plugin `Stop` hook that blocks with a fixed prompt and counts iterations in
+`.claude/foreman-autopilot.json`, under the conditions below. The rule that decided it is X3's own question
+(docs/DESIGN.md › Early experiments): "Does a plugin `Stop` hook with `decision: block` loop reliably, and stop on
+`stop_hook_active`?" It loops reliably; it must not stop on `stop_hook_active`.
 
-- **Count in the state file.** Never use `stop_hook_active` to stop or to count.
-- **Stand aside while work runs in the background.** When `background_tasks` is not empty, exit 0 without
-  blocking and without bumping `iteration`. The session wakes when a worker reports, and the next Stop continues
-  the loop. If nothing ever wakes it, the session simply idles: a safe failure.
-- **Bump the count only when blocking,** and expect it to run one ahead in a rare case: if 8 continuations in a row
-  make no tool call, the cap ends the turn after the hook has already bumped the count (run 2). Each autopilot
-  step calls tools, so the cap should not be reached.
-- **Tie the state to one session.** Store `session_id` in the state file and exit 0 for any other session. The
-  state file is per project, and the Stop hook fires in every session open in it, including `claude -p` runs. The
-  `ralph-loop` plugin does the same.
-- **Cancel by deleting the state file** (B5's cancel command), and report the iteration it held.
+**Conditions for B4.** Each is written to be lifted into B4's DoD.
+
+- **B4-1 Count in the state file.** The hook never reads `stop_hook_active` to stop or to count. Test: with
+  `stop_hook_active: true` and `iteration` below `max_iterations`, the hook blocks and bumps `iteration`.
+- **B4-2 Stand aside while subagents run.** When `background_tasks` has an entry of `type` `subagent`, the hook
+  exits 0 without blocking and without bumping `iteration`, and appends a line `waiting: <n> background subagents`
+  to the state file's log. Entries of other types (`shell`, `monitor`, and so on) do not count: a subagent's
+  leftover shells (run 5) or a long-lived dev server would otherwise stall the loop. The `foreman:ci-watcher` that
+  story-finish starts after a push is a subagent, so autopilot waits for it. If `background_tasks` is missing (the
+  docs say it is present only "when the task registry is reachable"), the hook stops the loop with the reason
+  `no task registry`, because it can't tell idle from busy. `session_crons` is ignored. Tests: one subagent entry
+  exits 0 with `iteration` unchanged; only `shell` entries block and bump; a missing `background_tasks` stops with
+  `no task registry`.
+- **B4-3 Leave a trace when idle.** Every exit records why, in the state file or its log: the stop reason when the
+  loop ends, and `waiting: …` when it stands aside. An idle session that nothing wakes then still shows where it
+  stopped. Test: each exit path writes its line.
+- **B4-4 Tie the state to one session, failing closed.** The autopilot skill writes `session_id` from
+  `CLAUDE_CODE_SESSION_ID` when it creates the state file (ralph-loop's `scripts/setup-ralph-loop.sh`, line 144,
+  does `session_id: ${CLAUDE_CODE_SESSION_ID:-}`). The hook exits 0 unless the stored `session_id` is non-empty and
+  equals the hook input's `session_id`. Note: ralph-loop's `hooks/stop-hook.sh` (lines 30 to 33) skips the check
+  when the stored id is empty; B4 must not. Tests: an empty `session_id` exits 0; another session's id exits 0.
+  Open for B4: what happens to the id on `/clear` or a resumed session is unknown.
+- **B4-5 Validate the state, fail closed.** Each field is type- and range-checked: `iteration`, `max_iterations`
+  and `max_stories` are non-negative integers, `deadline` is an ISO 8601 time, `merge_policy` is `integration` or
+  `stop-at-ready`. `max_iterations` and `deadline` are required. Any failed check deletes the file and stops.
+  Optionally, the limits are capped at the defaults in `.claude/foreman.json`, so a worker that edits the state
+  file can't raise them. Tests: one per bad field, and one for each missing required field.
+- **B4-6 A constant prompt.** The `reason` is a literal constant ("Run /foreman:next in autopilot mode."). A number
+  from the state file goes into it only after the integer check of B4-5; no other state text ever does.
+- **B4-7 Keep the cap.** Never set `CLAUDE_CODE_STOP_HOOK_BLOCK_CAP=0`. Bump `iteration` only when blocking, and
+  expect it to run one ahead if the cap overrides a block (run 2); each autopilot step calls tools, so this should
+  be rare.
+
+**For B5.** The cancel command deletes `.claude/foreman-autopilot.json` and reports the `iteration` it held. It says
+that Esc only pauses: the loop resumes when the next turn ends unless the file is deleted.
 
 ## Consequences
 
-- **B4:** add the background check and the session check to its Output, and a test for each: "background tasks
-  running: exit 0, iteration unchanged" and "another session: exit 0". Whether to answer with `decision: "block"`
-  or `additionalContext` is B4's call: both loop; `additionalContext` avoids a hook-error notice on every step.
-- **B5:** the cancel command deletes the state file and reports its `iteration`.
-- **Not tested:** an interactive session (the runs were headless, `claude -p`); the docs describe one Stop event
-  for both. Long runs of more than eight iterations with tool calls were not tried either, since the cap resets on
-  every tool call.
-- **Revisit if** a Claude Code release changes the Stop input (`stop_hook_active`, `background_tasks`), the
-  continuation cap, or how background agents wake a session.
+- **B4:** its Output and DoD take conditions B4-1 to B4-7, with their tests. Whether to answer with
+  `decision: "block"` or `additionalContext` is B4's call: both loop; `additionalContext` avoids a hook-error notice
+  on every step.
+- **B5:** the cancel command as above.
+- **Open for B4:** how `budget_usd` would be measured; the Stop input has no cost field (DESIGN.md › Risks already
+  leaves it out of B4).
+- **Not tested:** an interactive session; more than eight iterations with tool calls (the cap resets on every tool
+  call).
+- **Revisit when:**
+  - B4's DoD includes one interactive run of at least 3 iterations, including a wake by a background subagent.
+    Whether that run gates B4 is the user's call.
+  - A Claude Code release changes the Stop input (`stop_hook_active`, `background_tasks`), the continuation cap,
+    or how background agents wake a session.
