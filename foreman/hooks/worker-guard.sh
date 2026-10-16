@@ -29,8 +29,13 @@ CONFIG="${CLAUDE_PROJECT_DIR:-$MAIN}/.claude/foreman.json"
 BASE=$(jq -r '.base_branch // "main"' "$CONFIG" 2>/dev/null)
 BASE=${BASE:-main}
 
-block() {
-  echo "BLOCKED: $1 Story workers commit on their own branch ('$BRANCH') and report; the orchestrator merges, pushes and edits the backlog. Put it in your report instead." >&2
+# The way through, named at the end of each message.
+ALT_BACKLOG="Put it under Follow-ups in your report; the orchestrator updates the backlog."
+ALT_REPORT="Report it in your final message; the orchestrator does it."
+ALT_SCRATCH="To look at an old commit, use a scratch worktree: git worktree add --detach <dir> <commit>."
+block() {  # block <what was blocked> <the allowed alternative>
+  echo "BLOCKED: $1 Story workers commit on their own branch ('$BRANCH') and report; the orchestrator merges," \
+       "pushes and edits the backlog. $2" >&2
   exit 2
 }
 is_backlog() { [[ "$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')" =~ (^|/)docs/backlog\.md$ ]]; }
@@ -38,16 +43,16 @@ is_backlog() { [[ "$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')" =~ (^|/)doc
 case "$TOOL" in
   Write|Edit|MultiEdit|NotebookEdit)
     FILE=$(echo "$INPUT" | jq -r '.tool_input.file_path // .tool_input.notebook_path // empty')
-    is_backlog "$FILE" && block "editing docs/BACKLOG.md."
+    is_backlog "$FILE" && block "editing docs/BACKLOG.md." "$ALT_BACKLOG"
     ;;
   Bash)
     RAW=$(echo "$INPUT" | jq -r '.tool_input.command // empty' | awk -f "$HERE/lib/strip-heredocs.awk")
     # Quoted text is content (commit messages, echo), not commands.
     CMD=$(printf '%s\n' "$RAW" | sed -E "s/\"[^\"]*\"/ _q_ /g; s/'[^']*'/ _q_ /g")
     LOWER=$(printf '%s' "$CMD" | tr '[:upper:]' '[:lower:]')
-    echo "$CMD" | grep -qE 'backlog\.py[^;&|]*[[:space:]](tick|note|set-deps|add)([[:space:]]|$)' && block "changing the backlog with backlog.py."
+    echo "$CMD" | grep -qE 'backlog\.py[^;&|]*[[:space:]](tick|note|set-deps|add)([[:space:]]|$)' && block "changing the backlog with backlog.py." "$ALT_BACKLOG"
     if echo "$LOWER" | grep -qE '(>+|(^|[[:space:];&|])tee([[:space:]]+-a)?|(^|[[:space:];&|])(sed|perl)[[:space:]]+(-[a-z]*i|--in-place))[^;&|]*docs/backlog\.md'; then
-      block "writing docs/BACKLOG.md."
+      block "writing docs/BACKLOG.md." "$ALT_BACKLOG"
     fi
     SWITCHED=""
     while IFS= read -r part; do
@@ -89,23 +94,23 @@ case "$TOOL" in
       done
       has_opt() { [[ " ${REST[*]} " =~ \ $1\  ]]; }
       case "$SUB" in
-        push) block "git push." ;;
-        rebase) block "git rebase (story branches are merged, never rebased)." ;;
-        update-ref) block "git update-ref." ;;
+        push) block "git push." "$ALT_REPORT" ;;
+        rebase) block "git rebase (story branches are merged, never rebased)." "$ALT_REPORT" ;;
+        update-ref) block "git update-ref." "$ALT_REPORT" ;;
         pull)
           if has_opt --rebase || has_opt -r || [ "${#TARGETS[@]}" -lt 2 ] || [ "${TARGETS[1]}" != "$BASE" ]; then
-            block "git pull (use 'git merge $BASE' to take the base branch in)."
+            block "git pull." "To take the base branch in, run 'git merge $BASE'."
           fi ;;
         merge)
           { has_opt --abort || has_opt --continue || has_opt --quit; } && continue
           for t in "${TARGETS[@]}"; do
-            [ "$t" = "$BASE" ] || [ "$t" = "origin/$BASE" ] || block "git merge $t (only 'git merge $BASE' is allowed, to resolve conflicts)."
+            [ "$t" = "$BASE" ] || [ "$t" = "origin/$BASE" ] || block "git merge $t (only 'git merge $BASE' is allowed, to resolve conflicts)." "$ALT_REPORT"
           done ;;
         branch)
-          if has_opt -f || has_opt --force; then block "git branch -f."; fi ;;
+          if has_opt -f || has_opt --force; then block "git branch -f." "$ALT_REPORT"; fi ;;
         switch|checkout)
           for o in -b -B -c -C --create --force-create --orphan --detach; do
-            has_opt "$o" && block "git $SUB $o (a worker stays on its story branch)."
+            has_opt "$o" && block "git $SUB $o (a worker stays on its story branch)." "$ALT_REPORT"
           done
           has_opt -- && continue                                   # checkout <tree-ish> -- <paths>
           [ "${#TARGETS[@]}" -ge 1 ] || continue
@@ -120,7 +125,7 @@ case "$TOOL" in
               SWITCHED=1
               continue
             fi
-            block "git $SUB $t (a worker stays on its story branch; check old commits in a scratch worktree)."
+            block "git $SUB $t (a worker stays on its story branch)." "$ALT_SCRATCH"
           fi ;;
       esac
     done <<<"$(printf '%s\n' "$CMD" | sed -E 's/(\&\&|\|\||;|\||\(|\)|`)/\n/g')"

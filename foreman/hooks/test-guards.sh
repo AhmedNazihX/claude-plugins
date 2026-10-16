@@ -43,6 +43,23 @@ run() {  # run <hook> <expected exit> <json> <label>
   local c=$?
   if [ "$c" = "$2" ]; then echo "  ok    $4"; else echo "  FAIL  $4 (exit $c, want $2)"; FAILS=$((FAILS + 1)); fi
 }
+msg() {  # msg <hook> <json> <alternative> <label>: blocks, and the message ends by naming the way through
+  local out c
+  out=$(printf '%s' "$2" | "$1" 2>&1 >/dev/null)
+  c=$?
+  if [ "$c" = 2 ] && printf '%s' "$out" | grep -qF -- "$3"; then echo "  ok    $4"
+  else echo "  FAIL  $4 (exit $c, want 2 and '$3' in: $out)"; FAILS=$((FAILS + 1)); fi
+}
+# A PATH holding only the tools the hooks use, without the one named in $1 (to test what happens when it's missing).
+path_without() {
+  local dir="$TMP/bin-without-$1" tool p
+  mkdir -p "$dir"
+  for tool in git jq python3 sed awk grep tr cat dirname basename wc mktemp; do
+    [ "$tool" = "$1" ] && continue
+    p=$(command -v "$tool" 2>/dev/null) && ln -sf "$p" "$dir/$tool"
+  done
+  echo "$dir"
+}
 # Subagent input (agent_id set): the lane guard applies only to subagents; the gate applies to every session.
 bash_in() { jq -nc --arg c "$2" --arg d "$1" '{tool_name:"Bash",cwd:$d,agent_id:"a1",tool_input:{command:$c}}'; }
 file_in() { jq -nc --arg t "$1" --arg d "$2" --arg p "$3" '{tool_name:$t,cwd:$d,agent_id:"a1",tool_input:{file_path:$p,content:"x"}}'; }
@@ -61,6 +78,11 @@ run "$GATE" 2 "$(bash_in "$R" "sed -i '' s/a/b/ $E/graph.py")"           "sed -i
 run "$GATE" 2 "$(bash_in "$R" "python3 -c \"open('$E/x.py','w')\"")"     "python open(…, 'w') on the gated path"
 run "$GATE" 2 "$(bash_in "$R" "git checkout other -- $E")"               "git checkout -- the gated path"
 run "$GATE" 0 "$(bash_in "$R" "grep -rn x $E")"                          "reading the gated path"
+echo "gate, block messages name the way through"
+msg "$GATE" "$(file_in Write "$R" "$R/$E/graph.py")" "Commit 'eval/split.json' first" "Write: commit <requires> first"
+msg "$GATE" "$(bash_in "$R" "mkdir -p $E")"           "Commit 'eval/split.json' first" "shell: commit <requires> first"
+NOJQ=$(path_without jq)
+PATH="$NOJQ" msg "$GATE" "$(file_in Write "$R" "$R/$E/graph.py")" "brew install jq" "without jq: install it"
 echo '{}' > "$R/eval/split.json"; git -C "$R" add eval/split.json; git -C "$R" commit -q -m split
 echo "gate, after the split is committed"
 run "$GATE" 0 "$(file_in Write "$R" "$R/$E/graph.py")"                 "Write under the gated path"
@@ -102,6 +124,21 @@ main_bash() { jq -nc --arg c "$2" --arg d "$1" '{tool_name:"Bash",cwd:$d,tool_in
 run "$GUARD" 0 "$(main_bash "$W" "cd $R && git status")"                  "the main thread in the worktree reaches main"
 run "$GUARD" 0 "$(main_bash "$W" "cat $R/eval/cases.json")"               "the main thread in the worktree reads main's eval"
 run "$GUARD" 2 "$(bash_in "$W" "cd $R && git status")"                    "a worker in the worktree can't reach main"
+echo "lane guard, block messages name the config key and the story exception"
+LANE_KEY="lanes.Corpus.deny"
+EXC="stories.C1.allow"
+msg "$GUARD" "$(file_in Read "$W" "$W/eval/cases.json")" "$EXC" "Read: names the story exception"
+msg "$GUARD" "$(file_in Read "$W" "$W/eval/cases.json")" "$LANE_KEY" "Read: names the lane's config key"
+msg "$GUARD" "$(jq -nc --arg d "$W" --arg p "$R/eval" '{tool_name:"Grep",cwd:$d,agent_id:"a1",tool_input:{pattern:"x",path:$p}}')" \
+  "$EXC" "Grep path: names the story exception"
+msg "$GUARD" "$(jq -nc --arg d "$W" '{tool_name:"Glob",cwd:$d,agent_id:"a1",tool_input:{pattern:"**/eval/**"}}')" \
+  "$EXC" "Glob pattern: names the story exception"
+msg "$GUARD" "$(bash_in "$W" "cat eval/cases.json")"                     "$EXC" "shell touches a denied folder"
+msg "$GUARD" "$(bash_in "$W" "grep -rn x $R")"                           "$EXC" "shell reaches another checkout"
+msg "$GUARD" "$(bash_in "$W" "git sparse-checkout set --no-cone '/*'")"  "$EXC" "shell widens the sparse checkout"
+PATH="$NOJQ" msg "$GUARD" "$(file_in Read "$W" "$W/eval/cases.json")"    "brew install jq" "without jq: install it"
+PATH="$(path_without python3)" msg "$GUARD" "$(file_in Read "$W" "$W/eval/cases.json")" "stories.C1." \
+  "without python3: install it or give the story a rule"
 git -C "$R" worktree remove "$S" 2>/dev/null
 
 git -C "$W" checkout -q -b story/C2-guidelines
@@ -111,6 +148,7 @@ run "$GUARD" 0 "$(bash_in "$W" "jq .pile_b eval/split.json")"            "jq the
 run "$GUARD" 0 "$(bash_in "$W" "python3 -c \"open('eval/split.json')\"")" "python opens the allowed file"
 run "$GUARD" 2 "$(file_in Read "$W" "$R/eval/cases.json")"               "Read another eval file"
 run "$GUARD" 2 "$(bash_in "$W" "cat eval/cases.json")"                   "cat another eval file"
+msg "$GUARD" "$(file_in Read "$W" "$R/eval/cases.json")" "stories.C2.deny" "a story's own rule names its config key"
 
 git -C "$W" checkout -q -b story/B4-cases
 echo "lane guard on story/B4 (lane Benchmark, no rule) and on main"
@@ -137,6 +175,22 @@ run "$WG" 0 "$(bash_in "$W" "python3 backlog.py show B4")"                "a wor
 run "$WG" 0 "$(bash_in "$W" "git commit -m 'feat: cases'")"               "a worker commits"
 run "$WG" 0 "$(bash_in "$R" "git push origin main")"                      "the orchestrator on main pushes"
 run "$WG" 0 "$(file_in Edit "$R" "$R/docs/BACKLOG.md")"                   "the orchestrator edits the backlog"
+echo "worker guard, block messages name the way through"
+FOLLOW="Put it under Follow-ups in your report; the orchestrator updates the backlog."
+REPORT="Report it in your final message; the orchestrator does it."
+msg "$WG" "$(file_in Edit "$W" "$W/docs/BACKLOG.md")"                "$FOLLOW" "edit the backlog: Follow-ups"
+msg "$WG" "$(bash_in "$W" "python3 backlog.py tick B4 done")"        "$FOLLOW" "backlog.py tick: Follow-ups"
+msg "$WG" "$(bash_in "$W" "echo x >> docs/BACKLOG.md")"              "$FOLLOW" "shell write to the backlog: Follow-ups"
+msg "$WG" "$(bash_in "$W" "git push origin story/B4-cases")"         "$REPORT" "push: report it"
+msg "$WG" "$(bash_in "$W" "git rebase main")"                        "$REPORT" "rebase: report it"
+msg "$WG" "$(bash_in "$W" "git merge story/C1-parser")"              "$REPORT" "merge another story: report it"
+msg "$WG" "$(bash_in "$W" "git update-ref refs/heads/main HEAD")"    "$REPORT" "update-ref: report it"
+msg "$WG" "$(bash_in "$W" "git branch -f main HEAD")"                "$REPORT" "branch -f: report it"
+msg "$WG" "$(bash_in "$W" "git checkout -b other")"                  "$REPORT" "create a branch: report it"
+msg "$WG" "$(bash_in "$W" "git pull origin other")"                  "run 'git merge main'" "pull: merge the base branch"
+msg "$WG" "$(bash_in "$W" "git switch main")"                        "git worktree add --detach" \
+  "move to another commit: use a scratch worktree"
+PATH="$NOJQ" msg "$WG" "$(bash_in "$W" "git push")"                  "brew install jq" "without jq: install it"
 # Found in the 0.3.0 review.
 SHA=$(git -C "$R" rev-parse HEAD)
 run "$WG" 2 "$(bash_in "$W" "git checkout $SHA")"                         "a worker checks out a commit (detaches)"

@@ -5,6 +5,10 @@
 - New `scripts/lint.py`: checks agent and skill frontmatter, read-only agents' tools, `foreman:` references,
   hook paths, relative `.md` links, stdlib-only imports and that the version agrees across `plugin.json`, the
   README and this file. The README version line is corrected to 0.10.1.
+- `gate`, `lane-guard` and `worker-guard`: every BLOCKED message now ends with the way through, as `doc-guard`
+  does. The gate says to commit the required file first. The lane guard names the config key that denies the
+  folder and the story exception (`stories.<ID>.allow`). The worker guard says to put backlog changes under
+  Follow-ups, and to report a push, merge or rebase for the orchestrator to do.
 
 ## 0.10.1 (2026-10-13)
 
