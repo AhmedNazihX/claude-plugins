@@ -17,6 +17,9 @@
   becomes a DoD item. `kickoff` § 5 first questions each requirement (who owns it) and deletes what doesn't
   survive. `guardrails`: optional `because` on each registry entry and `expires` on each exception; the example
   config shows both.
+- `backlog.py`: `--json` on `status`, `plan` and `deps` (fields listed in its docstring); `<command> --help` shows
+  that command's usage and examples; a usage error prints the command's usage line and one example, not the whole
+  docstring.
 
 ## 0.10.1 (2026-10-13)
 
