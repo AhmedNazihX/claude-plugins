@@ -38,7 +38,10 @@ be a real merge, which is fine unless files conflict.
 - **`foreman:dod-verifier`**: "Verify story `<ID>` at worktree `<path>` (branch `story/<ID>-<slug>`). User approvals so
   far: <each approval the user gave for this story, with its date, or 'none'>. Known failures that aren't this
   story's: <if any, with why>. Pending the orchestrator's recording (not open): <DoD items, or 'none'>."
-- Every agent in `reviewers`: "Review the diff `<base>...story/<ID>-<slug>`." Run it in the worktree, if one exists.
+- Every agent in `reviewers`: "Review the diff `<base>...story/<ID>-<slug>`. The story it implements, from the
+  backlog: <the output of `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/backlog.py show <ID>`, verbatim>." Run
+  `backlog.py show` once and paste its whole entry (Output and DoD included), so a reviewer can tell an intended
+  change from a mistake. Run each reviewer in the worktree, if one exists.
 - Every agent in `lanes.<lane>.reviewers` for this story's lane: "Audit branch `story/<ID>-<slug>`."
 - **`foreman:test-auditor`**, when the DoD rests on tests: "Audit whether the tests of story `<ID>` (worktree
   `<path>`) prove its DoD. Tests waiting for the orchestrator's recording (pending, not weak): <tests, or 'none'>." Run it again after a fix round that changed tests or the code they cover.

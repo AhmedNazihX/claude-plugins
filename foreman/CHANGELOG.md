@@ -5,6 +5,10 @@
 - New `scripts/lint.py`: checks agent and skill frontmatter, read-only agents' tools, `foreman:` references,
   hook paths, relative `.md` links, stdlib-only imports and that the version agrees across `plugin.json`, the
   README and this file. The README version line is corrected to 0.10.1.
+- Reviewers see the story's intent: `story-finish` passes the `backlog.py show` entry to every reviewer.
+  `diff-reviewer` no longer reports a removal the story asks for (unless its impact reaches further) and flags
+  changes outside the story's Output as *scope*. `security-reviewer` reads the story for intent but still reviews
+  the whole diff.
 
 ## 0.10.1 (2026-10-13)
 
