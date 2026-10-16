@@ -5,6 +5,9 @@
 - New `scripts/lint.py`: checks agent and skill frontmatter, read-only agents' tools, `foreman:` references,
   hook paths, relative `.md` links, stdlib-only imports and that the version agrees across `plugin.json`, the
   README and this file. The README version line is corrected to 0.10.1.
+- Decision 002 records what a dead story-worker's transcript looks like (usage limit, API error, finish without a
+  report; context overflow not seen) and the idle times behind `watch`'s defaults, with synthetic fixtures in
+  `tests/fixtures/transcripts/`.
 
 ## 0.10.1 (2026-10-13)
 
