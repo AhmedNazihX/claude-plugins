@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Read, check, plan and update a story backlog (docs/BACKLOG.md by default). Stdlib only.
+One file, past 800 lines, on purpose for now: skills run it by path with no package to install (a split is its own story).
 
 Usage (from anywhere inside the repo):
   backlog.py check               validate: duplicate IDs, unknown deps, cycles, missing Type/Output/DoD
@@ -50,6 +51,7 @@ import difflib
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -521,9 +523,18 @@ def location(b: Backlog, index: int) -> str:
     return f"{b.path if rel.startswith('..') else rel}:{index + 1}"
 
 
-def find_line(b: Backlog, s: Story, text: str) -> int | None:
-    """Index of the first line of a story's entry that reads `text` (spaces around it ignored)."""
-    return next((i for i in range(s.line_no, entry_end(b, s) + 1) if b.lines[i].strip() == text.strip()), None)
+def find_note(b: Backlog, s: Story, text: str) -> int | None:
+    """Index of the note line of a story's entry that reads `text` (spaces around it ignored). Note lines come
+    after the story's own fields: after the last line that starts with Context:, Input:, Output: or DoD:."""
+    end = entry_end(b, s)
+    start = max((i for i in range(s.line_no, end + 1) if FIELD_RE.match(b.lines[i].strip())), default=s.line_no)
+    return next((i for i in range(start + 1, end + 1) if b.lines[i].strip() == text.strip()), None)
+
+
+def one_line(text: str, problem: str) -> None:
+    """Exit with `problem` unless `text` is one non-empty line (no break of any kind `splitlines` knows)."""
+    if not text.strip() or text.splitlines() != [text]:
+        sys.exit(problem)
 
 
 def refuse_broken(path: Path, touched: tuple[str, ...]) -> None:
@@ -545,21 +556,23 @@ def refuse_broken(path: Path, touched: tuple[str, ...]) -> None:
 
 
 def write_checked(b: Backlog, lines: list[str], what: str, at: int, touched: tuple[str, ...] = (),
-                  dry_run: bool = False, checked: bool = True) -> None:
-    """Write the edited backlog atomically, keeping its line endings, if it passes `refuse_broken` (when `checked`),
-    and print file:line for line index `at`. With `dry_run`, the same checks run, then only the diff is printed."""
-    fd, tmp_name = tempfile.mkstemp(suffix=".md", dir=b.path.parent)
+                  dry_run: bool = False) -> None:
+    """Write the edited backlog atomically, keeping its line endings, mode and symlink, if it passes
+    `refuse_broken`, and print file:line for line index `at`. With `dry_run`, the checks run, then only the diff
+    is printed."""
+    target = b.path.resolve()  # a symlinked backlog: write its target, keep the link
+    fd, tmp_name = tempfile.mkstemp(suffix=".md", dir=target.parent)
     tmp = Path(tmp_name)
     try:
         with os.fdopen(fd, "w", encoding="utf-8", newline="") as f:
             f.write(b.newline.join(lines) + b.newline)
-        if checked:
-            refuse_broken(tmp, touched)
+        shutil.copymode(target, tmp)  # mkstemp makes it 0600
+        refuse_broken(tmp, touched)
         if dry_run:
             print("\n".join(difflib.unified_diff(b.lines, lines, str(b.path), f"{b.path} (after)", lineterm="")))
             print(f"Dry run, nothing written: {what}")
             return
-        os.replace(tmp, b.path)
+        os.replace(tmp, target)
     finally:
         tmp.unlink(missing_ok=True)
     print(f"{location(b, at)}: {what}")
@@ -568,12 +581,15 @@ def write_checked(b: Backlog, lines: list[str], what: str, at: int, touched: tup
 def cmd_tick(b: Backlog, sid: str, note: str, dry_run: bool = False) -> None:
     """Tick a story and add its outcome note. The same note again is "already done"; a different one fails."""
     s = b.find(sid)
+    one_line(note, "An outcome note is one non-empty line")
     sub = sid in s.sub_ids
     outcome = f"**Outcome{f' ({sid})' if sub else ''}:** {note}"
     if s.done or (sub and sid in s.subs_done):
-        same = find_line(b, s, outcome)
+        same = find_note(b, s, outcome)
+        has_outcome = sid in s.subs_done if sub else any(x.strip().startswith("**Outcome:**") for x in s.body)
         if same is None:
-            sys.exit(f"{sid} is already ticked with a different outcome note")
+            sys.exit(f"{sid} is already ticked with a different outcome note" if has_outcome
+                     else f"{s.id} is already ticked")
         print(f"already done: {sid} ticked ({location(b, same)})")
         return
     if not sub and s.sub_ids and (left := [i for i in s.sub_ids if i not in s.subs_done]):
@@ -584,21 +600,20 @@ def cmd_tick(b: Backlog, sid: str, note: str, dry_run: bool = False) -> None:
     at = entry_end(b, s) + 1
     lines.insert(at, f"  {outcome}")
     what = f"Added the outcome note for {sid}." if sub else f"Ticked {s.id} and added the outcome note."
-    write_checked(b, lines, what, at, dry_run=dry_run, checked=False)
+    write_checked(b, lines, what, at, dry_run=dry_run)
 
 
 def cmd_note(b: Backlog, sid: str, text: str, source: str | None, dry_run: bool = False) -> None:
     """Add a hand-over note at the end of a story's entry. A sub-story's note goes on its group, marked (B5b)."""
     s = b.find(sid)
     text = text.strip()
-    if not text or "\n" in text or "\r" in text:
-        sys.exit("A note is one non-empty line: run `note` once per line")
+    one_line(text, "A note is one non-empty line: run `note` once per line")
     if re.match(r"(\*\*Outcome\b|- \[[ x]\])", text):
         sys.exit("A note can't start with **Outcome or a story line: `tick` writes outcomes, `add` adds stories")
     if sid in s.sub_ids:
         text = f"({sid}) {text}"
     note = f"**From {source} (merged):** {text}" if source else text
-    same = find_line(b, s, note)
+    same = find_note(b, s, note)
     if same is not None:
         print(f"already done: {s.id} has this note ({location(b, same)})")
         return

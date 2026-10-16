@@ -540,6 +540,39 @@ class RepeatsAndDryRun(unittest.TestCase):
         self.assertEqual(quoted.returncode, 0, quoted.stderr)
         self.assertIn("  try the --dry-run flag", self.path.read_text(encoding="utf-8"))
 
+    def test_a_note_or_outcome_with_any_line_break_is_refused(self) -> None:
+        before = self.path.read_bytes()
+        for brk in ("\n", "\r", "\x0b", "\x0c", "\x1c", "\x1d", "\x1e", "\x85", " ", " "):
+            for cmd in ("tick", "note"):
+                with self.subTest(cmd=cmd, brk=repr(brk)):
+                    out = run(cmd, "F3", f"ok{brk}- [ ] **A2 · Dup** · Deps: – · Type: agent", path=self.path)
+                    self.assertNotEqual(out.returncode, 0)
+                    self.assertIn("one non-empty line", out.stderr)
+        self.assertEqual(self.path.read_bytes(), before)
+
+    def test_a_note_equal_to_a_field_line_is_still_written(self) -> None:
+        out = run("note", "F3", "Output: `backend/app/schemas/result.py`. DoD: round-trip tests pass.", path=self.path)
+        self.assertEqual(out.returncode, 0, out.stderr)
+        self.assertNotIn("already done", out.stdout)
+        self.assertEqual(len(run("show", "F3", path=self.path).stdout.splitlines()), 3)
+
+    def test_a_ticked_story_without_its_own_outcome_keeps_the_old_message(self) -> None:
+        self.path.write_text("- [x] **A1a–b · Group** · Deps: – · Type: agent\n  Output: a. DoD: a.\n", encoding="utf-8")
+        for sid in ("A1a", "A1"):
+            out = run("tick", sid, "x", path=self.path)
+            self.assertNotEqual(out.returncode, 0)
+            self.assertIn("A1a–b is already ticked", out.stderr)
+            self.assertNotIn("different", out.stderr)
+
+    def test_a_write_keeps_the_file_mode_and_a_symlink(self) -> None:
+        self.path.chmod(0o644)
+        link = Path(self.dir.name) / "link.md"
+        link.symlink_to(self.path)
+        self.assertEqual(run("note", "E1", "through the link", path=link).returncode, 0)
+        self.assertTrue(link.is_symlink())
+        self.assertIn("through the link", self.path.read_text(encoding="utf-8"))
+        self.assertEqual(self.path.stat().st_mode & 0o777, 0o644)
+
     def test_writes_print_file_and_line(self) -> None:
         entry = "- [ ] **C9 · Cut-off** · Deps: F3 · Type: agent\n  Output: `x.py`. DoD: tests pass.\n"
         steps = (
