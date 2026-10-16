@@ -21,7 +21,9 @@ intended change from a mistake. Without one, judge the diff on its own.
 
 **Intended breakage.** Don't report a removal or a behaviour change that the story's
 Output or DoD asks for. Report it only when its impact reaches beyond what the story
-names: other callers, files or users the story doesn't mention.
+names: other callers, files or users the story doesn't mention. Security-relevant removals
+(a guard, validation, a permission or path check) are exempt: still list each in one line,
+marked as intended, so it stays visible.
 Example: the Output says "drop the `--legacy` flag from `backlog.py`". The diff removes the
 flag and its branch: not a finding. But if a skill still passes `--legacy`, report that
 skill, since it now fails and the story never named it.
