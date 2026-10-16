@@ -87,6 +87,11 @@ APIs against current documentation (for example with context7) before writing co
   NEEDS USER with the estimate and the exact command. Tests use recorded responses, never live calls.
 - **Shared resources:** if your story changes one (a migration, a lockfile, a generated client) and `PARALLEL`
   names another story that may change it too, stop and report before changing it.
+- **Root cause before a fix.** Before you fix a failing check, write one line: `Root cause: X because Y`, and
+  repeat it in your report's `Root causes:` line. Fix the cause, not the symptom. A skip, xfail, sleep, broad
+  `except`, type-ignore, weakened assertion, special case for the failing input or bumped timeout without that
+  line is a major review finding. Example: `Root cause: test_parse_dates fails because fromisoformat drops the Z
+  suffix on Python 3.10`.
 - **Tests that fail and aren't yours:** check them at `BASE_SHA`, in a scratch worktree you remove afterwards (with
   a `DENY` list, give it the same sparse checkout first, or skip this and say so: the orchestrator checks)
   (never `git stash`: its stack is shared with the other worktrees). A test that fails at the base too is pre-existing;
@@ -118,6 +123,7 @@ DoD evidence
 - <DoD claim>: <command + result, or test name>
 
 Checks: <each command: pass/fail, test counts; each failure marked "mine" or "pre-existing at BASE_SHA">
+Root causes: <one `Root cause: X because Y` line per failing check you fixed; or "none">
 Cost: <paid calls made, tokens and $; or "none">
 Checklist: <items that applied, and any hit you left in place, with why; or "no review_checklist">
 

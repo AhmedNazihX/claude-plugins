@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- `diff-reviewer`: two new categories, *developer-setup breakage* (listed even when intended) and *symptom fix*
+  (major without a `Root cause: X because Y` line). `story-worker` writes that line before fixing a failing check
+  and repeats it under `Root causes:` in its report. `story-finish` passes that line to the reviewers, adds a Setup
+  row to the merge table, and its triage has one rule: only the user drops or defers a finding, except a
+  "(default)" on a minor non-security one; severities are never lowered, auditor FAILs count as major, and every
+  deferral goes to the backlog.
+
 - `workers.py`: every change holds a file lock on `workers.json.lock` and writes through a temp file and a rename,
   so parallel `record` calls no longer lose entries. New `launching` state: `record <ID> --launching` before the
   Agent call, then `record <ID> --agent <id>` fills in the id. `story-start` records both steps.

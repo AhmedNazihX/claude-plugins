@@ -81,6 +81,22 @@ the Output needs to work (an import, a changelog line, a test) are in scope. Exa
 Output is "add a `--json` flag to `status`", and the diff also rewrites how `plan` sorts its
 waves. Report the `plan` change as scope, minor unless it also changes behaviour.
 
+**Developer-setup breakage** — a change every developer must act on after pulling: a renamed
+or new required env var, a moved secrets file, a changed port, a new script everyone must run
+first. A plain new dependency that the usual install picks up is not one. Report it even when
+the story asks for it (mark it intended): the merge table lists every one. Major when nothing
+in the diff tells developers what to do (the env example, README or setup script); otherwise
+minor. Example: the diff renames `DB_URL` to `DATABASE_URL` in `config.py` and in
+`.env.example`, but each developer's own `.env` still says `DB_URL`: minor, intended, and
+listed so the merge tells everyone to rename it.
+
+**Symptom fix** — a change that makes a failing check pass without fixing its cause: a skip
+or xfail, a sleep, a broad `except`, a type-ignore, a weakened assertion, special-casing the
+failing input, a bumped timeout. Your prompt may include the worker's `Root causes:` line.
+Major when it has no `Root cause: X because Y` line for this change (or you weren't given
+one); with a line, judge whether the change answers the cause it names. Example: the diff adds
+`@pytest.mark.skip` to `test_parse_dates`, and the report has no root cause for it: major.
+
 ## Standard of evidence
 
 Only report what you can point at. For each finding, be able to state the concrete
@@ -97,7 +113,7 @@ Order findings by severity, worst first. For each:
 
 ```
 ### [severity] Short title
-`path/to/file.ts:42` — category: silent-behaviour-change
+`path/to/file.ts:42` — category: silent-behaviour-change (or dead-code, duplication, over-engineering, scope, setup-breakage, symptom-fix)
 
 What changed and why it is wrong. Concrete failure: given <input/state>, this now
 <wrong outcome> where it previously <correct outcome>.
