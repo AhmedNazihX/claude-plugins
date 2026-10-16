@@ -448,6 +448,177 @@ class JsonOutput(unittest.TestCase):
         self.assertFalse(run("plan").stdout.startswith("{"))
 
 
+class RepeatsAndDryRun(unittest.TestCase):
+    """Q6: an identical repeat is "already done", --dry-run prints the diff only, writes name file:line."""
+
+    def setUp(self) -> None:
+        self.dir = tempfile.TemporaryDirectory()
+        self.path = Path(self.dir.name) / "backlog.md"
+        shutil.copy(FIXTURE, self.path)
+
+    def tearDown(self) -> None:
+        self.dir.cleanup()
+
+    def line_of(self, text: str) -> int:
+        """1-based number of the backlog line that reads `text`."""
+        lines = [line.strip() for line in self.path.read_text(encoding="utf-8").splitlines()]
+        return lines.index(text) + 1
+
+    def cli(self, *args: str, stdin: str = "") -> subprocess.CompletedProcess[str]:
+        return subprocess.run([sys.executable, str(SCRIPT), "--file", str(self.path), *args],
+                              input=stdin, capture_output=True, text=True, cwd=self.dir.name)
+
+    def test_the_same_tick_again_is_already_done(self) -> None:
+        self.assertEqual(run("tick", "F3", "contracts merged", path=self.path).returncode, 0)
+        before = self.path.read_bytes()
+        for sid, note in (("F3", "contracts merged"), ("B2a", "10 cases.")):
+            out = run("tick", sid, note, path=self.path)
+            self.assertEqual(out.returncode, 0, out.stderr)
+            self.assertTrue(out.stdout.startswith(f"already done: {sid} ticked"), out.stdout)
+        self.assertEqual(self.path.read_bytes(), before)
+
+    def test_a_different_note_on_a_ticked_story_still_fails(self) -> None:
+        before = self.path.read_bytes()
+        for sid, note in (("F1", "something else"), ("B2a", "11 cases.")):
+            out = run("tick", sid, note, path=self.path)
+            self.assertNotEqual(out.returncode, 0, sid)
+            self.assertIn("already ticked with a different outcome note", out.stderr)
+        self.assertEqual(self.path.read_bytes(), before)
+
+    def test_a_repeated_note_is_skipped_and_said_so(self) -> None:
+        self.assertEqual(run("note", "E1", "--from", "F3", "use the schema", path=self.path).returncode, 0)
+        before = self.path.read_bytes()
+        out = run("note", "E1", "--from", "F3", "use the schema", path=self.path)
+        self.assertEqual(out.returncode, 0, out.stderr)
+        self.assertIn("already done: E1 has this note", out.stdout)
+        self.assertEqual(self.path.read_bytes(), before)
+        # Different text, or the same text without --from, is a new line.
+        self.assertEqual(run("note", "E1", "use the schema", path=self.path).returncode, 0)
+        self.assertNotEqual(self.path.read_bytes(), before)
+
+    def test_dry_run_prints_the_diff_and_leaves_the_file_byte_identical(self) -> None:
+        entry = "- [ ] **C9 · Cut-off** · Deps: F3 · Type: agent\n  Output: `x.py`. DoD: tests pass.\n"
+        cases = {
+            ("tick", "--dry-run", "F3", "merged"): "+  **Outcome:** merged",
+            ("--dry-run", "tick", "B2b", "b done"): "+  **Outcome (B2b):** b done",
+            ("note", "--dry-run", "E1", "a hint"): "+  a hint",
+            ("set-deps", "--dry-run", "E2", "F3, B1"): "+- [ ] **E2 · Engine node two** · Deps: F3, B1",
+            ("add", "--dry-run", "--after", "E1"): "+- [ ] **C9 · Cut-off**",
+        }
+        before = self.path.read_bytes()
+        for args, added in cases.items():
+            with self.subTest(args=args):
+                out = self.cli(*args, stdin=entry)
+                self.assertEqual(out.returncode, 0, out.stderr)
+                self.assertIn(f"--- {self.path}\n+++ {self.path} (after)\n@@ ", out.stdout)
+                self.assertIn(added, out.stdout)
+                self.assertIn("Dry run, nothing written", out.stdout)
+                self.assertEqual(self.path.read_bytes(), before)
+        self.assertEqual(sorted(p.name for p in Path(self.dir.name).iterdir()), ["backlog.md"])  # no temp file left
+
+    def test_a_dry_run_that_would_be_refused_is_refused(self) -> None:
+        out = self.cli("set-deps", "--dry-run", "F3", "E1")
+        self.assertNotEqual(out.returncode, 0)
+        self.assertIn("cycle", out.stderr)
+
+    def test_a_dry_run_anywhere_else_is_refused_not_guessed(self) -> None:
+        before = self.path.read_bytes()
+        cases = {
+            ("tick", "F3", "tested", "--dry-run"): "--dry-run goes right after 'tick'",
+            ("note", "E1", "--dry-run", "later"): "--dry-run goes right after 'note'",
+            ("add", "--after", "E1", "--dry-run"): "--dry-run goes right after 'add'",
+            ("status", "--dry-run"): "--dry-run works with tick, note, set-deps, add",
+            ("show", "F3", "--dry-run"): "--dry-run works with tick, note, set-deps, add",
+        }
+        for args, expected in cases.items():
+            with self.subTest(args=args):
+                out = self.cli(*args, stdin="- [ ] **C9 · X** · Deps: – · Type: agent\n  Output: x. DoD: y.\n")
+                self.assertNotEqual(out.returncode, 0)
+                self.assertIn(expected, out.stderr)
+                self.assertEqual(self.path.read_bytes(), before)
+        quoted = self.cli("note", "E1", "try the --dry-run flag")  # one quoted word holding it is text
+        self.assertEqual(quoted.returncode, 0, quoted.stderr)
+        self.assertIn("  try the --dry-run flag", self.path.read_text(encoding="utf-8"))
+
+    def test_a_note_or_outcome_with_any_line_break_is_refused(self) -> None:
+        before = self.path.read_bytes()
+        for brk in ("\n", "\r", "\x0b", "\x0c", "\x1c", "\x1d", "\x1e", "\x85", " ", " "):
+            for cmd in ("tick", "note"):
+                with self.subTest(cmd=cmd, brk=repr(brk)):
+                    out = run(cmd, "F3", f"ok{brk}- [ ] **A2 · Dup** · Deps: – · Type: agent", path=self.path)
+                    self.assertNotEqual(out.returncode, 0)
+                    self.assertIn("one non-empty line", out.stderr)
+        self.assertEqual(self.path.read_bytes(), before)
+
+    def test_a_note_starting_with_a_field_label_is_refused(self) -> None:
+        before = self.path.read_bytes()
+        for text in ("Output: x", "DoD: extra", "Context: thing.", "Notes from merged stories: y"):
+            out = run("note", "E1", text, path=self.path)
+            self.assertNotEqual(out.returncode, 0, text)
+            self.assertIn("can't start with a field label", out.stderr)
+        self.assertEqual(self.path.read_bytes(), before)
+        self.assertEqual(run("note", "E1", "--from", "F3", "Output: x", path=self.path).returncode, 0)
+
+    def test_repeats_are_still_found_after_a_field_like_note_attempt(self) -> None:
+        for args in (("note", "E1", "first note"), ("note", "E1", "Output: x"), ("tick", "E2", "done"),
+                     ("note", "E2", "DoD: extra")):
+            run(*args, path=self.path)
+        before = self.path.read_bytes()
+        self.assertIn("already done: E1 has this note", run("note", "E1", "first note", path=self.path).stdout)
+        retry = run("tick", "E2", "done", path=self.path)
+        self.assertEqual(retry.returncode, 0, retry.stderr)
+        self.assertIn("already done: E2 ticked", retry.stdout)
+        self.assertEqual(self.path.read_bytes(), before)
+
+    def test_a_tick_on_a_backlog_broken_elsewhere_names_the_old_problem(self) -> None:
+        text = self.path.read_text(encoding="utf-8")
+        self.path.write_text(text + "\n- [ ] **E1 · Again** · Deps: – · Type: agent\n  Output: x. DoD: y.\n",
+                             encoding="utf-8")
+        before = self.path.read_bytes()
+        out = run("tick", "E3", "done", path=self.path)
+        self.assertNotEqual(out.returncode, 0)
+        self.assertIn("Not written: duplicate ID E1. The backlog already has duplicate ID E1; run `backlog.py check`",
+                      out.stderr)
+        self.assertEqual(self.path.read_bytes(), before)
+
+    def test_a_ticked_story_without_its_own_outcome_keeps_the_old_message(self) -> None:
+        self.path.write_text("- [x] **A1a–b · Group** · Deps: – · Type: agent\n  Output: a. DoD: a.\n", encoding="utf-8")
+        for sid in ("A1a", "A1"):
+            out = run("tick", sid, "x", path=self.path)
+            self.assertNotEqual(out.returncode, 0)
+            self.assertIn("A1a–b is already ticked", out.stderr)
+            self.assertNotIn("different", out.stderr)
+
+    def test_a_write_keeps_the_file_mode_and_a_symlink(self) -> None:
+        self.path.chmod(0o644)
+        link = Path(self.dir.name) / "link.md"
+        link.symlink_to(self.path)
+        self.assertEqual(run("note", "E1", "through the link", path=link).returncode, 0)
+        self.assertTrue(link.is_symlink())
+        self.assertIn("through the link", self.path.read_text(encoding="utf-8"))
+        self.assertEqual(self.path.stat().st_mode & 0o777, 0o644)
+
+    def test_writes_print_file_and_line(self) -> None:
+        entry = "- [ ] **C9 · Cut-off** · Deps: F3 · Type: agent\n  Output: `x.py`. DoD: tests pass.\n"
+        steps = (
+            (("tick", "F3", "merged"), "**Outcome:** merged"),
+            (("tick", "B2b", "b done"), "**Outcome (B2b):** b done"),
+            (("note", "E1", "a hint"), "a hint"),
+            (("set-deps", "E2", "F3, B1"), "- [ ] **E2 · Engine node two** · Deps: F3, B1 · Type: agent"),
+            (("add", "--after", "E1"), "- [ ] **C9 · Cut-off** · Deps: F3 · Type: agent"),
+        )
+        for args, line in steps:
+            with self.subTest(args=args):
+                out = self.cli(*args, stdin=entry)
+                self.assertEqual(out.returncode, 0, out.stderr)
+                # cwd is the backlog's folder, so the file is named relative to it.
+                self.assertTrue(out.stdout.startswith(f"backlog.md:{self.line_of(line)}: "), out.stdout)
+        elsewhere = run("note", "E1", "from another folder", path=self.path)
+        self.assertIn(f"{self.path}:{self.line_of('from another folder')}: ", elsewhere.stdout)
+        again = self.cli("tick", "F3", "merged")
+        self.assertIn(f"(backlog.md:{self.line_of('**Outcome:** merged')})", again.stdout)
+
+
 class HelpAndUsage(unittest.TestCase):
     def cli(self, *args: str) -> subprocess.CompletedProcess[str]:
         return subprocess.run([sys.executable, str(SCRIPT), *args], capture_output=True, text=True)

@@ -20,6 +20,10 @@
 - `backlog.py`: `--json` on `status`, `plan` and `deps` (fields listed in its docstring); `<command> --help` shows
   that command's usage and examples; a usage error prints the command's usage line and one example, not the whole
   docstring.
+- `backlog.py`: the same `tick` again prints `already done: <ID> ticked` and exits 0 (a different note still
+  fails); a `note` that repeats a line already on the story is skipped and says so. `--dry-run`, as the first word
+  or right after `tick`, `note`, `set-deps` or `add`, prints the unified diff and writes nothing; a `--dry-run`
+  anywhere else is refused. Every write prints `<file>:<line>`.
 - New CI workflow `.github/workflows/test.yml`: on every push and pull request it runs each check listed in
   `.claude/foreman.json` (unit tests, hook tests, lint, `claude plugin validate`) on Python 3.12 with `jq`.
 - Decision 001: a plugin `SubagentStop` hook can tell a story-worker apart (`agent_type`) and block it once
