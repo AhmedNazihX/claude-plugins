@@ -5,7 +5,7 @@
 #   - the unit tests (python3 -m unittest discover -s foreman/tests)
 #   - every foreman/hooks/test-*.sh and git-guardrails/tests/test-guards.sh, found by glob and run through bash
 #   - the lint (python3 foreman/scripts/lint.py)
-#   - claude plugin validate, for the marketplace and both plugins
+#   - claude plugin validate, for the marketplace and both plugins (skipped with a warning if the CLI didn't install)
 # The step "List the checks" fails if any of these is missing from the config.
 name: test
 
@@ -20,10 +20,12 @@ jobs:
   checks:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
 
       # The lint needs Python 3.10 or later (it reads sys.stdlib_module_names).
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
           python-version: "3.12"
 
@@ -31,12 +33,14 @@ jobs:
       - name: Set up jq
         run: command -v jq || { sudo apt-get update && sudo apt-get install -y jq; }
 
-      # `claude plugin validate` checks the manifests offline and needs no login.
-      - uses: actions/setup-node@v4
+      # `claude plugin validate` checks the manifests offline and needs no login. If the install fails, the other
+      # checks still run and "Run the checks" skips validate with a warning.
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: "22"
       - name: Install the Claude Code CLI
-        run: npm install -g @anthropic-ai/claude-code
+        continue-on-error: true
+        run: npm install -g @anthropic-ai/claude-code@2.1.302
 
       # The hook tests build throwaway repos and commit in them, so git needs a name and email.
       - name: Set a git identity for the tests
@@ -49,16 +53,27 @@ jobs:
           checks=$(jq -r '.checks[]' .claude/foreman.json)
           printf '%s\n' "$checks"
           for want in 'unittest discover' 'foreman/hooks/test-\*.sh' 'git-guardrails/tests/test-guards.sh' \
-                      'foreman/scripts/lint.py' 'claude plugin validate'; do
+                      'foreman/scripts/lint.py' 'claude plugin validate \.' 'claude plugin validate foreman' \
+                      'claude plugin validate git-guardrails'; do
             grep -q -- "$want" <<<"$checks" || { echo "::error::no check in .claude/foreman.json runs: $want"; exit 1; }
           done
 
+      # Each check gets no stdin, so one that reads stdin can't swallow the rest of the list.
       - name: Run the checks
         run: |
-          failed=0
-          while IFS= read -r check; do
+          mapfile -t checks < <(jq -r '.checks[]' .claude/foreman.json)
+          failed=0; ran=0
+          for check in "${checks[@]}"; do
+            ran=$((ran + 1))
+            if [[ $check == *"claude plugin validate"* ]] && ! command -v claude >/dev/null; then
+              echo "::warning::the Claude Code CLI did not install, so this check is skipped: $check"
+              continue
+            fi
             echo "::group::$check"
-            if bash -c "$check"; then echo "pass"; else echo "::error::check failed: $check"; failed=1; fi
+            if bash -c "$check" </dev/null; then echo "pass"; else echo "::error::check failed: $check"; failed=1; fi
             echo "::endgroup::"
-          done < <(jq -r '.checks[]' .claude/foreman.json)
+          done
+          if [ "$ran" -ne "${#checks[@]}" ] || [ "${#checks[@]}" -eq 0 ]; then
+            echo "::error::went through $ran of ${#checks[@]} checks"; failed=1
+          fi
           exit "$failed"
