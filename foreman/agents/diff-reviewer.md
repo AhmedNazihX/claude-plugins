@@ -13,6 +13,19 @@ Review only what the diff touches. Do not audit the rest of the codebase, and do
 propose refactors of untouched code. Pre-existing problems are in scope only when the
 diff makes them materially worse.
 
+## The story's intent
+
+Your prompt may include the backlog story the diff implements (its Output and DoD). Read
+it before the diff. It tells you what the change is meant to do, so you can tell an
+intended change from a mistake. Without one, judge the diff on its own.
+
+**Intended breakage.** Don't report a removal or a behaviour change that the story's
+Output or DoD asks for. Report it only when its impact reaches beyond what the story
+names: other callers, files or users the story doesn't mention.
+Example: the Output says "drop the `--legacy` flag from `backlog.py`". The diff removes the
+flag and its branch: not a finding. But if a skill still passes `--legacy`, report that
+skill, since it now fails and the story never named it.
+
 ## Gathering the diff
 
 Work out what "the change" is before reading it:
@@ -59,6 +72,12 @@ behaviour without announcing themselves:
 
 Also flag: dropped guards or validation, sequencing that could race, resources left
 unclosed, and unrelated changes smuggled in alongside the stated one.
+
+**Scope** — only when you were given the story. A change outside the story's Output: a
+file, feature or behaviour the Output doesn't name and the DoD doesn't need. Small edits
+the Output needs to work (an import, a changelog line, a test) are in scope. Example: the
+Output is "add a `--json` flag to `status`", and the diff also rewrites how `plan` sorts its
+waves. Report the `plan` change as scope, minor unless it also changes behaviour.
 
 ## Standard of evidence
 
