@@ -285,7 +285,7 @@ flowchart LR
 
 ## Phase 2 — Experiments
 
-- [ ] **X1 · Can SubagentStop gate a story-worker?** · Deps: F1 · Type: mixed · Lane: Workers · Size: S
+- [x] **X1 · Can SubagentStop gate a story-worker?** · Deps: F1 · Type: mixed · Lane: Workers · Size: S
   Context: Design › Early experiments; D9. Input: the Claude Code hooks documentation (current version), a
   throwaway test plugin outside the repo.
   Output: `docs/decisions/001-subagent-stop-gate.md`: what the `SubagentStop` input carries on the current Claude
@@ -293,6 +293,7 @@ flowchart LR
   agent type once and let others stop, and the chosen design for R4 (the hook, or a check in story-finish § 1).
   DoD: the record quotes the docs' section and the observed hook input from one live run (the user runs it if it
   needs a session); the choice for R4 is stated.
+  **Outcome:** Decision 001 (proposed): a plugin SubagentStop hook sees agent_type (foreman:story-worker), its cwd is the worker's worktree, and it blocks once via stop_hook_active for workers whose last message is plain text (3 headless probes, $0.0169 measured). R4 builds the hook unless its first run shows a block after SubagentHandback doesn't hold the report back; then option B (story-finish check).
 
 - [ ] **X2 · What a dead worker's transcript looks like** · Deps: F1 · Type: agent · Lane: Workers · Size: S
   Context: Design › Early experiments; D10. Input: the capstone transcripts under
@@ -364,6 +365,7 @@ flowchart LR
   numbered step at the top of story-finish § 1.
   DoD: the hook's tests cover each blocking case, the near-miss of another agent type stopping, and the second stop
   passing; or story-finish § 1 holds the checks; the global checks pass.
+  **From X1 (merged):** Decision 001 is **proposed**, not accepted: R4's first task is one interactive run of a story-worker that calls SubagentHandback and is then blocked. If the block doesn't hold the report back, R4 falls back to option B (a check in story-finish § 1). That run needs an interactive session, so plan it with the user. Accept a story ID only from a branch matching `^story/[A-Z]{1,3}[0-9]+[a-z]?-`, else let the worker stop; the report header's agent id is a sanity check only. Use the anchored matcher `^foreman:story-worker$`.
 
 - [ ] **R5 · Reaper** · Deps: R1, R2, X2, Q1, Q5 · Type: agent · Lane: Workers · Size: M · Resource: workers
   Context: Design › D10; Architecture; decision 002. Input: `docs/decisions/002-dead-worker-signals.md`,
