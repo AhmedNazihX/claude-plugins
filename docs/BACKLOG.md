@@ -154,7 +154,7 @@ flowchart LR
   **Setup (2026-10-16):** the config's lint check is guarded (`test ! -e foreman/scripts/lint.py || …`) until F1 exists; F1 replaces it with the plain `python3 foreman/scripts/lint.py` in `.claude/foreman.json`.
   **Outcome:** lint.py (7 checks, exit 1 with file:line: message, 2 on unreadable root) and 27 tests; lint flagged only the stale README version (fixed to 0.10.1); CHANGELOG has ## Unreleased; the lint check is now plain in foreman.json. Reviews clean (DoD DONE, diff clean, security approve, 28/30 mutations caught).
 
-- [ ] **F2 · CI workflow** · Deps: F1 · Type: agent · Lane: Tooling · Size: S
+- [x] **F2 · CI workflow** · Deps: F1 · Type: agent · Lane: Tooling · Size: S
   Context: Design › D1; Evaluation. Input: the global checks (this backlog › Global rules).
   Output: `.github/workflows/test.yml`: on push and pull request, run the unit tests, every
   `foreman/hooks/test-*.sh` and `git-guardrails/tests/test-guards.sh` by glob, and the lint, with `jq` and
@@ -163,6 +163,7 @@ flowchart LR
   DoD: the workflow runs every check named above (the dod-verifier reads it against the list); the global checks
   pass. (The first green run in Actions is checked after the push, in V1's DoD.)
   **From F1 (merged):** Run the lint as plain `python3 foreman/scripts/lint.py`. It needs Python >= 3.10 (`sys.stdlib_module_names`): on macOS's /usr/bin/python3 3.9 it crashes with exit 1, as test_backlog already does, so pin CI's Python to >= 3.10. `foreman/hooks/test-format.sh` is not executable (the other test-*.sh are): run hook tests through `bash` or chmod it.
+  **Outcome:** .github/workflows/test.yml: push and pull_request, contents: read, actions pinned to SHAs, persist-credentials false; Python 3.12, jq, Node 22, claude-code@2.1.302 (install failure fails the job); runs every .claude/foreman.json checks entry with </dev/null, fails on an empty list or a missing check. Two fix rounds (1 MEDIUM, 3 LOW, 1 minor).
 
 ## Phase 1 — Wave 1: quick wins
 
@@ -212,7 +213,7 @@ flowchart LR
   DoD: the three files hold these rules, each category with one example; the report template in story-worker § 5
   has a `Root causes:` line; the global checks pass.
 
-- [ ] **Q5 · backlog.py JSON, help and errors** · Deps: F1 · Type: agent · Lane: Tooling · Size: M · Resource: backlog-script
+- [x] **Q5 · backlog.py JSON, help and errors** · Deps: F1 · Type: agent · Lane: Tooling · Size: M · Resource: backlog-script
   Context: Design › D6. Input: `foreman/scripts/backlog.py`, `foreman/tests/test_backlog.py`,
   `foreman/tests/fixtures/backlog.md`.
   Output: `--json` on `status`, `plan` and `deps` (documented schemas in the docstring: `status` → `{done, in_progress,
@@ -221,6 +222,7 @@ flowchart LR
   usage line and an example instead of the whole docstring. Tests.
   DoD: tests parse each `--json` output against the fixture and check its keys; a test shows a usage error is
   under 10 lines and contains `Example:`; the global checks pass.
+  **Outcome:** backlog.py: --json on status, plan, deps and info (schemas in the docstring; not_finishable is a subset of ready), per-command --help right after the command name, four-line usage errors with Example:; text output unchanged (diffed on the real backlog); 13 new tests. Fix round 1 closed 2 LOW, 4 minor.
 
 - [ ] **Q6 · Idempotent and dry-run backlog writes** · Deps: Q5 · Type: agent · Lane: Tooling · Size: S · Resource: backlog-script
   Context: Design › D6. Input: `foreman/scripts/backlog.py`, `foreman/tests/test_backlog.py`.
@@ -230,6 +232,7 @@ flowchart LR
   print `docs/BACKLOG.md:<line>`. Tests.
   DoD: tests for the repeat-tick, the different-note failure, the duplicate note, each `--dry-run` leaving the file
   byte-identical, and the `file:line` output; the global checks pass.
+  **From Q5 (merged):** `-h`/`--help` now count only as the first word or right after the command; `--json`, `--file` and `--width` are still taken from anywhere on the line, so an unquoted `--width 3` inside note text is eaten (pre-existing). Q6's idempotent tick/note and --dry-run are the rest of D6 that Q5 left out.
 
 - [ ] **Q7 · Hook block messages name the way through** · Deps: F1 · Type: agent · Lane: Tooling · Size: S · Resource: guard-hooks
   Context: Design › D6. Input: `foreman/hooks/gate.sh`, `foreman/hooks/lane-guard.sh`,
@@ -278,6 +281,7 @@ flowchart LR
   and the README version line say 0.11.0; the README describes what changed for the user (reviews, CLI, CI).
   DoD: the lint passes; the user approved the CHANGELOG entry; after the merge and push, `foreman:ci-watcher`
   reports the GitHub Actions run green; the user pulled the release copy and a new session lists foreman 0.11.0.
+  **From F2 (merged):** First Actions run must show the pinned `@anthropic-ai/claude-code@2.1.302` install and `claude plugin validate` passing on the runner: the install is required, so its failure fails the whole job. Pinned actions: checkout v4.4.0, setup-python v5.6.0, setup-node v4.4.0.
 
 ## Phase 2 — Experiments
 
