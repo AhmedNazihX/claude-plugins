@@ -9,7 +9,7 @@ Usage (from anywhere inside the repo):
   backlog.py show <ID>           print one story's full entry
   backlog.py deps <ID> [--json]  list unmet deps; exit 1 if any are unmet
   backlog.py info <ID>           JSON: id, title, slug, lane, type, size, solo, resources, deps, done
-  backlog.py tick <ID> <note>    mark a story [x] and add an outcome note
+  backlog.py tick <ID> <note>    mark a story [x] and add an outcome note (the same note again: "already done")
   backlog.py note <ID> [--from <SRC>] <text>
                                  add a hand-over note to a story ("**From SRC (merged):** text" with --from)
   backlog.py set-deps <ID> <deps>
@@ -17,6 +17,7 @@ Usage (from anywhere inside the repo):
   backlog.py add --after <ID>    insert a new story entry read from stdin after <ID>'s entry
   backlog.py graph               Mermaid flowchart of the critical path
 Options: --file PATH (default: <repo root>/docs/BACKLOG.md)
+         --dry-run  first, or right after tick, note, set-deps or add: print the diff, write nothing
          <command> --help  that command's usage and two or three examples
 
 JSON output (--json; one object on stdout, the exit code is the same as without it):
@@ -45,6 +46,7 @@ Solo: the story runs alone (nothing else in its wave). Resource: at most one sto
 
 from __future__ import annotations
 
+import difflib
 import json
 import os
 import re
@@ -505,26 +507,6 @@ def cmd_status(b: Backlog, as_json: bool) -> None:
         print(f"\n## Next wave\n  {', '.join(s.id for s in waves[0])}")
 
 
-def cmd_tick(b: Backlog, sid: str, note: str) -> None:
-    s = b.find(sid)
-    sub = sid in s.sub_ids
-    if s.done:
-        sys.exit(f"{s.id} is already ticked")
-    if sub and sid in s.subs_done:
-        sys.exit(f"{sid} already has an outcome note")
-    if not sub and s.sub_ids and (left := [i for i in s.sub_ids if i not in s.subs_done]):
-        sys.exit(f"Can't tick {s.id}: sub-stories without an outcome note: {', '.join(left)}")
-    lines = b.lines
-    if not sub:
-        lines[s.line_no] = lines[s.line_no].replace("- [ ]", "- [x]", 1)
-    last = s.line_no + len(s.body)
-    while last > s.line_no and lines[last].strip() == "":
-        last -= 1
-    lines.insert(last + 1, f"  **Outcome{f' ({sid})' if sub else ''}:** {note}")
-    b.path.write_text(b.newline.join(lines) + b.newline, encoding="utf-8", newline="")
-    print(f"Added the outcome note for {sid}." if sub else f"Ticked {s.id} and added the outcome note.")
-
-
 def entry_end(b: Backlog, s: Story) -> int:
     """Index of the last non-blank line of a story's entry."""
     last = s.line_no + len(s.body)
@@ -533,35 +515,79 @@ def entry_end(b: Backlog, s: Story) -> int:
     return last
 
 
-def write_checked(b: Backlog, lines: list[str], what: str, touched: tuple[str, ...] = ()) -> None:
-    """Write the edited backlog only if it has no duplicate IDs, no cycle, and the touched stories still pass
-    `check`; otherwise leave the file as it was. The write is atomic and keeps the file's line endings."""
+def location(b: Backlog, index: int) -> str:
+    """'<file>:<line>' for a 0-based line index; the file relative to the current folder when it is inside it."""
+    rel = os.path.relpath(b.path.resolve(), Path.cwd().resolve())
+    return f"{b.path if rel.startswith('..') else rel}:{index + 1}"
+
+
+def find_line(b: Backlog, s: Story, text: str) -> int | None:
+    """Index of the first line of a story's entry that reads `text` (spaces around it ignored)."""
+    return next((i for i in range(s.line_no, entry_end(b, s) + 1) if b.lines[i].strip() == text.strip()), None)
+
+
+def refuse_broken(path: Path, touched: tuple[str, ...]) -> None:
+    """Exit "Not written: …" if the backlog at `path` has a duplicate ID, a cycle, or a touched story failing `check`."""
+    trial = Backlog(path)
+    seen: dict[str, Story] = {}
+    for s in trial.stories:
+        for k in s.keys:
+            if k in seen and seen[k] is not s:
+                sys.exit(f"Not written: duplicate ID {k}")
+            seen[k] = s
+    try:
+        trial.order()
+    except SystemExit as e:
+        sys.exit(f"Not written: {e}")
+    problems = [p for sid in touched if sid in trial.by_key for p in story_problems(trial, trial.by_key[sid])]
+    if problems:
+        sys.exit("Not written: " + "; ".join(problems))
+
+
+def write_checked(b: Backlog, lines: list[str], what: str, at: int, touched: tuple[str, ...] = (),
+                  dry_run: bool = False, checked: bool = True) -> None:
+    """Write the edited backlog atomically, keeping its line endings, if it passes `refuse_broken` (when `checked`),
+    and print file:line for line index `at`. With `dry_run`, the same checks run, then only the diff is printed."""
     fd, tmp_name = tempfile.mkstemp(suffix=".md", dir=b.path.parent)
     tmp = Path(tmp_name)
     try:
         with os.fdopen(fd, "w", encoding="utf-8", newline="") as f:
             f.write(b.newline.join(lines) + b.newline)
-        trial = Backlog(tmp)
-        seen: dict[str, Story] = {}
-        for s in trial.stories:
-            for k in s.keys:
-                if k in seen and seen[k] is not s:
-                    sys.exit(f"Not written: duplicate ID {k}")
-                seen[k] = s
-        try:
-            trial.order()
-        except SystemExit as e:
-            sys.exit(f"Not written: {e}")
-        problems = [p for sid in touched if sid in trial.by_key for p in story_problems(trial, trial.by_key[sid])]
-        if problems:
-            sys.exit("Not written: " + "; ".join(problems))
+        if checked:
+            refuse_broken(tmp, touched)
+        if dry_run:
+            print("\n".join(difflib.unified_diff(b.lines, lines, str(b.path), f"{b.path} (after)", lineterm="")))
+            print(f"Dry run, nothing written: {what}")
+            return
         os.replace(tmp, b.path)
     finally:
         tmp.unlink(missing_ok=True)
-    print(what)
+    print(f"{location(b, at)}: {what}")
 
 
-def cmd_note(b: Backlog, sid: str, text: str, source: str | None) -> None:
+def cmd_tick(b: Backlog, sid: str, note: str, dry_run: bool = False) -> None:
+    """Tick a story and add its outcome note. The same note again is "already done"; a different one fails."""
+    s = b.find(sid)
+    sub = sid in s.sub_ids
+    outcome = f"**Outcome{f' ({sid})' if sub else ''}:** {note}"
+    if s.done or (sub and sid in s.subs_done):
+        same = find_line(b, s, outcome)
+        if same is None:
+            sys.exit(f"{sid} is already ticked with a different outcome note")
+        print(f"already done: {sid} ticked ({location(b, same)})")
+        return
+    if not sub and s.sub_ids and (left := [i for i in s.sub_ids if i not in s.subs_done]):
+        sys.exit(f"Can't tick {s.id}: sub-stories without an outcome note: {', '.join(left)}")
+    lines = list(b.lines)
+    if not sub:
+        lines[s.line_no] = lines[s.line_no].replace("- [ ]", "- [x]", 1)
+    at = entry_end(b, s) + 1
+    lines.insert(at, f"  {outcome}")
+    what = f"Added the outcome note for {sid}." if sub else f"Ticked {s.id} and added the outcome note."
+    write_checked(b, lines, what, at, dry_run=dry_run, checked=False)
+
+
+def cmd_note(b: Backlog, sid: str, text: str, source: str | None, dry_run: bool = False) -> None:
     """Add a hand-over note at the end of a story's entry. A sub-story's note goes on its group, marked (B5b)."""
     s = b.find(sid)
     text = text.strip()
@@ -572,12 +598,17 @@ def cmd_note(b: Backlog, sid: str, text: str, source: str | None) -> None:
     if sid in s.sub_ids:
         text = f"({sid}) {text}"
     note = f"**From {source} (merged):** {text}" if source else text
+    same = find_line(b, s, note)
+    if same is not None:
+        print(f"already done: {s.id} has this note ({location(b, same)})")
+        return
     lines = list(b.lines)
-    lines.insert(entry_end(b, s) + 1, f"  {note}")
-    write_checked(b, lines, f"Added a note to {s.id}.", (s.id,))
+    at = entry_end(b, s) + 1
+    lines.insert(at, f"  {note}")
+    write_checked(b, lines, f"Added a note to {s.id}.", at, (s.id,), dry_run)
 
 
-def cmd_set_deps(b: Backlog, sid: str, deps: str) -> None:
+def cmd_set_deps(b: Backlog, sid: str, deps: str, dry_run: bool = False) -> None:
     """Replace a story's Deps: field (the rest of the header stays as it is)."""
     s = b.find(sid)
     if sid in s.sub_ids:
@@ -589,10 +620,10 @@ def cmd_set_deps(b: Backlog, sid: str, deps: str) -> None:
         sys.exit(f"{s.id} has no 'Deps:' field to replace")
     lines = list(b.lines)
     lines[s.line_no] = re.sub(r"\bDeps:\s*[^·]+?(\s*·|\s*$)", lambda m: f"Deps: {deps}{m.group(1)}", s.header, count=1)
-    write_checked(b, lines, f"{s.id}: Deps: {deps}", (s.id,))
+    write_checked(b, lines, f"{s.id}: Deps: {deps}", s.line_no, (s.id,), dry_run)
 
 
-def cmd_add(b: Backlog, after: str, entry: str) -> None:
+def cmd_add(b: Backlog, after: str, entry: str, dry_run: bool = False) -> None:
     """Insert a new story entry (its header line and indented lines, from stdin) after another story's entry."""
     new = [line.rstrip() for line in entry.strip().splitlines()]
     while new and not new[-1].strip():
@@ -606,7 +637,7 @@ def cmd_add(b: Backlog, after: str, entry: str) -> None:
     at = entry_end(b, anchor) + 1
     lines[at:at] = ["", *new]
     new_id = STORY_RE.match(new[0])["id"]
-    write_checked(b, lines, f"Added {new_id} after {anchor.id}.", (new_id,))
+    write_checked(b, lines, f"Added {new_id} after {anchor.id}.", at + 1, (new_id,), dry_run)
 
 
 def cmd_graph(b: Backlog) -> None:
@@ -638,6 +669,7 @@ class Command:
     examples: tuple[str, ...]
     needs: int = 0  # positional arguments the command must have
     takes_json: bool = False
+    writes: bool = False  # edits the backlog, so takes --dry-run
 
 
 COMMANDS = {
@@ -653,18 +685,22 @@ COMMANDS = {
     "info": Command("info <ID>", "Print one story's fields as JSON.", ("backlog.py info C1", "backlog.py info B5b"), 1,
                     takes_json=True),
     "tick": Command("tick <ID> <note>", "Mark a story done and add its outcome note.",
-                    ('backlog.py tick C1 "parser merged; 42 tests"', 'backlog.py tick B5b "German cases approved"'), 1),
+                    ('backlog.py tick C1 "parser merged; 42 tests"', 'backlog.py tick B5b "German cases approved"',
+                     'backlog.py tick --dry-run C1 "parser merged"'), 1, writes=True),
     "note": Command("note <ID> [--from <SRC>] <text>", "Add a one-line hand-over note to a story.",
                     ('backlog.py note E1 "use the Result schema"',
-                     'backlog.py note E1 --from F3 "the schema is in app/schemas/result.py"'), 2),
+                     'backlog.py note E1 --from F3 "the schema is in app/schemas/result.py"'), 2, writes=True),
     "set-deps": Command("set-deps <ID> <deps>", "Replace a story's Deps: field (refused if it makes a cycle).",
-                        ('backlog.py set-deps E2 "F3, B1"', 'backlog.py set-deps W1 "–"'), 2),
+                        ('backlog.py set-deps E2 "F3, B1"', 'backlog.py set-deps W1 "–"',
+                         'backlog.py set-deps --dry-run E2 "F3"'), 2, writes=True),
     "add": Command("add --after <ID>", "Insert a new story entry, read from stdin, after another story's entry.",
-                   ("backlog.py add --after E1 < new-story.md", "pbpaste | backlog.py add --after F3")),
+                   ("backlog.py add --after E1 < new-story.md", "pbpaste | backlog.py add --after F3",
+                    "backlog.py add --dry-run --after E1 < new-story.md"), writes=True),
     "graph": Command("graph", "Print the critical path as a Mermaid flowchart.",
                      ("backlog.py graph", "backlog.py graph > docs/critical-path.md")),
 }
 HELP_FLAGS = ("--help", "-h")
+DRY_RUN = "--dry-run"
 SHORT_USAGE = (f"Usage: backlog.py [--file PATH] <command> ...\nCommands: {', '.join(COMMANDS)}\n"
                "Example: backlog.py status\nMore: backlog.py --help, or backlog.py <command> --help")
 
@@ -695,6 +731,10 @@ def pop_option(argv: list[str], flag: str) -> tuple[str | None, list[str]]:
 def main(argv: list[str]) -> None:
     file, argv = pop_option(argv, "--file")
     width_text, argv = pop_option(argv, "--width")
+    # --dry-run, like help, only as the first word or right after the command; a later one is refused below.
+    dry_run = DRY_RUN in argv[:2]
+    if dry_run:
+        argv = argv[:argv.index(DRY_RUN)] + argv[argv.index(DRY_RUN) + 1:]
     if argv and argv[0] in HELP_FLAGS:
         print(__doc__)
         return
@@ -715,6 +755,10 @@ def main(argv: list[str]) -> None:
         usage_error(cmd, "--width needs a whole number")
     if as_json and not COMMANDS[cmd].takes_json:
         usage_error(cmd, f"--json works with {', '.join(n for n, c in COMMANDS.items() if c.takes_json)}")
+    if (dry_run or DRY_RUN in args) and not COMMANDS[cmd].writes:
+        usage_error(cmd, f"--dry-run works with {', '.join(n for n, c in COMMANDS.items() if c.writes)}")
+    if DRY_RUN in args:  # never guess: a dry run that writes, or a write that silently doesn't, is worse
+        usage_error(cmd, f"--dry-run goes right after '{cmd}'; quote a note that contains it")
     if len(args) < COMMANDS[cmd].needs:
         usage_error(cmd, "needs a story ID" if COMMANDS[cmd].needs == 1 else "needs a story ID and a value")
     b = Backlog(Path(file) if file else repo_root() / "docs" / "BACKLOG.md")
@@ -741,7 +785,7 @@ def main(argv: list[str]) -> None:
             "resource_hints": s.resource_hints, "dod_input_gaps": b.dod_input_gaps(s),
         }, ensure_ascii=False))
     elif cmd == "tick":
-        cmd_tick(b, args[0], " ".join(args[1:]) or "done")
+        cmd_tick(b, args[0], " ".join(args[1:]) or "done", dry_run)
     elif cmd == "note":
         source = None
         if "--from" in args:
@@ -750,13 +794,13 @@ def main(argv: list[str]) -> None:
                 usage_error("note", "--from needs a story ID")
             source = args[i + 1]
             args = args[:i] + args[i + 2:]
-        cmd_note(b, args[0], " ".join(args[1:]), source)
+        cmd_note(b, args[0], " ".join(args[1:]), source, dry_run)
     elif cmd == "set-deps":
-        cmd_set_deps(b, args[0], " ".join(args[1:]))
+        cmd_set_deps(b, args[0], " ".join(args[1:]), dry_run)
     elif cmd == "add":
         if "--after" not in args or args.index("--after") + 1 >= len(args):
             usage_error("add", "needs --after <ID>; the entry is read from stdin")
-        cmd_add(b, args[args.index("--after") + 1], sys.stdin.read())
+        cmd_add(b, args[args.index("--after") + 1], sys.stdin.read(), dry_run)
     elif cmd == "graph":
         cmd_graph(b)
 
