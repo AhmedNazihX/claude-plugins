@@ -166,7 +166,7 @@ flowchart LR
 
 ## Phase 1 — Wave 1: quick wins
 
-- [ ] **Q1 · Registry lock and launching state** · Deps: F1 · Type: agent · Lane: Workers · Size: S · Resource: workers, story-start
+- [x] **Q1 · Registry lock and launching state** · Deps: F1 · Type: agent · Lane: Workers · Size: S · Resource: workers, story-start
   Context: Design › D2; Architecture. Input: `foreman/scripts/workers.py`, `foreman/tests/test_workers.py`,
   `foreman/skills/story-start/SKILL.md`.
   Output: `workers.py` takes an `fcntl.flock` on a lock file next to the registry around every load-modify-save and
@@ -174,6 +174,7 @@ flowchart LR
   `record` filling the id later. `story-start` § 3 records `launching` before the Agent call. Tests.
   DoD: a test runs 20 concurrent `record` processes and the registry keeps all 20 entries; a test shows a
   `launching` entry without an agent id listed as such by `list`; the global checks pass.
+  **Outcome:** workers.py flocks every record/set/forget and writes via mkstemp+os.replace (registry now 0600); launching state: record --launching (refuses a live entry without --replace), record --agent fills it; set refuses a launching entry; story-start § 3/§ 5 record both steps. 20-process test keeps 20/20 (base kept 16/20). Fix round 1 closed 1 LOW, 2 minor.
 
 - [x] **Q2 · Reviewers see the story's intent** · Deps: F1 · Type: agent · Lane: Review · Size: S · Resource: story-finish, diff-reviewer, security-reviewer
   Context: Design › D3. Input: `foreman/skills/story-finish/SKILL.md`, `foreman/agents/diff-reviewer.md`,
@@ -383,6 +384,7 @@ flowchart LR
   and `status` run it first and show anything that isn't live or idle.
   DoD: tests build a temp repo with worktrees and branches for each class, and show reconcile reaping a dead
   worker from a fixture transcript; next and status name the command; the global checks pass.
+  **From Q1 (merged):** workers.py now has a `launching` state (no agent id yet). Reconcile should report a `launching` entry whose worktree never appeared as "launching without id", and `dead` is already in REPLACEABLE (record --launching may overwrite merged or dead without --replace).
 
 - [ ] **R7 · Watch and retry budget** · Deps: R6 · Type: agent · Lane: Workers · Size: M · Resource: workers, story-start, config-template
   Context: Design › D10; Architecture. Input: `foreman/scripts/workers.py`, `foreman/skills/story-start/SKILL.md`,
