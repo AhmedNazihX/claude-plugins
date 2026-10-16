@@ -24,6 +24,8 @@
   `.claude/foreman.json` (unit tests, hook tests, lint, `claude plugin validate`) on Python 3.12 with `jq`.
 - Decision 001: a plugin `SubagentStop` hook can tell a story-worker apart (`agent_type`) and block it once
   (`stop_hook_active`), so the report gate (R4) is a hook, not a story-finish check.
+- Decision 003 (proposed): a plugin `Stop` hook loop works headless on Claude Code 2.1.302. B4's hook will count in
+  its own state file and stand aside while background subagents run.
 
 ## 0.10.1 (2026-10-13)
 
