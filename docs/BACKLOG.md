@@ -306,7 +306,7 @@ flowchart LR
   DoD: each failure mode has a pattern seen in at least one real transcript, or is marked "not observed"; the
   fixtures contain no text from a real transcript; the global checks pass.
 
-- [ ] **X3 · Does a Stop-hook loop behave?** · Deps: F1 · Type: mixed · Lane: Autonomy · Size: S
+- [x] **X3 · Does a Stop-hook loop behave?** · Deps: F1 · Type: mixed · Lane: Autonomy · Size: S
   Context: Design › Early experiments; D17. Input: the Claude Code hooks documentation, a throwaway test plugin
   outside the repo.
   Output: `docs/decisions/003-stop-hook-loop.md`: whether a plugin `Stop` hook returning `decision: block` with a
@@ -314,6 +314,7 @@ flowchart LR
   inside a turn interferes, and how the loop is cancelled.
   DoD: the record quotes the docs and one live run of at least three iterations ending on a state-file condition;
   the go/no-go for B4 is stated.
+  **Outcome:** Decision 003 (proposed): a plugin Stop hook loop works headless on 2.1.302 (8 runs; run 1: 4 iterations ending on the state file). Go for B4; it must count iterations itself (stop_hook_active is a flag), stand aside while background_tasks has any entry, and tie itself to one session. One interactive run is still owed. Two fix rounds; round 2 moved the hook design out of the record into B4.
 
 ## Phase 3 — Wave 2: reliability core
 
@@ -524,6 +525,7 @@ flowchart LR
   /foreman:next in autopilot mode." `foreman/hooks/test-autopilot-stop.sh` and the `hooks.json` entry.
   DoD: one test per stop reason, one for corrupt state, one for continuing with the bumped iteration; the global
   checks pass.
+  **From X3 (merged):** Decision 003 is **proposed**: B4's DoD includes one interactive run of ≥3 iterations with a background-subagent wake (the user decides whether it gates B4). Hook design conditions from X3's reviews, each needing a test: (1) order: parse, then the session check, then validation; another session's Stop exits 0 and writes nothing. (2) Session check fails closed: a missing or empty stored session_id counts as another session (ralph-loop skips the check when empty; don't copy that); the skill refuses to arm when CLAUDE_CODE_SESSION_ID is empty. (3) The block reason is a literal constant; no state-file text goes into it. (4) Validate every state field's type and range (merge_policy ∈ integration|stop-at-ready); on failure write the reason to a separate log file (e.g. .claude/foreman-autopilot.log), then delete the state file and stop. (5) max_iterations and deadline are required and fail closed (or B5 writes a default deadline); never set CLAUDE_CODE_STOP_HOOK_BLOCK_CAP=0. (6) Stand aside (exit 0, no count bump, log a waiting line) while background_tasks has ANY entry; a missing field is an open question. (7) Protect the loop from edits: a worker can reset iteration or raise limits within valid ranges, so cap limits at config defaults, keep a hook-owned monotonic counter (e.g. under ${CLAUDE_PLUGIN_DATA} keyed by session_id) and treat a decrease or raised limit as corruption; and/or have worker-guard block subagent writes to .claude/foreman-autopilot.json. Open questions are listed in decision 003.
 
 - [ ] **B5 · Autopilot skill and merge policy** · Deps: B4, R10 · Type: agent · Lane: Autonomy · Size: M · Resource: story-finish, config-template
   Context: Design › D17. Input: `foreman/skills/next/SKILL.md`, `foreman/skills/story-finish/SKILL.md`,
@@ -537,6 +539,7 @@ flowchart LR
   DoD: the skill passes the lint; next and story-finish hold the autopilot branches, and neither ever merges to the
   base in autopilot; the `autopilot` defaults are in `foreman/templates/foreman.example.json` and setup's table, and
   setup adds `.claude/foreman-autopilot.json` to `.gitignore`; the global checks pass.
+  **From X3 (merged):** Cancel deletes .claude/foreman-autopilot.json and reports its iteration; tell the user Esc only pauses (Stop doesn't run after an interrupt, so the loop resumes when the next turn ends). If --until is optional, write a default deadline: B4 requires one.
 
 - [ ] **B6 · Capped review checklist** · Deps: H2 · Type: agent · Lane: Learning · Size: S · Resource: story-finish
   Context: Design › D18. Input: `foreman/skills/story-finish/SKILL.md` § 3 (Grow the checklist).
