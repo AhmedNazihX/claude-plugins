@@ -137,8 +137,8 @@ msg "$GUARD" "$(bash_in "$W" "cat eval/cases.json")"                     "$EXC" 
 msg "$GUARD" "$(bash_in "$W" "grep -rn x $R")"                           "$EXC" "shell reaches another checkout"
 msg "$GUARD" "$(bash_in "$W" "git sparse-checkout set --no-cone '/*'")"  "$EXC" "shell widens the sparse checkout"
 PATH="$NOJQ" msg "$GUARD" "$(file_in Read "$W" "$W/eval/cases.json")"    "brew install jq" "without jq: install it"
-PATH="$(path_without python3)" msg "$GUARD" "$(file_in Read "$W" "$W/eval/cases.json")" "stories.C1." \
-  "without python3: install it or give the story a rule"
+PATH="$(path_without python3)" msg "$GUARD" "$(file_in Read "$W" "$W/eval/cases.json")" \
+  "stories.C1 (with the deny list next to it)" "without python3: ask the user for python3 or a full story rule"
 git -C "$R" worktree remove "$S" 2>/dev/null
 
 git -C "$W" checkout -q -b story/C2-guidelines
@@ -188,8 +188,10 @@ msg "$WG" "$(bash_in "$W" "git update-ref refs/heads/main HEAD")"    "$REPORT" "
 msg "$WG" "$(bash_in "$W" "git branch -f main HEAD")"                "$REPORT" "branch -f: report it"
 msg "$WG" "$(bash_in "$W" "git checkout -b other")"                  "$REPORT" "create a branch: report it"
 msg "$WG" "$(bash_in "$W" "git pull origin other")"                  "run 'git merge main'" "pull: merge the base branch"
-msg "$WG" "$(bash_in "$W" "git switch main")"                        "git worktree add --detach" \
-  "move to another commit: use a scratch worktree"
+msg "$WG" "$(bash_in "$W" "git switch main")"                        "git show <commit>:<path>" \
+  "move to another commit: read it with git show"
+msg "$WG" "$(bash_in "$W" "git checkout --detach HEAD")"             "git show <commit>:<path>" \
+  "detach: read it with git show"
 PATH="$NOJQ" msg "$WG" "$(bash_in "$W" "git push")"                  "brew install jq" "without jq: install it"
 # Found in the 0.3.0 review.
 SHA=$(git -C "$R" rev-parse HEAD)
@@ -213,6 +215,17 @@ SCR="$TMP/auditor-scratch"
 git -C "$R" worktree add -q --detach "$SCR" 2>/dev/null
 run "$WG" 0 "$(bash_in "$W" "git -C $SCR checkout --detach HEAD")"       "the test auditor detaches its own scratch copy"
 run "$WG" 2 "$(bash_in "$W" "git -C $R push origin main")"               "git -C <main checkout> push is still blocked"
+# Found in the Q7 review: a scratch worktree shares the repo's refs, so `git -C <scratch>` must not skip the checks.
+run "$WG" 0 "$(bash_in "$W" "git -C $SCR checkout $SHA")"                "a scratch worktree checks out a commit"
+run "$WG" 2 "$(bash_in "$W" "git -C $SCR update-ref refs/heads/main HEAD")" "git -C <scratch worktree> update-ref"
+run "$WG" 2 "$(bash_in "$W" "git -C $SCR push origin HEAD:main")"        "git -C <scratch worktree> push"
+run "$WG" 2 "$(bash_in "$W" "git -C $SCR switch -c x")"                  "git -C <scratch worktree> switch -c"
+run "$WG" 2 "$(bash_in "$W" "git -C $SCR merge story/C1-parser")"        "git -C <scratch worktree> merge a story"
+run "$WG" 2 "$(bash_in "$W" "git -C $SCR checkout story/C1-parser")"     "git -C <scratch worktree> checks out a branch"
+CLONE="$TMP/separate-clone"
+git clone -q "$R" "$CLONE" 2>/dev/null
+run "$WG" 0 "$(bash_in "$W" "git -C $CLONE update-ref refs/heads/main HEAD")" "git -C <separate clone> update-ref"
+run "$WG" 0 "$(bash_in "$W" "git -C $CLONE push origin HEAD:other")"     "git -C <separate clone> push"
 git -C "$R" worktree remove "$SCR" 2>/dev/null
 git -C "$W" checkout -q --detach 2>/dev/null
 run "$WG" 2 "$(bash_in "$W" "git push origin HEAD:main")"                 "a detached worktree still can't push"

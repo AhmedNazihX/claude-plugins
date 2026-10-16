@@ -31,7 +31,8 @@ RULE=$(jq -c --arg id "$ID" '.stories[$id] // empty' "$CONFIG")
 RULE_KEY="stories.$ID"   # where the rule lives in the config, named in the block message
 if [ -z "$RULE" ]; then
   command -v python3 >/dev/null 2>&1 || { echo "BLOCKED: foreman's lane guard needs python3 to find story $ID's lane." \
-    "Install python3, or give the story its own rule under .claude/foreman.json › stories.$ID." >&2; exit 2; }
+    "Stop and ask the user to install python3, or to add a rule under .claude/foreman.json › stories.$ID" \
+    "(with the deny list next to it)." >&2; exit 2; }
   ROOT_FOR_BACKLOG=$(git -C "${CWD:-.}" rev-parse --show-toplevel 2>/dev/null)
   LANE=$(cd "$ROOT_FOR_BACKLOG" 2>/dev/null && python3 "$BACKLOG_PY" info "$ID" 2>/dev/null | jq -r '.lane // empty')
   [ -n "$LANE" ] && RULE=$(jq -c --arg l "$LANE" '.lanes[$l] // empty' "$CONFIG") && RULE_KEY="lanes.$LANE"

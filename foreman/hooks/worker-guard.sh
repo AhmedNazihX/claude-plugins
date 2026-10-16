@@ -9,6 +9,8 @@
 #     creating branches, `branch -f` and `update-ref`. One move is allowed: `git switch story/<ID>-<slug>` from a
 #     branch that isn't a story branch, so a relaunched worker can continue a story (story-start › Continue);
 #   - editing docs/BACKLOG.md (file tools, shell writes, or backlog.py tick / note / set-deps / add).
+# `git -C <dir>` on a separate clone is not checked. On another worktree of the same repo it is, since worktrees
+# share refs; there only detaching that worktree's own HEAD is allowed.
 # Text inside quotes (commit messages, echo) is ignored. The base branch comes from .claude/foreman.json
 # (`base_branch`, default main). Shell checks are best effort.
 
@@ -24,6 +26,8 @@ case "$TOP" in
   */.claude/worktrees/*) ;;
   *) [[ "$BRANCH" =~ ^story/[A-Z]{1,3}[0-9]+[a-z]?- ]] || exit 0 ;;
 esac
+common_dir() { (cd "$(git -C "$1" rev-parse --path-format=absolute --git-common-dir 2>/dev/null)" 2>/dev/null && pwd -P); }
+COMMON=$(common_dir "$TOP")   # the repository every worktree of it shares: refs, branches, remotes
 MAIN=$(cd "$(dirname "$(git -C "$TOP" rev-parse --path-format=absolute --git-common-dir 2>/dev/null)")" && pwd)
 CONFIG="${CLAUDE_PROJECT_DIR:-$MAIN}/.claude/foreman.json"
 BASE=$(jq -r '.base_branch // "main"' "$CONFIG" 2>/dev/null)
@@ -32,7 +36,7 @@ BASE=${BASE:-main}
 # The way through, named at the end of each message.
 ALT_BACKLOG="Put it under Follow-ups in your report; the orchestrator updates the backlog."
 ALT_REPORT="Report it in your final message; the orchestrator does it."
-ALT_SCRATCH="To look at an old commit, use a scratch worktree: git worktree add --detach <dir> <commit>."
+ALT_READ="To read old code, use 'git show <commit>:<path>', 'git log -p' or 'git diff <commit>'."
 block() {  # block <what was blocked> <the allowed alternative>
   echo "BLOCKED: $1 Story workers commit on their own branch ('$BRANCH') and report; the orchestrator merges," \
        "pushes and edits the backlog. $2" >&2
@@ -70,13 +74,17 @@ case "$TOOL" in
           *) break ;;
         esac
       done
-      # `git -C <dir>` acts on <dir>'s repo: a scratch copy outside the agent worktrees isn't the story's checkout.
+      # `git -C <dir>` acts on <dir>'s repo. A separate clone is exempt. A scratch worktree of this repo (outside the
+      # agent worktrees, not on a story branch, not the main checkout) shares its refs, so every check still applies;
+      # only moving that copy's own HEAD to a detached commit is allowed there (the test auditor does this).
+      SCRATCH=""
       if [ -n "$GDIR" ]; then
         [[ "$GDIR" == /* ]] || GDIR="${CWD:-$TOP}/$GDIR"
         GTOP=$(git -C "$GDIR" rev-parse --show-toplevel 2>/dev/null)
         GBR=$(git -C "$GDIR" rev-parse --abbrev-ref HEAD 2>/dev/null)
         if [ -n "$GTOP" ] && [[ "$GTOP" != */.claude/worktrees/* ]] && [[ ! "$GBR" =~ ^story/ ]] && [ "$GTOP" != "$MAIN" ]; then
-          continue
+          [ "$(common_dir "$GDIR")" != "$COMMON" ] && continue
+          SCRATCH=1
         fi
       fi
       SUB=${T[$i]}
@@ -109,14 +117,20 @@ case "$TOOL" in
         branch)
           if has_opt -f || has_opt --force; then block "git branch -f." "$ALT_REPORT"; fi ;;
         switch|checkout)
-          for o in -b -B -c -C --create --force-create --orphan --detach; do
+          for o in -b -B -c -C --create --force-create --orphan; do
             has_opt "$o" && block "git $SUB $o (a worker stays on its story branch)." "$ALT_REPORT"
           done
+          if has_opt --detach; then
+            [ -n "$SCRATCH" ] && continue                          # a scratch worktree detaches its own HEAD
+            block "git $SUB --detach (a worker stays on its story branch)." "$ALT_READ"
+          fi
           has_opt -- && continue                                   # checkout <tree-ish> -- <paths>
           [ "${#TARGETS[@]}" -ge 1 ] || continue
           t=${TARGETS[0]}
           [ -e "$TOP/$t" ] || [ -e "${CWD:-$TOP}/$t" ] && continue # a path: restoring files is fine
           if git -C "$TOP" rev-parse --verify --quiet "$t^{commit}" >/dev/null; then
+            # A scratch worktree may check out a commit (detached), never a branch: its commits would move that branch.
+            [ -n "$SCRATCH" ] && ! git -C "$TOP" show-ref --verify --quiet "refs/heads/$t" && continue
             # Continue a story: a fresh worktree (not yet on a story branch) switches onto an existing story branch,
             # in its own checkout (no `git -C`) and once per command ($BRANCH is read once, before any switch).
             if [ "$SUB" = switch ] && [ -z "$GDIR" ] && [ -z "$SWITCHED" ] &&
@@ -125,7 +139,7 @@ case "$TOOL" in
               SWITCHED=1
               continue
             fi
-            block "git $SUB $t (a worker stays on its story branch)." "$ALT_SCRATCH"
+            block "git $SUB $t (a worker stays on its story branch)." "$ALT_READ"
           fi ;;
       esac
     done <<<"$(printf '%s\n' "$CMD" | sed -E 's/(\&\&|\|\||;|\||\(|\)|`)/\n/g')"

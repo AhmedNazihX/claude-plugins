@@ -8,7 +8,9 @@
 - `gate`, `lane-guard` and `worker-guard`: every BLOCKED message now ends with the way through, as `doc-guard`
   does. The gate says to commit the required file first. The lane guard names the config key that denies the
   folder and the story exception (`stories.<ID>.allow`). The worker guard says to put backlog changes under
-  Follow-ups, and to report a push, merge or rebase for the orchestrator to do.
+  Follow-ups, to report a push, merge or rebase for the orchestrator to do, and to read old code with `git show`.
+  `worker-guard` also checks `git -C <dir>` on another worktree of the same repo, which shares its branches; only
+  a separate clone is exempt.
 
 ## 0.10.1 (2026-10-13)
 
