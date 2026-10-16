@@ -25,7 +25,8 @@
 - Decision 001: a plugin `SubagentStop` hook can tell a story-worker apart (`agent_type`) and block it once
   (`stop_hook_active`), so the report gate (R4) is a hook, not a story-finish check.
 - `story-finish` triages review findings into Act on / Consider / Dismissed before a fix round and lists Consider
-  for the user; Act on findings, plus Consider items the user chose to fix, go back to the worker. Re-reviews of fix
+  for the user; Act on findings, plus Consider items the user chose to fix, go back to the worker. A major finding
+  (security MEDIUM and up) is never deferred and is dismissed only with the user's agreement. Re-reviews of fix
   commits get the story entry, audit the fix range first, then confirm the previous findings closed and see the ones
   deliberately not fixed. The merge table shows each round's counts per bucket.
 
