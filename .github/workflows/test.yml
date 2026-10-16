@@ -5,7 +5,7 @@
 #   - the unit tests (python3 -m unittest discover -s foreman/tests)
 #   - every foreman/hooks/test-*.sh and git-guardrails/tests/test-guards.sh, found by glob and run through bash
 #   - the lint (python3 foreman/scripts/lint.py)
-#   - claude plugin validate, for the marketplace and both plugins (skipped with a warning if the CLI didn't install)
+#   - claude plugin validate, for the marketplace and both plugins
 # The step "List the checks" fails if any of these is missing from the config.
 name: test
 
@@ -33,13 +33,12 @@ jobs:
       - name: Set up jq
         run: command -v jq || { sudo apt-get update && sudo apt-get install -y jq; }
 
-      # `claude plugin validate` checks the manifests offline and needs no login. If the install fails, the other
-      # checks still run and "Run the checks" skips validate with a warning.
+      # `claude plugin validate` checks the manifests offline and needs no login. If the install fails, the job
+      # fails: a skipped validate would let a broken manifest merge green.
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: "22"
       - name: Install the Claude Code CLI
-        continue-on-error: true
         run: npm install -g @anthropic-ai/claude-code@2.1.302
 
       # The hook tests build throwaway repos and commit in them, so git needs a name and email.
@@ -58,22 +57,16 @@ jobs:
             grep -q -- "$want" <<<"$checks" || { echo "::error::no check in .claude/foreman.json runs: $want"; exit 1; }
           done
 
-      # Each check gets no stdin, so one that reads stdin can't swallow the rest of the list.
+      # The list is read in full before any check runs, and each check gets no stdin, so a check that reads stdin
+      # can't cut the list short. An empty list fails the job.
       - name: Run the checks
         run: |
           mapfile -t checks < <(jq -r '.checks[]' .claude/foreman.json)
-          failed=0; ran=0
+          if [ "${#checks[@]}" -eq 0 ]; then echo "::error::no checks in .claude/foreman.json"; exit 1; fi
+          failed=0
           for check in "${checks[@]}"; do
-            ran=$((ran + 1))
-            if [[ $check == *"claude plugin validate"* ]] && ! command -v claude >/dev/null; then
-              echo "::warning::the Claude Code CLI did not install, so this check is skipped: $check"
-              continue
-            fi
             echo "::group::$check"
             if bash -c "$check" </dev/null; then echo "pass"; else echo "::error::check failed: $check"; failed=1; fi
             echo "::endgroup::"
           done
-          if [ "$ran" -ne "${#checks[@]}" ] || [ "${#checks[@]}" -eq 0 ]; then
-            echo "::error::went through $ran of ${#checks[@]} checks"; failed=1
-          fi
           exit "$failed"
