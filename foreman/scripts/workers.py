@@ -6,8 +6,9 @@ The orchestrator's conversation is the only place that knows which agent works o
 (.claude/worktrees/ is gitignored by setup), one entry per story.
 
 Usage (from anywhere inside the repo, the main checkout or a story worktree):
-  workers.py record <ID> --launching --base <sha> [--branch B] [--brief -|FILE]
-                         record a worker about to launch, before the Agent call (no agent id yet)
+  workers.py record <ID> --launching --base <sha> [--replace] [--branch B] [--brief -|FILE]
+                         record a worker about to launch, before the Agent call (no agent id yet); over an
+                         entry that isn't merged or dead only with --replace
   workers.py record <ID> --agent <agent-id> [--base <sha>] [--branch B] [--worktree PATH] [--brief -|FILE]
                          record a launched worker, or fill in the agent id of a `launching` entry (which keeps
                          its base and brief); --brief - reads the launch prompt from stdin
@@ -50,6 +51,8 @@ STATES = ("running", "reported", "fix-round", "waiting-user", "merged")
 # Written before the Agent call, so a launch whose agent id never got recorded still shows in `list`.
 # `record --agent` moves it to running.
 LAUNCHING = "launching"
+# States `record --launching` may overwrite without --replace: the old worker is finished.
+REPLACEABLE = ("merged", "dead")
 REGISTRY_NAME = Path(".claude") / "worktrees" / "workers.json"
 # A subagent's prompt cache lives 5 minutes. Resuming a worker idle for longer rewrites its whole context to the
 # cache; above FRESH_WORKER_TOKENS a fresh worker with a short brief costs less and carries no stale context.
@@ -144,12 +147,15 @@ def new_entry(sid: str, base: str, branch: str | None, worktree: str | None, bri
 
 
 def cmd_record(data: dict[str, dict[str, object]], sid: str, args: list[str], brief: str | None) -> None:
-    launching = "--launching" in args
+    launching, replace = "--launching" in args, "--replace" in args
     agent, base = option(args, "--agent"), option(args, "--base")
     branch, worktree = option(args, "--branch"), option(args, "--worktree")
     if launching:
         if agent or not base:
             raise SystemExit("record --launching needs --base <sha> and no --agent (the id comes after the launch)")
+        state = data.get(sid, {}).get("state")
+        if state is not None and state not in REPLACEABLE and not replace:
+            raise SystemExit(f"{sid} is {state}: add --replace to launch a new worker over it (story-start --continue)")
         data[sid] = new_entry(sid, base, branch, worktree, brief)
         print(f"Recorded {sid}: launching, base {base[:12]}.")
         return
@@ -175,6 +181,8 @@ def cmd_set(data: dict[str, dict[str, object]], sid: str, args: list[str]) -> No
     if len(args) != 1 or args[0] not in STATES:
         raise SystemExit(f"set needs one state: {', '.join(STATES)}")
     e = entry(data, sid)
+    if e.get("state") == LAUNCHING:
+        raise SystemExit(f"{sid} is launching with no agent id: fill it with `record {sid} --agent <id>` first")
     e["state"] = args[0]
     if note is not None:
         e["note"] = note

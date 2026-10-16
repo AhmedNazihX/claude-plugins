@@ -144,6 +144,7 @@ Story notes: <the story's backlog notes since launch, from `backlog.py show <ID>
 Task: <what to do now: the fix round's findings, the user's decisions, or "finish the story">
 ```
 
-Record it in the same two steps as in section 3: `record <ID> --launching --base <BASE_SHA>` with this prompt as
-the brief before the Agent call, then `record <ID> --agent` with the new agent id and worktree. When it reports, delete the leftover branch it names with `git branch -d <branch>` if it still
+Record it in the same two steps as in section 3: `record <ID> --launching --replace --base <BASE_SHA>` with this
+prompt as the brief before the Agent call (`--replace` because it replaces the stopped worker's entry), then
+`record <ID> --agent` with the new agent id and worktree. When it reports, delete the leftover branch it names with `git branch -d <branch>` if it still
 exists (it points at a base-branch commit, so `-d` is enough). If `-d` refuses, leave the branch and tell the user.
