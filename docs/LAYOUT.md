@@ -42,6 +42,7 @@ Story IDs in brackets create or first change the path. Unmarked paths exist alre
 │   │   └── lib/                       shared shell helpers
 │   ├── scripts/                       Python 3, standard library only; each has a docstring with usage
 │   │   ├── backlog.py
+│   │   ├── backlog_model.py           Story, Backlog and the dep graph; imported by backlog.py, not a CLI (Q11)
 │   │   ├── workers.py
 │   │   ├── lint.py                    (F1)
 │   │   ├── pages.py                   HTML pages: merge page, status page (B9, B10)

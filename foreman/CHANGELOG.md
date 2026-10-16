@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- `backlog.py` is split under the 800-line ceiling: the model (`Story`, `Backlog`, the dep parsing and the
+  per-story checks) moves to `scripts/backlog_model.py`, which it imports from its own folder. No behaviour change.
+
 - `diff-reviewer`: two new categories, *developer-setup breakage* (listed even when intended) and *symptom fix*
   (major without a `Root cause: X because Y` line). `story-worker` writes that line before fixing a failing check
   and repeats it under `Root causes:` in its report. `story-finish` passes that line to the reviewers, adds a Setup
