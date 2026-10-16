@@ -29,6 +29,11 @@
 - Decision 002 records what a dead story-worker's transcript looks like (usage limit and API error seen; context
   overflow and a finish without a report not seen as deaths), how to tell a prompt from a wake-up, and the idle
   times behind `watch`'s defaults, with synthetic fixtures in `tests/fixtures/transcripts/`.
+- `story-finish` triages review findings into Act on / Consider / Dismissed before a fix round and lists Consider
+  for the user; Act on findings, plus Consider items the user chose to fix, go back to the worker. A major finding
+  (security MEDIUM and up) is never deferred and is dismissed only with the user's agreement. Re-reviews of fix
+  commits get the story entry, audit the fix range first, then confirm the previous findings closed and see the ones
+  deliberately not fixed. The merge table shows each round's counts per bucket.
 
 ## 0.10.1 (2026-10-13)
 

@@ -55,31 +55,73 @@ Relay each result as it arrives, in a few lines: the verdict, then the critical 
 
 ## 3. Fix rounds
 
-When any review is back with a FAIL, a critical or major finding, or minor findings worth fixing:
-- Wait for all the reviews of this round, then send **one** message to the worker with every finding: file and
-  line, the failure, and the fix direction. Include the user's decisions on the worker's questions, and anything a
-  later story now needs. Run `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/workers.py context <ID>` first:
+Once all the reviews of a round are back, triage them, even a clean round, so each round has its counts in step 4.
+
+- **Triage.** Sort every finding into one bucket. Keep the list (each finding, who raised it, its bucket, and the
+  reason for Consider or Dismissed) for the re-review and for step 4. These severity rules hold everywhere in this
+  skill; no other line overrides them:
+  1. "Major" means critical or major. The security reviewer's CRITICAL, HIGH and MEDIUM are major; its LOW is
+     minor. A merged duplicate keeps its highest severity, and counts as security if any source was the security
+     reviewer, or if the finding is about security whoever raised it.
+  2. A major finding is always Act on. It is never deferred. It leaves Act on only by being dismissed with the
+     user's agreement: it waits in Consider as a "proposed dismissal" with your reason, and if the user says no, it
+     goes back to Act on.
+  3. Consider holds only minor findings and proposed dismissals.
+  4. "(default)": when the user said not to be blocked, you may apply your own recommendation only to a minor
+     finding that isn't about security. Proposed dismissals and every security finding always wait for the user.
+  5. The exit rule is "no major finding open". Step 4 names every major or security finding that wasn't fixed,
+     whatever its outcome.
+
+  The buckets:
+  - **Act on**: a DoD FAIL, every major finding, and every real minor finding in this story's scope that is worth
+    fixing now.
+  - **Consider**: a real minor finding that is a trade-off, a scope question or a nice-to-have (the user decides:
+    fix it now, defer it to a backlog story, or drop it), and proposed dismissals.
+  - **Dismissed**: not a real problem, with a one-line reason (a major finding only after the user agrees, rule 2).
+
+  How to sort them:
+  - Merge duplicates: the same problem raised by two reviewers (or twice by one) is one finding. A finding two
+    reviewers raised on their own weighs more: lean towards Act on.
+  - Never dismiss a correctness finding because only one reviewer raised it. Check it against the code; if you
+    can't rule it out, it's Act on.
+  - Dismiss "I would have done it differently" when the code works and meets the story. Dismiss a finding that
+    rests on a hypothetical caller you can't find in the repo (`rg` for it), unless it's about security. Input
+    from outside the repo (hook stdin, CLI arguments, files, transcripts, CI or PR text) counts as a real caller.
+  - An empty review is a valid result. Don't ask a reviewer again to make it find something.
+- **User decisions.** A decision the fix itself depends on (a trade-off, a label, a wording, a paid run) goes to the
+  user first, **one question at a time**, with your recommendation and why. Legal or domain decisions quote the
+  source verbatim with its page and heading. Consider items don't hold back the fix round: list them together in the
+  same turn, each with your recommendation. Where rule 4 allows a default, apply your recommendation, say so, and
+  mark it "(default)" in step 4's Outcome. Settle every Consider item before a paid recording (see Paid recordings
+  last) and before step 4.
+- **Send.** A fix round starts when anything is to be fixed: the Act on findings plus the Consider items the user
+  chose to fix. Send them in **one** message to the worker: file and line, the failure, and the fix direction. Include
+  the user's decisions on the worker's questions, and anything a later story now needs. Run
+  `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/workers.py context <ID>` first:
   - `resume`: SendMessage to the worker's `agent_id` (`workers.py show <ID>`; this only works in the session that
     launched it). If that fails ("No transcript found", after a `/clear` or in a new session), continue as below.
   - `fresh` (the worker sat idle past its 5-minute prompt cache with a large context, so resuming would rewrite all
     of it): follow `story-start` › Continue (`--continue <ID>`) with the findings as the task. Resume instead when
     a finding asks for the worker's own reasoning ("why did you choose X"), which a fresh worker doesn't have.
   Mark the round with `workers.py set <ID> fix-round`, and `set <ID> reported` when the worker reports back.
-- Decisions that belong to the user (a trade-off, a label, a wording, a paid run) go to the user first, **one
-  question at a time**, with your recommendation and why. Legal or domain decisions quote the source verbatim
-  with its page and heading.
-- When the fixes come back: read the fix diff and rerun the relevant tests yourself. If a finding was major or the
-  fix is large, run the diff reviewer again on the fix commits only (`<previous head>..<new head>`), and ask it to
-  look for regressions the fixes introduced. When a fix answers a security finding, also run
-  `foreman:security-reviewer` on the fix commits, and ask it to confirm the finding is fixed and to look for
-  regressions.
-- Severity labels (the security reviewer's) map onto this: CRITICAL and HIGH are major and are fixed before the
-  merge; MEDIUM is fixed, or deferred with the user's agreement; LOW is minor.
+- **Re-review.** When the fixes come back, read the fix diff and rerun the relevant tests yourself. If a finding
+  was major or the fix is large, run the diff reviewer again on the fix commits only. When a fix answers a
+  security finding, also run `foreman:security-reviewer` on them. Each re-review prompt has three parts, in order:
+  1. "Review the fix commits `<previous head>..<new head>` first, on their own, for regressions the fixes
+     introduced. The story they implement, from the backlog: <the same `backlog.py show <ID>` entry as step 2,
+     verbatim>."
+  2. "Then confirm each finding sent to the worker is closed: <every finding in the fix message, with file and
+     line>."
+  3. "These findings were not fixed on purpose, each with its reason: <Consider items deferred, dropped or not yet
+     decided, and Dismissed ones>. Re-check one if the fixes touch its code; otherwise don't raise it again."
+
+  Auditing the fix range before reading the old findings keeps the reviewer from only checking the boxes it was
+  given. Triage the re-review's findings the same way.
 - A DoD item that waits only on the recording (see Paid recordings last) isn't open and gets no fix round.
-- Repeat until the DoD is DONE and no critical or major finding is open, with one exception: if the reviews of
+- Repeat until the DoD is DONE and no major finding is open (rule 5), with one exception: if the reviews of
   the third round's fixes find new edge cases of the same kind (each fix exposing the next case), don't send a
   fourth round. Tell the user, with a simpler design that removes the class of case, and let them choose. Minor
-  findings the user agrees to defer go to the backlog in step 5.
+  findings the user defers go to the backlog in step 5.
 - **Grow the checklist.** When `review_checklist` is set and a major finding is of a kind a worker could have
   caught in its own diff, it isn't on the list yet, and the same kind was found in an earlier story too, add one
   imperative line for it (with both story IDs) in the hand-over commit of step 5. One-off findings stay off the
@@ -98,8 +140,16 @@ When any review is back with a FAIL, a critical or major finding, or minor findi
 
 ## 4. Merge with the user's go-ahead
 
-Summarise in a small table: the DoD verdict, the reviews (findings per round, and "fixed"), the lane reviews. Name
-anything that will fail after the merge but isn't this story's. Check again whether the final branch touches
+Summarise in a small table: the DoD verdict, the reviews, the lane reviews. For the reviews, one row per round with
+its counts per triage bucket and what became of them. Name every major or security finding that wasn't fixed,
+whatever its outcome, instead of only counting it (rule 5 of step 3). For example:
+
+| Round | Act on | Consider | Dismissed | Outcome |
+|---|---|---|---|---|
+| 1 | 3 | 2 | 2 | 3 fixed; 1 deferred to Q5 (user); 1 dropped (default); dismissed: 1 style, security MEDIUM "path not checked" (user: input is internal) |
+| 2 (fix range) | 0 | 0 | 0 | clean |
+
+Name anything that will fail after the merge but isn't this story's. Check again whether the final branch touches
 `.claude/` (a fix round may have added it since step 1), and quote any changed `checks` or `post_merge` entries. Then ask the user to confirm the merge, and in the
 same question whether to push once the checks pass. Merge from the main checkout, on the base branch
 (`git -C <main checkout> status` shows where you are).
