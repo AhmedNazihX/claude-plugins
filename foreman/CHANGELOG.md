@@ -5,6 +5,8 @@
 - New `scripts/lint.py`: checks agent and skill frontmatter, read-only agents' tools, `foreman:` references,
   hook paths, relative `.md` links, stdlib-only imports and that the version agrees across `plugin.json`, the
   README and this file. The README version line is corrected to 0.10.1.
+- Decision 001: a plugin `SubagentStop` hook can tell a story-worker apart (`agent_type`) and block it once
+  (`stop_hook_active`), so the report gate (R4) is a hook, not a story-finish check.
 
 ## 0.10.1 (2026-10-13)
 
