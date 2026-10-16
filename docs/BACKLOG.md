@@ -128,12 +128,13 @@ flowchart LR
 
 ## Phase 0 — Foundations
 
-- [ ] **H1 · Install foreman from a release copy (gate)** · Deps: – · Type: human · Lane: Release · Size: S
+- [x] **H1 · Install foreman from a release copy (gate)** · Deps: – · Type: human · Lane: Release · Size: S
   Context: Design › Human-only work; Gates; Risks and open questions. Input: `.claude-plugin/marketplace.json`.
   Output: a release copy of this repo outside the working tree (for example `~/Workspace/claude-plugins-release`,
   a clone on `main`, or the GitHub repo), the `nazihx` marketplace re-added from it, and foreman reinstalled.
   DoD: `claude plugin marketplace list` shows the `nazihx` source outside `~/Workspace/claude-plugins`; a new
   session lists `foreman` 0.10.1 from it.
+  **Outcome:** Release copy at ~/Workspace/claude-plugins-release; nazihx marketplace reads from it; foreman 0.10.1 loads from it (checked 2026-10-16)
 
 - [ ] **F1 · Plugin lint** · Deps: H1 · Type: agent · Lane: Tooling · Solo · Size: M
   Context: Design › D1; Rules and enforcement. Input: `foreman/agents/*.md`, `foreman/skills/*/SKILL.md`,
