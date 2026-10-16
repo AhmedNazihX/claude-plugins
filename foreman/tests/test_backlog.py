@@ -16,6 +16,7 @@ ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / "scripts" / "backlog.py"
 FIXTURE = Path(__file__).parent / "fixtures" / "backlog.md"
 
+sys.path.insert(0, str(SCRIPT.parent))  # backlog.py imports backlog_model.py from its own folder
 spec = importlib.util.spec_from_file_location("backlog", SCRIPT)
 assert spec and spec.loader
 backlog = importlib.util.module_from_spec(spec)
