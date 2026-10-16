@@ -294,6 +294,7 @@ flowchart LR
   DoD: the lint passes; the user approved the CHANGELOG entry; after the merge and push, `foreman:ci-watcher`
   reports the GitHub Actions run green; the user pulled the release copy and a new session lists foreman 0.11.0.
   **From F2 (merged):** First Actions run must show the pinned `@anthropic-ai/claude-code@2.1.302` install and `claude plugin validate` passing on the runner: the install is required, so its failure fails the whole job. Pinned actions: checkout v4.4.0, setup-python v5.6.0, setup-node v4.4.0.
+  **User decision (2026-10-17):** CI removed. F2's workflow (.github/workflows/test.yml) was deleted after its first Actions run failed on Linux (foreman/hooks/test-guards.sh exits 1 on ubuntu, passes on macOS; run 38974723879). V1's 'first green run in Actions' DoD item no longer applies; the global checks run locally only.
 
 ## Phase 2 — Experiments
 
