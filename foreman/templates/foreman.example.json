@@ -64,7 +64,11 @@
     {
       "rule": "Benchmark files are never read by corpus code",
       "source": "DESIGN.md › Data, security and compliance; decision 012",
-      "enforced_by": ["lanes.Corpus", "foreman:lane-auditor", "backend/tests/test_isolation.py"]
+      "enforced_by": ["lanes.Corpus", "foreman:lane-auditor", "backend/tests/test_isolation.py"],
+      "because": "story C4 leaked test answers into the corpus",
+      "exceptions": [
+        {"what": "stories.C2 may read eval/split.json", "expires": "2026-12-01"}
+      ]
     },
     {
       "rule": "No live model calls in tests",

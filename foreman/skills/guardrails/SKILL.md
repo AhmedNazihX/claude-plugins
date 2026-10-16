@@ -57,10 +57,19 @@ Add or update one entry per rule in `.claude/foreman.json` › `guardrails`:
 
 ```json
 {"rule": "Benchmark files are never read by corpus code", "source": "DESIGN.md › Data; decision 012",
- "enforced_by": ["lanes.Corpus", "foreman:lane-auditor", "backend/tests/test_isolation.py"]}
+ "enforced_by": ["lanes.Corpus", "foreman:lane-auditor", "backend/tests/test_isolation.py"],
+ "because": "story C4 leaked test answers into the corpus",
+ "exceptions": [{"what": "stories.C2 may read eval/split.json", "expires": "2026-12-01"}]}
 ```
 
 A rule with an empty `enforced_by` is allowed only if the user decided so; say so in a `note`.
+
+- **`because`** (optional): the incident or story behind the rule, in one line. It tells a later reader whether
+  the rule still matters, so add it whenever you know it.
+- **`expires`** on each exception: every way through the rule (an `allow` entry, a story exception, a check
+  switched off for now) is listed under `exceptions` with `what` it allows and `expires`, a date or the story ID
+  whose merge ends it. When this skill runs, report each exception past its `expires`: remove it and its config
+  entry, or renew it with the user's reason.
 
 ## 5. Hand over
 
