@@ -20,6 +20,8 @@
 - `backlog.py`: `--json` on `status`, `plan` and `deps` (fields listed in its docstring); `<command> --help` shows
   that command's usage and examples; a usage error prints the command's usage line and one example, not the whole
   docstring.
+- New CI workflow `.github/workflows/test.yml`: on every push and pull request it runs each check listed in
+  `.claude/foreman.json` (unit tests, hook tests, lint, `claude plugin validate`) on Python 3.12 with `jq`.
 
 ## 0.10.1 (2026-10-13)
 
