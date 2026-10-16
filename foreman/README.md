@@ -52,8 +52,9 @@ When a worker reports DONE, `story-finish` runs the review panel in parallel, in
 The orchestrator sorts the findings into Act on, Consider (listed for you, each with a recommendation) and
 Dismissed. Act on findings, plus Consider items you chose to fix, go back to the worker as **one** fix round; a
 major finding gets its fix re-reviewed for regressions, and the loop repeats until the DoD is met and nothing major
-is open. A major finding (the security reviewer's MEDIUM and above included) is never deferred, and only you can
-agree to dismiss one. A worker that has sat idle with a large context is replaced by a fresh one for the fix round
+is open. Only you drop or defer a finding (the orchestrator may apply its own proposal only to a minor,
+non-security one when you said not to be blocked); severities are never lowered, and auditor FAILs count as major.
+A worker that has sat idle with a large context is replaced by a fresh one for the fix round
 (`workers.py context` decides), and a third round that still opens new edge cases goes to you with a simpler design.
 Workers check their diff against the project's `review_checklist` before DONE, and the list grows when the same kind
 of major finding comes back in a second story. Paid recordings (responses the tests replay) are made once, by the
