@@ -295,7 +295,7 @@ flowchart LR
   needs a session); the choice for R4 is stated.
   **Outcome:** Decision 001 (proposed): a plugin SubagentStop hook sees agent_type (foreman:story-worker), its cwd is the worker's worktree, and it blocks once via stop_hook_active for workers whose last message is plain text (3 headless probes, $0.0169 measured). R4 builds the hook unless its first run shows a block after SubagentHandback doesn't hold the report back; then option B (story-finish check).
 
-- [ ] **X2 · What a dead worker's transcript looks like** · Deps: F1 · Type: agent · Lane: Workers · Size: S
+- [x] **X2 · What a dead worker's transcript looks like** · Deps: F1 · Type: agent · Lane: Workers · Size: S
   Context: Design › Early experiments; D10. Input: the capstone transcripts under
   `~/.claude/projects/-Users-ahmednazihali-Workspace-Projects-Capstone-anazih-AE-CAP-AFA-1-1*/` (read-only; the
   P25 usage-limit worker is one), `foreman/scripts/workers.py` (`context`).
@@ -305,6 +305,7 @@ flowchart LR
   R5 matches. Synthetic fixture lines for each shape in `foreman/tests/fixtures/transcripts/`.
   DoD: each failure mode has a pattern seen in at least one real transcript, or is marked "not observed"; the
   fixtures contain no text from a real transcript; the global checks pass.
+  **Outcome:** Decision 002: from 180 real story-worker transcripts (counts only), 8 ordered rules tied to the last prompt (defined by record fields) and to silence limits; usage-limit and api-error deaths seen, context-overflow and finished-without-report not; watch defaults stay 5/30 (longest live silence 20.9 min, margin ~1.4x); 13 synthetic fixtures with an expected-verdict table. Two fix rounds (4 major).
 
 - [x] **X3 · Does a Stop-hook loop behave?** · Deps: F1 · Type: mixed · Lane: Autonomy · Size: S
   Context: Design › Early experiments; D17. Input: the Claude Code hooks documentation, a throwaway test plugin
@@ -381,6 +382,7 @@ flowchart LR
   synthetic fixtures.
   DoD: one test per mode in decision 002 plus `unknown`; a test that a live worker is left alone; the global checks
   pass.
+  **From X2 (merged):** Implement decision 002's 8 rules in order and copy its fixture verdict table (13 fixtures × last write +1/+31 min) into tests; pass the test's own 'now' (fixture timestamps are fixed). Split transcripts on `\n`, never `splitlines()` (U+2028 inside records; see line-separator.jsonl). workers.py `last_turn` still uses splitlines() (workers.py ~182): fix it here. A 'prompt' is defined by fields in the record's shape table (initial: string, no isMeta; resume/wake-up: isMeta + origin.kind).
 
 - [ ] **R6 · Reconcile** · Deps: R5 · Type: agent · Lane: Workers · Size: M · Resource: workers, status-skill
   Context: Design › D10. Input: `foreman/scripts/workers.py`, `foreman/skills/next/SKILL.md`,
@@ -405,6 +407,7 @@ flowchart LR
   escalation. The keys go in the example config and setup's table.
   DoD: tests for the notice and stuck thresholds firing once and the counters; story-start holds the refusal and
   the retry table; `foreman.example.json` parses; the global checks pass.
+  **From X2 (merged):** One shared stall silenced 4 workers at once for ~146 min (machine asleep): `watch` should report a silence that hits several workers at the same moment as one event, not N stuck workers. Stuck is a question for the user; silence alone is not enough to reap (30-min default has only ~1.4× margin over the longest live wait).
 
 - [ ] **R8 · WIP checkpoint commits** · Deps: V1 · Type: agent · Lane: Workers · Size: S · Resource: story-worker, story-start
   Context: Design › D10. Input: `foreman/agents/story-worker.md`, `foreman/skills/story-start/SKILL.md` § 5.
