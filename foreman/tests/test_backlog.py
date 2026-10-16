@@ -550,11 +550,36 @@ class RepeatsAndDryRun(unittest.TestCase):
                     self.assertIn("one non-empty line", out.stderr)
         self.assertEqual(self.path.read_bytes(), before)
 
-    def test_a_note_equal_to_a_field_line_is_still_written(self) -> None:
-        out = run("note", "F3", "Output: `backend/app/schemas/result.py`. DoD: round-trip tests pass.", path=self.path)
-        self.assertEqual(out.returncode, 0, out.stderr)
-        self.assertNotIn("already done", out.stdout)
-        self.assertEqual(len(run("show", "F3", path=self.path).stdout.splitlines()), 3)
+    def test_a_note_starting_with_a_field_label_is_refused(self) -> None:
+        before = self.path.read_bytes()
+        for text in ("Output: x", "DoD: extra", "Context: thing.", "Notes from merged stories: y"):
+            out = run("note", "E1", text, path=self.path)
+            self.assertNotEqual(out.returncode, 0, text)
+            self.assertIn("can't start with a field label", out.stderr)
+        self.assertEqual(self.path.read_bytes(), before)
+        self.assertEqual(run("note", "E1", "--from", "F3", "Output: x", path=self.path).returncode, 0)
+
+    def test_repeats_are_still_found_after_a_field_like_note_attempt(self) -> None:
+        for args in (("note", "E1", "first note"), ("note", "E1", "Output: x"), ("tick", "E2", "done"),
+                     ("note", "E2", "DoD: extra")):
+            run(*args, path=self.path)
+        before = self.path.read_bytes()
+        self.assertIn("already done: E1 has this note", run("note", "E1", "first note", path=self.path).stdout)
+        retry = run("tick", "E2", "done", path=self.path)
+        self.assertEqual(retry.returncode, 0, retry.stderr)
+        self.assertIn("already done: E2 ticked", retry.stdout)
+        self.assertEqual(self.path.read_bytes(), before)
+
+    def test_a_tick_on_a_backlog_broken_elsewhere_names_the_old_problem(self) -> None:
+        text = self.path.read_text(encoding="utf-8")
+        self.path.write_text(text + "\n- [ ] **E1 · Again** · Deps: – · Type: agent\n  Output: x. DoD: y.\n",
+                             encoding="utf-8")
+        before = self.path.read_bytes()
+        out = run("tick", "E3", "done", path=self.path)
+        self.assertNotEqual(out.returncode, 0)
+        self.assertIn("Not written: duplicate ID E1. The backlog already has duplicate ID E1; run `backlog.py check`",
+                      out.stderr)
+        self.assertEqual(self.path.read_bytes(), before)
 
     def test_a_ticked_story_without_its_own_outcome_keeps_the_old_message(self) -> None:
         self.path.write_text("- [x] **A1a–b · Group** · Deps: – · Type: agent\n  Output: a. DoD: a.\n", encoding="utf-8")

@@ -567,7 +567,15 @@ def write_checked(b: Backlog, lines: list[str], what: str, at: int, touched: tup
         with os.fdopen(fd, "w", encoding="utf-8", newline="") as f:
             f.write(b.newline.join(lines) + b.newline)
         shutil.copymode(target, tmp)  # mkstemp makes it 0600
-        refuse_broken(tmp, touched)
+        try:
+            refuse_broken(tmp, touched)
+        except SystemExit as new:
+            try:  # say so when the problem was there before this edit
+                refuse_broken(b.path, ())
+            except SystemExit as old:
+                sys.exit(f"{new}. The backlog already has {str(old).removeprefix('Not written: ')}; "
+                         "run `backlog.py check`")
+            raise
         if dry_run:
             print("\n".join(difflib.unified_diff(b.lines, lines, str(b.path), f"{b.path} (after)", lineterm="")))
             print(f"Dry run, nothing written: {what}")
@@ -613,6 +621,8 @@ def cmd_note(b: Backlog, sid: str, text: str, source: str | None, dry_run: bool 
     if sid in s.sub_ids:
         text = f"({sid}) {text}"
     note = f"**From {source} (merged):** {text}" if source else text
+    if FIELD_RE.match(note):  # it would read as one of the story's own fields
+        sys.exit("A note can't start with a field label (Context:, Input:, Output:, DoD:): reword it or use --from")
     same = find_note(b, s, note)
     if same is not None:
         print(f"already done: {s.id} has this note ({location(b, same)})")
