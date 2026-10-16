@@ -26,6 +26,9 @@
   (`stop_hook_active`), so the report gate (R4) is a hook, not a story-finish check.
 - Decision 003 (proposed): a plugin `Stop` hook loop works headless on Claude Code 2.1.302. B4's hook will count in
   its own state file and stand aside while background subagents run.
+- Decision 002 records what a dead story-worker's transcript looks like (usage limit and API error seen; context
+  overflow and a finish without a report not seen as deaths), how to tell a prompt from a wake-up, and the idle
+  times behind `watch`'s defaults, with synthetic fixtures in `tests/fixtures/transcripts/`.
 
 ## 0.10.1 (2026-10-13)
 
