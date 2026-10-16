@@ -226,7 +226,7 @@ flowchart LR
   under 10 lines and contains `Example:`; the global checks pass.
   **Outcome:** backlog.py: --json on status, plan, deps and info (schemas in the docstring; not_finishable is a subset of ready), per-command --help right after the command name, four-line usage errors with Example:; text output unchanged (diffed on the real backlog); 13 new tests. Fix round 1 closed 2 LOW, 4 minor.
 
-- [ ] **Q6 · Idempotent and dry-run backlog writes** · Deps: Q5 · Type: agent · Lane: Tooling · Size: S · Resource: backlog-script
+- [x] **Q6 · Idempotent and dry-run backlog writes** · Deps: Q5 · Type: agent · Lane: Tooling · Size: S · Resource: backlog-script
   Context: Design › D6. Input: `foreman/scripts/backlog.py`, `foreman/tests/test_backlog.py`.
   Output: `tick` with the same note on an already-ticked story prints `already done: <ID> ticked` and exits 0 (a
   different note still fails); `note` skips an exact repeat of a line already on the story and says so;
@@ -235,6 +235,7 @@ flowchart LR
   DoD: tests for the repeat-tick, the different-note failure, the duplicate note, each `--dry-run` leaving the file
   byte-identical, and the `file:line` output; the global checks pass.
   **From Q5 (merged):** `-h`/`--help` now count only as the first word or right after the command; `--json`, `--file` and `--width` are still taken from anywhere on the line, so an unquoted `--width 3` inside note text is eaten (pre-existing). Q6's idempotent tick/note and --dry-run are the rest of D6 that Q5 left out.
+  **Outcome:** backlog.py: repeat tick/note says 'already done' (exit 0), a different tick note still fails; --dry-run (first word or right after the command) prints the diff and writes nothing; writes print file:line, keep mode and symlinks, refuse multi-line notes and notes starting with a field label; tick refuses on a broken backlog and names the old problem. 115 tests; backlog.py at 834 lines (docstring explains). Two fix rounds (2 MEDIUM).
 
 - [ ] **Q7 · Hook block messages name the way through** · Deps: F1 · Type: agent · Lane: Tooling · Size: S · Resource: guard-hooks
   Context: Design › D6. Input: `foreman/hooks/gate.sh`, `foreman/hooks/lane-guard.sh`,
