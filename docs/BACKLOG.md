@@ -136,7 +136,7 @@ flowchart LR
   session lists `foreman` 0.10.1 from it.
   **Outcome:** Release copy at ~/Workspace/claude-plugins-release; nazihx marketplace reads from it; foreman 0.10.1 loads from it (checked 2026-10-16)
 
-- [ ] **F1 · Plugin lint** · Deps: H1 · Type: agent · Lane: Tooling · Solo · Size: M
+- [x] **F1 · Plugin lint** · Deps: H1 · Type: agent · Lane: Tooling · Solo · Size: M
   Context: Design › D1; Rules and enforcement. Input: `foreman/agents/*.md`, `foreman/skills/*/SKILL.md`,
   `foreman/hooks/hooks.json`, `foreman/.claude-plugin/plugin.json`, `foreman/CHANGELOG.md`, `foreman/README.md`,
   `docs/LAYOUT.md`.
@@ -152,6 +152,7 @@ flowchart LR
   DoD: `python3 foreman/scripts/lint.py` exits 0 on the repo; `test_lint.py` has one test per check that fails on
   a planted violation and one that passes on a clean fixture; the global checks pass.
   **Setup (2026-10-16):** the config's lint check is guarded (`test ! -e foreman/scripts/lint.py || …`) until F1 exists; F1 replaces it with the plain `python3 foreman/scripts/lint.py` in `.claude/foreman.json`.
+  **Outcome:** lint.py (7 checks, exit 1 with file:line: message, 2 on unreadable root) and 27 tests; lint flagged only the stale README version (fixed to 0.10.1); CHANGELOG has ## Unreleased; the lint check is now plain in foreman.json. Reviews clean (DoD DONE, diff clean, security approve, 28/30 mutations caught).
 
 - [ ] **F2 · CI workflow** · Deps: F1 · Type: agent · Lane: Tooling · Size: S
   Context: Design › D1; Evaluation. Input: the global checks (this backlog › Global rules).
@@ -161,6 +162,7 @@ flowchart LR
   @anthropic-ai/claude-code`); otherwise the workflow says it is local-only in a comment.
   DoD: the workflow runs every check named above (the dod-verifier reads it against the list); the global checks
   pass. (The first green run in Actions is checked after the push, in V1's DoD.)
+  **From F1 (merged):** Run the lint as plain `python3 foreman/scripts/lint.py`. It needs Python >= 3.10 (`sys.stdlib_module_names`): on macOS's /usr/bin/python3 3.9 it crashes with exit 1, as test_backlog already does, so pin CI's Python to >= 3.10. `foreman/hooks/test-format.sh` is not executable (the other test-*.sh are): run hook tests through `bash` or chmod it.
 
 ## Phase 1 — Wave 1: quick wins
 
@@ -340,6 +342,7 @@ flowchart LR
   DoD: decision 004 is recorded and the user approved it; if it says yes, each agent file holds the instruction and
   the return line, and `lint.py` and `test_lint.py` allow Write only with a `handoffs/` instruction, tested both
   ways; the global checks pass.
+  **From F1 (merged):** Deferred minor findings on lint.py, for whoever next edits it (R3 changes its read-only rule): no test covers the `allowed-tools` key (TOOL_KEYS) or the `mcp__*` tool-name exemption (the test-auditor removed each and no test failed); add one test each. The bare-name check covers only a backticked name touching the label ("the `x` agent", "skill `x`"), so unlabelled names and the non-adjacent names in a list ("the `a` and `b` agents") aren't checked; external skills credited by the plugin go in EXTERNAL (now {"grilling"}).
 
 - [ ] **R4 · Report gate** · Deps: R2, X1 · Type: agent · Lane: Workers · Size: M · Resource: hooks-config, story-finish
   Context: Design › D9; decision 001. Input: `docs/decisions/001-subagent-stop-gate.md`,
