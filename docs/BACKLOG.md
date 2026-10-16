@@ -238,6 +238,11 @@ flowchart LR
   **From Q5 (merged):** `-h`/`--help` now count only as the first word or right after the command; `--json`, `--file` and `--width` are still taken from anywhere on the line, so an unquoted `--width 3` inside note text is eaten (pre-existing). Q6's idempotent tick/note and --dry-run are the rest of D6 that Q5 left out.
   **Outcome:** backlog.py: repeat tick/note says 'already done' (exit 0), a different tick note still fails; --dry-run (first word or right after the command) prints the diff and writes nothing; writes print file:line, keep mode and symlinks, refuse multi-line notes and notes starting with a field label; tick refuses on a broken backlog and names the old problem. 115 tests; backlog.py at 834 lines (docstring explains). Two fix rounds (2 MEDIUM).
 
+- [ ] **Q11 · Split backlog.py under the line ceiling** · Deps: Q6 · Type: agent · Lane: Tooling · Size: S · Resource: backlog-script
+  Context: Rules (800-line soft ceiling); Q6's review. Input: `foreman/scripts/backlog.py` (834 lines), `foreman/tests/test_backlog.py`.
+  Output: the model part (regexes, `Story`, `parse_deps`, `Backlog`, `repo_root`, `branches`, `story_problems`) moves to `foreman/scripts/backlog_model.py`, imported by `backlog.py` as a sibling (skills run it by path, so its folder is on the import path); the docstring line explaining the overrun goes; tests load both. No behaviour change.
+  DoD: `backlog.py` is under 800 lines; every existing test passes with only import setup changed; `lint.py` passes; the global checks pass.
+
 - [ ] **Q7 · Hook block messages name the way through** · Deps: F1 · Type: agent · Lane: Tooling · Size: S · Resource: guard-hooks
   Context: Design › D6. Input: `foreman/hooks/gate.sh`, `foreman/hooks/lane-guard.sh`,
   `foreman/hooks/worker-guard.sh`, `foreman/hooks/doc-guard.sh`, `foreman/hooks/test-guards.sh`.
