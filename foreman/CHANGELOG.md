@@ -5,6 +5,11 @@
 - New `scripts/lint.py`: checks agent and skill frontmatter, read-only agents' tools, `foreman:` references,
   hook paths, relative `.md` links, stdlib-only imports and that the version agrees across `plugin.json`, the
   README and this file. The README version line is corrected to 0.10.1.
+- `kickoff` and `decision`: live docs before memory. A choice that rests on an external API, library or model
+  cites the section of its current docs; a capability the docs never mention is "unavailable until verified" and
+  becomes a DoD item. `kickoff` § 5 first questions each requirement (who owns it) and deletes what doesn't
+  survive. `guardrails`: optional `because` on each registry entry and `expires` on each exception; the example
+  config shows both.
 
 ## 0.10.1 (2026-10-13)
 

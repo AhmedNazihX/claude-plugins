@@ -14,7 +14,7 @@ Rules for the whole skill:
 - **One question at a time**, each with your recommended answer and the reason. Never a batch.
 - **Read before you ask.** Never ask what a file, the repo or a quick look at the docs already answers.
 - **The user decides**; you propose. Anything the user hasn't confirmed is marked *assumed* in the design.
-- **Check library facts** against current docs (context7, or the library's own site) before recommending a stack.
+- **Check library facts** against current docs before recommending a stack (step 3, "Live docs before memory").
 
 ## 1. Read what exists
 
@@ -57,8 +57,12 @@ what `work-breakdown` needs from it (see the headings in step 4).
 - **An existing codebase:** confirm its stack; ask only about additions (a database, a queue, a frontend).
 - **A new project:** for each layer that matters (language and runtime, framework, data store, frontend, hosting,
   model provider if any), propose 2–3 options in a short table: fit to the constraints, maturity, cost, what the
-  team knows, lock-in. Recommend one and say why. Check each recommended library's current version and API
-  against its docs.
+  team knows, lock-in. Recommend one and say why.
+- **Live docs before memory.** When a choice rests on an external API, library or model, fetch its current docs
+  (its `llms.txt`, its OpenAPI spec, or context7) and read only the section the choice needs: the current
+  version, the call, the limit, the price. Cite that section (URL and heading) in the design or the decision
+  record. A capability the docs never mention is **unavailable until verified**: mark it so in the design, and
+  make proving it a DoD item (usually an early experiment), never an assumption.
 - Record every real choice with the **decision** skill (`docs/decisions/NNN-<slug>.md`): the options, what was
   compared, the choice. Obvious defaults need no record; say "default" in the design instead.
 - Name what the first week must prove (model quality, a library's fit, cost per run): these become early
@@ -99,15 +103,20 @@ pages.
 Before asking for approval, test the draft the way a sceptical reviewer would. The method comes from the
 `grilling` skill (Matt Pocock's skills collection, MIT), adapted to one question at a time:
 
-1. **Map the design tree.** Every decision in the draft (a stack choice, a gate, an acceptance criterion, a
+1. **Question each requirement, then delete, then split.** For every deliverable, constraint, gate and rule, ask
+   who owns it: the person (or source document) that asked for it and can say why. A requirement nobody owns, or
+   whose reason doesn't survive the question, is deleted from the draft (say so, and list it under *Non-goals*).
+   Only what survives is split into parts later, by `work-breakdown`; never plan work for a requirement you
+   haven't questioned.
+2. **Map the design tree.** Every decision in the draft (a stack choice, a gate, an acceptance criterion, a
    constraint) is a node; the decisions that only make sense once it is settled hang off it.
-2. **Walk the frontier.** The frontier is every decision whose parents are settled. Pick the one whose answer
+3. **Walk the frontier.** The frontier is every decision whose parents are settled. Pick the one whose answer
    would change the most of the design, and ask it: **one question**, with your recommended answer and the reason.
    Good questions attack: "what happens when …", "how will you know …", "what if this is 10× bigger, or never
    arrives", "who approves this, and when", "what would make you drop this deliverable".
-3. **Update the draft** after each answer: fix the section, drop what the answer made moot, add what it opened,
+4. **Update the draft** after each answer: fix the section, drop what the answer made moot, add what it opened,
    and record any real choice as a decision.
-4. **Stop** when the frontier holds only questions whose answer wouldn't change a deliverable, a gate, the stack or
+5. **Stop** when the frontier holds only questions whose answer wouldn't change a deliverable, a gate, the stack or
    the order of work, or when the user says it's enough. List what you didn't ask under *Risks and open questions*.
 
 ## 6. Approve, then hand over
