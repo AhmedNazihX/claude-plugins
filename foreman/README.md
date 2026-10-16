@@ -107,7 +107,8 @@ Each project keeps only its own facts: `docs/DESIGN.md`, `docs/BACKLOG.md`, `doc
 ## Tests
 
 ```bash
-python3 -m unittest discover -s tests     # backlog.py, workers.py
+python3 -m unittest discover -s tests     # backlog.py, workers.py, lint.py
+python3 scripts/lint.py                   # frontmatter, references, hooks, links, imports, versions
 bash hooks/test-guards.sh                 # gate, lane-guard and worker-guard hooks
 bash hooks/test-format.sh                 # formatter hook
 bash hooks/test-doc-guard.sh              # doc guard hook
@@ -116,7 +117,7 @@ claude plugin validate .
 
 ## Version
 
-0.10.0. See [CHANGELOG.md](CHANGELOG.md), which also has the migration steps for projects that used the plugin under
+0.10.1. See [CHANGELOG.md](CHANGELOG.md), which also has the migration steps for projects that used the plugin under
 its old name, `story-workflow`.
 
 ## Credits
