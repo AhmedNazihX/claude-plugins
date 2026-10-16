@@ -368,5 +368,122 @@ class Commands(unittest.TestCase):
         self.assertIn("**Outcome:** all three", text)
 
 
+class JsonOutput(unittest.TestCase):
+    def ids(self, items: list[dict]) -> list[str]:
+        return [item["id"] for item in items]
+
+    def test_status_json_sorts_the_fixture(self) -> None:
+        out = run("status", "--json")
+        self.assertEqual(out.returncode, 0, out.stderr)
+        data = json.loads(out.stdout)
+        self.assertEqual(set(data), {"done", "in_progress", "ready", "blocked", "not_finishable"})
+        self.assertEqual(self.ids(data["done"]), ["F1", "F2"])
+        self.assertEqual(self.ids(data["ready"]), ["F3", "B1", "W1"])
+        self.assertEqual(self.ids(data["blocked"]), ["B2a–c", "E1", "E2", "E3", "P1"])
+        self.assertEqual(data["in_progress"], [])
+        self.assertEqual(data["not_finishable"], [])
+        for items in data.values():
+            for item in items:
+                self.assertTrue({"id", "title", "type"} <= set(item), item)
+        group = next(item for item in data["blocked"] if item["id"] == "B2a–c")
+        self.assertEqual(group["sub_stories_left"], ["B2b", "B2c"])
+        self.assertEqual(group["waiting_on"], ["F3"])
+        w1 = next(item for item in data["ready"] if item["id"] == "W1")
+        self.assertEqual(w1["checks"], ["run in week 9"])
+
+    def test_status_json_lists_a_story_that_can_be_built_but_not_finished(self) -> None:
+        with tempfile.TemporaryDirectory() as d:
+            path = Path(d) / "backlog.md"
+            path.write_text(
+                "- [ ] **A1 · Cases** · Deps: – · Type: human\n  Output: `cases/a.yaml`. DoD: approved.\n\n"
+                "- [ ] **A2 · Node** · Deps: – · Type: agent\n  Output: node. DoD: passes on `cases/a.yaml`.\n",
+                encoding="utf-8",
+            )
+            data = json.loads(run("status", "--json", path=path).stdout)
+        self.assertEqual(self.ids(data["ready"]), ["A1", "A2"])
+        self.assertEqual(self.ids(data["not_finishable"]), ["A2"])
+        self.assertIn("A1's Output creates", data["not_finishable"][0]["gaps"][0])
+
+    def test_plan_json_matches_the_computed_plan(self) -> None:
+        out = run("plan", "--json")
+        self.assertEqual(out.returncode, 0, out.stderr)
+        data = json.loads(out.stdout)
+        self.assertEqual(set(data), {"critical_path", "waves"})
+        b = backlog.Backlog(FIXTURE)
+        self.assertEqual(self.ids(data["critical_path"]), [s.id for s in b.critical_path()])
+        self.assertEqual([self.ids(w) for w in data["waves"]], [[s.id for s in w] for w in b.waves()])
+        self.assertEqual(set(data["critical_path"][0]), {"id", "title", "size", "done"})
+        first = {item["id"]: item for item in data["waves"][0]}
+        self.assertEqual(set(first["F3"]), {"id", "title", "critical", "solo", "check"})
+        self.assertTrue(first["F3"]["critical"])
+        self.assertTrue(first["W1"]["check"])
+
+    def test_plan_json_honours_the_width(self) -> None:
+        data = json.loads(run("plan", "--width", "1", "--json").stdout)
+        self.assertTrue(all(len(w) == 1 for w in data["waves"]))
+
+    def test_deps_json_names_the_unmet_deps_and_keeps_the_exit_code(self) -> None:
+        blocked = run("deps", "E1", "--json")
+        self.assertEqual(blocked.returncode, 1)
+        self.assertEqual(json.loads(blocked.stdout), {"id": "E1", "unmet": [{"id": "F3", "title": "Contracts"}],
+                                                       "checks": []})
+        manual = run("deps", "W1", "--json")
+        self.assertEqual(manual.returncode, 0)
+        self.assertEqual(json.loads(manual.stdout), {"id": "W1", "unmet": [], "checks": ["run in week 9"]})
+
+    def test_the_text_output_has_no_json(self) -> None:
+        self.assertFalse(run("status").stdout.startswith("{"))
+        self.assertFalse(run("plan").stdout.startswith("{"))
+
+
+class HelpAndUsage(unittest.TestCase):
+    def cli(self, *args: str) -> subprocess.CompletedProcess[str]:
+        return subprocess.run([sys.executable, str(SCRIPT), *args], capture_output=True, text=True)
+
+    def test_every_command_has_help_with_two_or_three_examples(self) -> None:
+        for name in backlog.COMMANDS:
+            out = self.cli(name, "--help")
+            self.assertEqual(out.returncode, 0, name)
+            self.assertTrue(out.stdout.startswith(f"Usage: backlog.py {name}"), out.stdout)
+            examples = out.stdout.split("Examples:\n")[1].splitlines()
+            self.assertIn(len(examples), (2, 3), name)
+            self.assertTrue(all("backlog.py" in e and name in e for e in examples), examples)
+
+    def test_the_docstring_lists_every_command(self) -> None:
+        for name in backlog.COMMANDS:
+            self.assertIn(f"backlog.py {name}", backlog.__doc__)
+
+    def test_help_alone_prints_the_whole_guide(self) -> None:
+        out = self.cli("--help")
+        self.assertEqual(out.returncode, 0)
+        self.assertIn("JSON output", out.stdout)
+
+    def assert_short_usage_error(self, out: subprocess.CompletedProcess[str]) -> None:
+        self.assertNotEqual(out.returncode, 0)
+        self.assertNotIn("Traceback", out.stderr)
+        self.assertLess(len(out.stderr.splitlines()), 10, out.stderr)
+        self.assertIn("Example:", out.stderr)
+        self.assertNotIn("Story format", out.stderr)  # not the whole docstring
+
+    def test_a_usage_error_is_short_and_has_an_example(self) -> None:
+        cases = {
+            ("show",): "Usage: backlog.py show <ID>",
+            ("set-deps", "E2"): "Usage: backlog.py set-deps",
+            ("plan", "--width", "three"): "--width needs a whole number",
+            ("show", "F3", "--json"): "--json works with status, plan and deps",
+            ("--file", FIXTURE.as_posix(), "add"): "needs --after <ID>",
+            ("--file", FIXTURE.as_posix(), "note", "E1", "text", "--from"): "--from needs a story ID",
+            ("status", "--file"): "--file needs a path",
+            (): "Commands: check, plan",
+            ("--file",): "--file needs a path",
+            ("bogus",): "Unknown command 'bogus'",
+        }
+        for args, expected in cases.items():
+            with self.subTest(args=args):
+                out = self.cli(*args)
+                self.assert_short_usage_error(out)
+                self.assertIn(expected, out.stderr)
+
+
 if __name__ == "__main__":
     unittest.main()

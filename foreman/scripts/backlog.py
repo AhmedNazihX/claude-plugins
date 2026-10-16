@@ -3,10 +3,11 @@
 
 Usage (from anywhere inside the repo):
   backlog.py check               validate: duplicate IDs, unknown deps, cycles, missing Type/Output/DoD
-  backlog.py plan [--width N]    critical path and waves, computed from the deps
-  backlog.py status              done / in progress / ready / blocked, and the next wave
+  backlog.py plan [--width N] [--json]
+                                 critical path and waves, computed from the deps
+  backlog.py status [--json]     done / in progress / ready / blocked, and the next wave
   backlog.py show <ID>           print one story's full entry
-  backlog.py deps <ID>           list unmet deps; exit 1 if any are unmet
+  backlog.py deps <ID> [--json]  list unmet deps; exit 1 if any are unmet
   backlog.py info <ID>           JSON: id, title, slug, lane, type, size, solo, resources, deps, done
   backlog.py tick <ID> <note>    mark a story [x] and add an outcome note
   backlog.py note <ID> [--from <SRC>] <text>
@@ -16,6 +17,17 @@ Usage (from anywhere inside the repo):
   backlog.py add --after <ID>    insert a new story entry read from stdin after <ID>'s entry
   backlog.py graph               Mermaid flowchart of the critical path
 Options: --file PATH (default: <repo root>/docs/BACKLOG.md)
+         <command> --help  that command's usage and two or three examples
+
+JSON output (--json; one object on stdout, the exit code is the same as without it):
+  status  {"done", "in_progress", "ready", "blocked", "not_finishable"}: each a list of stories, every story
+          {"id", "title", "type"}; a group entry adds "sub_stories_left"; blocked ones add "waiting_on" (IDs);
+          ready ones add "lane", "resources", "resource_hints", "checks" (manual conditions) and "gaps".
+          not_finishable repeats the ready stories that have gaps: their Input or DoD needs an open story
+          outside their Deps, so they can be built but not finished yet.
+  plan    {"critical_path": [{"id", "title", "size", "done"}],
+           "waves": [[{"id", "title", "critical", "solo", "check"}], ...]}  (waves hold open stories only)
+  deps    {"id", "unmet": [{"id", "title"}], "checks": [manual conditions, to check by hand]}
 
 Story format (one line, then indented lines for Context/Input/Output/DoD):
   - [ ] **C1 · Import parser** · Deps: B1, F4 · Type: agent · Lane: Data · Size: M · Resource: db-schema
@@ -41,6 +53,7 @@ import sys
 import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import NoReturn
 
 ID = r"[A-Z]{1,3}\d+[a-z]?"
 STORY_RE = re.compile(rf"^- \[( |x)\] \*\*(?P<id>{ID}(?:–[a-z])?) · (?P<title>[^*]+)\*\*(?P<rest>.*)$")
@@ -395,54 +408,92 @@ def cmd_check(b: Backlog) -> int:
     return 1 if problems else 0
 
 
-def cmd_plan(b: Backlog, width: int) -> None:
+def plan_data(b: Backlog, width: int) -> dict:
+    """The critical path and the waves, as `plan --json` prints them."""
     path = b.critical_path()
-    total = sum(s.size for s in path)
-    print(f"## Critical path ({len(path)} stories, weight {total})")
-    print("  " + " → ".join(f"{s.id}{'✓' if s.done else ''}" for s in path))
-    print("\n## Waves (open stories)")
     crit = {s.id for s in path}
+    return {
+        "critical_path": [{"id": s.id, "title": s.title, "size": s.size, "done": s.done} for s in path],
+        "waves": [[{"id": s.id, "title": s.title, "critical": s.id in crit, "solo": s.solo,
+                    "check": bool(b.unmet(s)[1])} for s in wave] for wave in b.waves(width)],
+    }
 
-    def label(s: Story) -> str:
-        tags = [t for t, on in (("solo", s.solo), ("check", bool(b.unmet(s)[1]))) if on]
-        return f"{s.id}{'*' if s.id in crit else ''}{f' ({', '.join(tags)})' if tags else ''}"
 
-    for i, wave in enumerate(b.waves(width), 1):
+def cmd_plan(b: Backlog, width: int, as_json: bool) -> None:
+    data = plan_data(b, width)
+    if as_json:
+        print(json.dumps(data, ensure_ascii=False))
+        return
+    path = data["critical_path"]
+    print(f"## Critical path ({len(path)} stories, weight {sum(s['size'] for s in path)})")
+    print("  " + " → ".join(f"{s['id']}{'✓' if s['done'] else ''}" for s in path))
+    print("\n## Waves (open stories)")
+
+    def label(s: dict) -> str:
+        tags = [t for t in ("solo", "check") if s[t]]
+        return f"{s['id']}{'*' if s['critical'] else ''}{f' ({', '.join(tags)})' if tags else ''}"
+
+    for i, wave in enumerate(data["waves"], 1):
         print(f"  {i:>2}. {', '.join(label(s) for s in wave)}")
     print("\n  * on the critical path · (solo) runs alone · (check) has a manual condition in its Deps")
 
 
-def cmd_status(b: Backlog) -> None:
+def status_data(b: Backlog) -> dict[str, list[dict]]:
+    """Every story sorted into done / in progress / ready / blocked, as `status --json` prints them.
+    not_finishable repeats the ready stories that have Input/DoD gaps."""
     live = branches()
-    groups: dict[str, list[str]] = {"In progress": [], "Ready": [], "Blocked": []}
-    done = [s for s in b.stories if s.done]
+    groups: dict[str, list[dict]] = {k: [] for k in ("done", "in_progress", "ready", "blocked", "not_finishable")}
     for s in b.stories:
+        item: dict = {"id": s.id, "title": s.title, "type": s.type}
         if s.done:
+            groups["done"].append(item)
             continue
-        label = f"{s.id} · {s.title}"
         if s.sub_ids:
-            left = [i for i in s.sub_ids if i not in s.subs_done]
-            label += f"  (sub-stories left: {', '.join(left) or 'none, tick the group'})"
+            item["sub_stories_left"] = [i for i in s.sub_ids if i not in s.subs_done]
         missing, notes = b.unmet(s)
         if any(br.startswith(f"story/{k}-") for k in s.keys for br in live):
-            groups["In progress"].append(f"{label}  [{s.type}]")
+            groups["in_progress"].append(item)
         elif missing:
-            groups["Blocked"].append(f"{label}  ← waiting on {', '.join(missing)}")
+            groups["blocked"].append({**item, "waiting_on": missing})
         else:
-            extra = f"  (check: {'; '.join(notes)})" if notes else ""
-            tags = [s.type, *([f"lane {s.lane}"] if s.lane else []), *s.resources,
-                    *(f"{h}?" for h in s.resource_hints)]
-            gaps = b.dod_input_gaps(s)
-            if gaps:
-                extra += f"  (ready to build, not to finish: {'; '.join(gaps)})"
-            groups["Ready"].append(f"{label}  [{', '.join(tags)}]{extra}")
+            ready = {**item, "lane": s.lane, "resources": s.resources, "resource_hints": s.resource_hints,
+                     "checks": notes, "gaps": b.dod_input_gaps(s)}
+            groups["ready"].append(ready)
+            if ready["gaps"]:
+                groups["not_finishable"].append(ready)
+    return groups
+
+
+def status_line(item: dict, group: str) -> str:
+    """One story's line in the text output of `status`."""
+    label = f"{item['id']} · {item['title']}"
+    if "sub_stories_left" in item:
+        label += f"  (sub-stories left: {', '.join(item['sub_stories_left']) or 'none, tick the group'})"
+    if group == "in_progress":
+        return f"{label}  [{item['type']}]"
+    if group == "blocked":
+        return f"{label}  ← waiting on {', '.join(item['waiting_on'])}"
+    tags = [item["type"], *([f"lane {item['lane']}"] if item["lane"] else []), *item["resources"],
+            *(f"{h}?" for h in item["resource_hints"])]
+    extra = f"  (check: {'; '.join(item['checks'])})" if item["checks"] else ""
+    if item["gaps"]:
+        extra += f"  (ready to build, not to finish: {'; '.join(item['gaps'])})"
+    return f"{label}  [{', '.join(tags)}]{extra}"
+
+
+def cmd_status(b: Backlog, as_json: bool) -> None:
+    groups = status_data(b)
+    if as_json:
+        print(json.dumps(groups, ensure_ascii=False))
+        return
+    done = groups["done"]
     print(f"Backlog: {len(done)}/{len(b.stories)} stories done\n")
-    for name, items in groups.items():
-        print(f"## {name} ({len(items)})")
-        for item in items:
-            print(f"  - {item}")
+    for key, name in (("in_progress", "In progress"), ("ready", "Ready"), ("blocked", "Blocked")):
+        print(f"## {name} ({len(groups[key])})")
+        for item in groups[key]:
+            print(f"  - {status_line(item, key)}")
         print()
-    print(f"## Done ({len(done)})\n  {', '.join(s.id for s in done) or 'none'}\n")
+    print(f"## Done ({len(done)})\n  {', '.join(s['id'] for s in done) or 'none'}\n")
     path = b.critical_path()
     nxt = next((s for s in path if not s.done), None)
     print(f"## Critical path\n  {' → '.join(s.id + ('✓' if s.done else '') for s in path)}")
@@ -566,45 +617,115 @@ def cmd_graph(b: Backlog) -> None:
     print("```")
 
 
-def main(argv: list[str]) -> None:
-    path = None
-    for flag in ("--file", "--width"):
-        if flag in argv and argv.index(flag) + 1 >= len(argv):
-            sys.exit(f"{flag} needs a value\n\n{__doc__}")
-    if "--file" in argv:
-        i = argv.index("--file")
-        path = Path(argv[i + 1])
-        argv = argv[:i] + argv[i + 2:]
-    width = 0
-    if "--width" in argv:
-        i = argv.index("--width")
-        width = int(argv[i + 1])
-        argv = argv[:i] + argv[i + 2:]
-    if not argv:
-        sys.exit(__doc__)
-    if argv[0] in {"show", "deps", "info", "tick", "note", "set-deps"} and len(argv) < 2:
-        sys.exit(f"'{argv[0]}' needs a story ID\n\n{__doc__}")
-    if argv[0] in {"note", "set-deps"} and len(argv) < 3:
-        sys.exit(f"'{argv[0]}' needs a story ID and a value\n\n{__doc__}")
-    b = Backlog(path or repo_root() / "docs" / "BACKLOG.md")
-    cmd, *args = argv
-    if cmd == "check":
-        sys.exit(cmd_check(b))
-    elif cmd == "plan":
-        cmd_plan(b, width)
-    elif cmd == "status":
-        cmd_status(b)
-    elif cmd == "show":
-        s = b.find(args[0])
-        print("\n".join([s.header, *s.body]).rstrip())
-    elif cmd == "deps":
-        s = b.find(args[0])
-        missing, notes = b.unmet(s)
+def cmd_deps(b: Backlog, sid: str, as_json: bool) -> int:
+    missing, notes = b.unmet(b.find(sid))
+    if as_json:
+        unmet = [{"id": m, "title": b.by_key[m].title} for m in missing]
+        print(json.dumps({"id": sid, "unmet": unmet, "checks": notes}, ensure_ascii=False))
+    else:
         for m in missing:
             print(f"unmet: {m} · {b.by_key[m].title}")
         for n in notes:
             print(f"check by hand: {n}")
-        sys.exit(1 if missing else 0)
+    return 1 if missing else 0
+
+
+# ---- usage and help ----
+@dataclass(frozen=True)
+class Command:
+    usage: str  # what follows "backlog.py"
+    summary: str
+    examples: tuple[str, ...]
+    needs: int = 0  # positional arguments the command must have
+    takes_json: bool = False
+
+
+COMMANDS = {
+    "check": Command("check", "Validate the backlog: duplicate IDs, unknown deps, cycles, missing fields.",
+                     ("backlog.py check", "backlog.py --file plans/v2/BACKLOG.md check")),
+    "plan": Command("plan [--width N] [--json]", "Print the critical path and the waves of open stories.",
+                    ("backlog.py plan", "backlog.py plan --width 3", "backlog.py plan --json"), takes_json=True),
+    "status": Command("status [--json]", "Sort the stories into done, in progress, ready and blocked.",
+                      ("backlog.py status", "backlog.py status --json"), takes_json=True),
+    "show": Command("show <ID>", "Print one story's full entry.", ("backlog.py show C1", "backlog.py show B5b"), 1),
+    "deps": Command("deps <ID> [--json]", "List a story's unmet deps; exit 1 if any are unmet.",
+                    ("backlog.py deps E1", "backlog.py deps E1 --json"), 1, takes_json=True),
+    "info": Command("info <ID>", "Print one story's fields as JSON.", ("backlog.py info C1", "backlog.py info B5b"), 1),
+    "tick": Command("tick <ID> <note>", "Mark a story done and add its outcome note.",
+                    ('backlog.py tick C1 "parser merged; 42 tests"', 'backlog.py tick B5b "German cases approved"'), 1),
+    "note": Command("note <ID> [--from <SRC>] <text>", "Add a one-line hand-over note to a story.",
+                    ('backlog.py note E1 "use the Result schema"',
+                     'backlog.py note E1 --from F3 "the schema is in app/schemas/result.py"'), 2),
+    "set-deps": Command("set-deps <ID> <deps>", "Replace a story's Deps: field (refused if it makes a cycle).",
+                        ('backlog.py set-deps E2 "F3, B1"', 'backlog.py set-deps W1 "–"'), 2),
+    "add": Command("add --after <ID>", "Insert a new story entry, read from stdin, after another story's entry.",
+                   ("backlog.py add --after E1 < new-story.md", "pbpaste | backlog.py add --after F3")),
+    "graph": Command("graph", "Print the critical path as a Mermaid flowchart.",
+                     ("backlog.py graph", "backlog.py graph > docs/critical-path.md")),
+}
+SHORT_USAGE = (f"Usage: backlog.py [--file PATH] <command> ...\nCommands: {', '.join(COMMANDS)}\n"
+               "Example: backlog.py status\nMore: backlog.py --help, or backlog.py <command> --help")
+
+
+def command_help(name: str) -> str:
+    c = COMMANDS[name]
+    return "\n".join([f"Usage: backlog.py {c.usage}", f"  {c.summary}", "", "Examples:",
+                      *(f"  {e}" for e in c.examples)])
+
+
+def usage_error(name: str, problem: str) -> NoReturn:
+    """Exit with the command's usage line and one example, not the whole docstring."""
+    c = COMMANDS[name]
+    sys.exit(f"backlog.py {name}: {problem}\nUsage: backlog.py {c.usage}\nExample: {c.examples[0]}\n"
+             f"More examples: backlog.py {name} --help")
+
+
+def pop_option(argv: list[str], flag: str) -> tuple[str | None, list[str]]:
+    """(value, argv without the flag and its value); the value is "" when the flag is last."""
+    if flag not in argv:
+        return None, argv
+    i = argv.index(flag)
+    if i + 1 >= len(argv):
+        return "", argv[:i]
+    return argv[i + 1], argv[:i] + argv[i + 2:]
+
+
+def main(argv: list[str]) -> None:
+    wants_help = any(a in ("--help", "-h") for a in argv)
+    as_json = "--json" in argv
+    argv = [a for a in argv if a not in ("--help", "-h", "--json")]
+    file, argv = pop_option(argv, "--file")
+    width_text, argv = pop_option(argv, "--width")
+    cmd, args = (argv[0], argv[1:]) if argv else (None, [])
+    if cmd is None or cmd not in COMMANDS:
+        if wants_help and cmd is None:
+            print(__doc__)
+            return
+        problem = f"Unknown command '{cmd}'\n" if cmd else "--file needs a path\n" if file == "" else ""
+        sys.exit(problem + SHORT_USAGE)
+    if wants_help:
+        print(command_help(cmd))
+        return
+    if file == "":
+        usage_error(cmd, "--file needs a path")
+    if width_text is not None and not width_text.isdigit():
+        usage_error("plan", "--width needs a whole number")
+    if as_json and not COMMANDS[cmd].takes_json and cmd != "info":
+        usage_error(cmd, "--json works with status, plan and deps")
+    if len(args) < COMMANDS[cmd].needs:
+        usage_error(cmd, "needs a story ID" if COMMANDS[cmd].needs == 1 else "needs a story ID and a value")
+    b = Backlog(Path(file) if file else repo_root() / "docs" / "BACKLOG.md")
+    if cmd == "check":
+        sys.exit(cmd_check(b))
+    elif cmd == "plan":
+        cmd_plan(b, int(width_text or 0), as_json)
+    elif cmd == "status":
+        cmd_status(b, as_json)
+    elif cmd == "show":
+        s = b.find(args[0])
+        print("\n".join([s.header, *s.body]).rstrip())
+    elif cmd == "deps":
+        sys.exit(cmd_deps(b, args[0], as_json))
     elif cmd == "info":
         s = b.find(args[0])
         ids, notes = parse_deps(s.field("Deps"))
@@ -623,7 +744,7 @@ def main(argv: list[str]) -> None:
         if "--from" in args:
             i = args.index("--from")
             if i + 1 >= len(args):
-                sys.exit("--from needs a story ID")
+                usage_error("note", "--from needs a story ID")
             source = args[i + 1]
             args = args[:i] + args[i + 2:]
         cmd_note(b, args[0], " ".join(args[1:]), source)
@@ -631,12 +752,10 @@ def main(argv: list[str]) -> None:
         cmd_set_deps(b, args[0], " ".join(args[1:]))
     elif cmd == "add":
         if "--after" not in args or args.index("--after") + 1 >= len(args):
-            sys.exit("add needs --after <ID>; the entry is read from stdin")
+            usage_error("add", "needs --after <ID>; the entry is read from stdin")
         cmd_add(b, args[args.index("--after") + 1], sys.stdin.read())
     elif cmd == "graph":
         cmd_graph(b)
-    else:
-        sys.exit(__doc__)
 
 
 if __name__ == "__main__":

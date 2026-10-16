@@ -5,6 +5,9 @@
 - New `scripts/lint.py`: checks agent and skill frontmatter, read-only agents' tools, `foreman:` references,
   hook paths, relative `.md` links, stdlib-only imports and that the version agrees across `plugin.json`, the
   README and this file. The README version line is corrected to 0.10.1.
+- `backlog.py`: `--json` on `status`, `plan` and `deps` (fields listed in its docstring); `<command> --help` shows
+  that command's usage and examples; a usage error prints the command's usage line and one example, not the whole
+  docstring.
 
 ## 0.10.1 (2026-10-13)
 
