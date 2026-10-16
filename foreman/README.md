@@ -49,21 +49,24 @@ When a worker reports DONE, `story-finish` runs the review panel in parallel, in
 
 `dod-verifier` and `test-auditor` run on Sonnet; the others, and the workers, on the session's model.
 
-Findings go back to the worker as **one** fix round; a major finding gets its fix re-reviewed for regressions, and
-the loop repeats until the DoD is met and nothing major is open. A worker that has sat idle with a large context is
-replaced by a fresh one for the fix round (`workers.py context` decides), and a third round that still opens new
-edge cases goes to you with a simpler design. Workers check their diff against the project's `review_checklist`
-before DONE, and the list grows when the same kind of major finding comes back in a second story. Paid recordings
-(responses the tests replay) are made once, by the orchestrator, after every review round, so a fix never makes
-them stale. Then you're asked to merge (and whether to push). After the merge, the config's `post_merge` steps
-regenerate what the merge left stale, the checks run on the base branch, the story is ticked, and every follow-up
-is written as a note on the backlog story it affects, so the next worker reads it. After a push, `ci-watcher`
-(Haiku, read-only) watches the repo's GitHub Actions runs and reports each job; a repo without workflows skips it.
+The orchestrator sorts the findings into Act on, Consider (listed for you, each with a recommendation) and
+Dismissed. Only Act on findings go back to the worker, as **one** fix round; a major finding gets its fix
+re-reviewed for regressions, and the loop repeats until the DoD is met and nothing major is open. A worker that has
+sat idle with a large context is replaced by a fresh one for the fix round (`workers.py context` decides), and a
+third round that still opens new edge cases goes to you with a simpler design. Workers check their diff against the
+project's `review_checklist` before DONE, and the list grows when the same kind of major finding comes back in a
+second story. Paid recordings (responses the tests replay) are made once, by the orchestrator, after every review
+round, so a fix never makes them stale. Then you're asked to merge (and whether to push). After the merge, the
+config's `post_merge` steps regenerate what the merge left stale, the checks run on the base branch, the story is
+ticked, and every follow-up is written as a note on the backlog story it affects, so the next worker reads it. After
+a push, `ci-watcher` (Haiku, read-only) watches the repo's GitHub Actions runs and reports each job; a repo without
+workflows skips it.
 
 ## What stays with you
 
-- Approving the design, and every decision a review raises that is yours: a trade-off, a label, a wording. They
-  come one question at a time, each with a recommendation.
+- Approving the design, and every decision a review raises that is yours: a trade-off, a label, a wording. One a fix
+  depends on comes one question at a time, with a recommendation; Consider findings come as one list, each with a
+  recommendation, and don't hold up the fix round.
 - Anything that costs money: a worker spends up to the config's `cost_cap_usd` without asking; above it, or for a
   full run, it stops and reports the estimate and the exact command for you to approve.
 - Every merge and every push.
