@@ -15,7 +15,11 @@ Story IDs in brackets create or first change the path. Unmarked paths exist alre
 ├── .claude-plugin/marketplace.json    the nazihx marketplace
 ├── .github/workflows/test.yml         CI: tests, hook tests, lint, plugin validate (F2)
 ├── .claude/foreman.json               the workflow config for this repo (setup)
-├── .claude/worktrees/                 ⚠ gitignored: worker worktrees, workers.json, handoffs/, ledger.tsv, ANDON
+├── .gitattributes                     `foreman/CHANGELOG.md merge=union` (planning)
+├── .claude/worktrees/                 ⚠ gitignored: worker worktrees, workers.json, handoffs/, ledger.tsv, ANDON,
+│                                        attention.log
+├── .claude/foreman-autopilot.json     ⚠ gitignored: autopilot state (B4, B5)
+├── .claude/foreman-retro-index.json   ⚠ gitignored: retro transcript index (B7)
 │
 ├── foreman/
 │   ├── .claude-plugin/plugin.json     the version: release stories only (V1, V2, V3)
@@ -56,7 +60,7 @@ Story IDs in brackets create or first change the path. Unmarked paths exist alre
     ├── BACKLOG.md                     this backlog
     ├── LAYOUT.md                      this file
     ├── foreman-merge-plan.md          historical (the 0.1 port plan)
-    ├── decisions/NNN-<slug>.md        decision records; 001–003 reserved for X1–X3
+    ├── decisions/NNN-<slug>.md        decision records; 001–003 reserved for X1–X3, 004 for R3
     └── trials/<date>-<wave>.md        trial notes from real use (H2)
 ```
 
@@ -68,6 +72,6 @@ Story IDs in brackets create or first change the path. Unmarked paths exist alre
 | Every hook is its own executable `foreman/hooks/<name>.sh` with a `test-<name>.sh` next to it; registration only in `hooks.json` | CI runs every `test-*.sh` by glob, so a new hook's test runs without editing the workflow |
 | Tests mirror the scripts: `foreman/tests/test_<script>.py`; fixtures are synthetic | Easy to find; real transcripts may hold private project data |
 | Agent `name` = file name, skill `name` = folder name | The lint (F1) checks it; `foreman:<name>` references resolve |
-| Only V1, V2, V3 change `plugin.json`'s version and the README version line; others append under `## Unreleased` | User decision 2026-10-16: no version collisions between parallel stories |
+| Only V1, V2, V3 change `plugin.json`'s version and the README version line (F1 corrects the stale README once); others append under `## Unreleased`, merged with `merge=union` | User decision 2026-10-16: no version collisions between parallel stories |
 | Runtime state lives in the main checkout's gitignored `.claude/worktrees/`, never in the repo | It belongs to one machine's session, not to the project |
 | A new folder or top-level file gets an entry here in the same story | Keeps this file the source of truth |

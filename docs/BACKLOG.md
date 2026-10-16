@@ -1,5 +1,7 @@
 # Foreman 0.11–0.13 — Build Backlog
 
+Reviewed: 2026-10-16
+
 ## Context
 This backlog builds the foreman improvements in `docs/DESIGN.md` (approved 2026-10-16): lessons from pstack and the
 other Cursor plugins in `~/Workspace/plugins`, plus the open items in `foreman/HANDOVER.md`. Foreman runs its own
@@ -16,6 +18,9 @@ The design sets these ordering rules (gates), which this backlog enforces:
   the report gate and the reaper; the verdict ledger (R9) before the merge gate and the merge page.
 - **A release ends each wave:** V1 before wave 2, V2 before the trial (Design › Gates).
 - **Trial before wave 3:** H2 (Design › Gate G1) before every B story.
+
+`setup` (with `guardrails`) runs during planning, on the planning branch, before any story starts: it writes
+`.claude/foreman.json`, the `.gitignore` entries and the review checklist, so it is not a story here.
 
 ---
 
@@ -47,13 +52,16 @@ its *Context* line, (4) the files in its *Input*. Nothing else should be needed.
   This is the only list of them until `setup` copies it, verbatim, into `.claude/foreman.json` › `checks`; after
   that, this line points to the config instead. Stories say "the global checks pass", never the commands.
 - **Versions:** only V1, V2 and V3 change `foreman/.claude-plugin/plugin.json`'s version and the README's version
-  line. Every other story appends one line under `## Unreleased` in `foreman/CHANGELOG.md`.
+  line (one exception: F1 corrects the README's stale 0.10.0 to 0.10.1). Every other story appends one line under
+  `## Unreleased` in `foreman/CHANGELOG.md`; `.gitattributes` merges that file with `merge=union`, so parallel
+  appends don't conflict.
 - **Scripts** use the Python standard library only. **Hooks** parse their input with `jq`, never `eval`, and every
   hook change comes with a test that blocks the forbidden case and passes a legitimate near-miss.
 - **Fixtures are synthetic.** Never copy a real transcript, or text from the capstone, into the repo; describe its
   shape instead.
 - **Docs** are plain English: short sentences, no jargon, as the existing skills are written.
-- **Decisions** go in `docs/decisions/NNN-<slug>.md` (the `decision` skill); 001–003 are reserved for X1–X3.
+- **Decisions** go in `docs/decisions/NNN-<slug>.md` (the `decision` skill); 001–003 are reserved for X1–X3, 004
+  for R3.
 - **No paid calls.** Nothing in this backlog calls a paid API; `cost_cap_usd` is 0.
 
 ---
@@ -66,7 +74,8 @@ flowchart LR
   Q2 --> Q3
   Q3 --> V1
   V1 --> R1
-  R1 --> R5
+  R1 --> R2
+  R2 --> R5
   R5 --> R6
   R6 --> R7
   R7 --> V2
@@ -91,8 +100,8 @@ flowchart LR
 
 ## Waves
 ```
-## Critical path (15 stories, weight 23)
-  H1 → F1 → Q2 → Q3 → V1 → R1 → R5 → R6 → R7 → V2 → H2 → B3 → B4 → B5 → V3
+## Critical path (16 stories, weight 25)
+  H1 → F1 → Q2 → Q3 → V1 → R1 → R2 → R5 → R6 → R7 → V2 → H2 → B3 → B4 → B5 → V3
 
 ## Waves (open stories)
    1. H1*
@@ -102,18 +111,19 @@ flowchart LR
    5. Q4
    6. V1*
    7. R1*, R8, R12
-   8. R5*, R2
-   9. R6*, R3, R4
-  10. R7*
-  11. R9
-  12. R10, R11, R13
+   8. R2*, R9
+   9. R5*, R3
+  10. R6*, R11, R4
+  11. R7*, R10
+  12. R13
   13. V2*
   14. H2*
-  15. B3*, B7, B9, B1
-  16. B4*, B2, B8, B10
+  15. B3*, B7, B9
+  16. B4*, B6, B8, B10
   17. B5*
-  18. B6
-  19. V3*
+  18. B1
+  19. B2
+  20. V3*
 
   * on the critical path · (solo) runs alone · (check) has a manual condition in its Deps
 ```
@@ -136,7 +146,8 @@ flowchart LR
   Output: `foreman/scripts/lint.py` (stdlib; exit 1 with `file:line: message` per problem) checking: agent and
   skill frontmatter (`name` = file or folder name, `description` present, `model` ∈ haiku/sonnet/opus/inherit,
   `tools` known names); agents whose description says "Read-only" list no Write, Edit, MultiEdit or NotebookEdit;
-  every `foreman:<name>` in a skill or agent resolves to an agent or skill; every hook command path in
+  every `foreman:<name>`, and every backticked bare name of a foreman agent or skill (matched against the list of
+  agent files and skill folders), in a skill or agent resolves; every hook command path in
   `hooks.json` exists and is executable; relative `.md` links resolve; scripts import only stdlib modules
   (`sys.stdlib_module_names`); the version in `plugin.json`, the README version line and the top numbered
   `CHANGELOG.md` entry agree (`## Unreleased` ignored). `foreman/tests/test_lint.py`. A `## Unreleased` section at
@@ -150,8 +161,8 @@ flowchart LR
   `foreman/hooks/test-*.sh` and `git-guardrails/tests/test-guards.sh` by glob, and the lint, with `jq` and
   Python 3 set up. `claude plugin validate` runs only if the CLI installs there (`npm i -g
   @anthropic-ai/claude-code`); otherwise the workflow says it is local-only in a comment.
-  DoD: the workflow runs every check named above (the dod-verifier reads it against the list); after the merge and
-  push, `foreman:ci-watcher` reports the run green; the global checks pass.
+  DoD: the workflow runs every check named above (the dod-verifier reads it against the list); the global checks
+  pass. (The first green run in Actions is checked after the push, in V1's DoD.)
 
 ## Phase 1 — Wave 1: quick wins
 
@@ -164,7 +175,7 @@ flowchart LR
   DoD: a test runs 20 concurrent `record` processes and the registry keeps all 20 entries; a test shows a
   `launching` entry without an agent id listed as such by `list`; the global checks pass.
 
-- [ ] **Q2 · Reviewers see the story's intent** · Deps: F1 · Type: agent · Lane: Review · Size: S · Resource: story-finish, diff-reviewer
+- [ ] **Q2 · Reviewers see the story's intent** · Deps: F1 · Type: agent · Lane: Review · Size: S · Resource: story-finish, diff-reviewer, security-reviewer
   Context: Design › D3. Input: `foreman/skills/story-finish/SKILL.md`, `foreman/agents/diff-reviewer.md`,
   `foreman/agents/security-reviewer.md`.
   Output: story-finish § 2 passes the output of `backlog.py show <ID>` (Output and DoD) to every reviewer in
@@ -245,7 +256,7 @@ flowchart LR
   DoD: the four files hold these rules; `foreman.example.json` parses with `jq .` and shows `because` and `expires`;
   the global checks pass.
 
-- [ ] **Q10 · HANDOVER fixes** · Deps: F1 · Type: agent · Lane: Workers · Size: S · Resource: story-worker, guard-hooks
+- [ ] **Q10 · HANDOVER fixes** · Deps: F1 · Type: agent · Lane: Workers · Size: S · Resource: story-worker, story-start, guard-hooks
   Context: Design › D7. Input: `foreman/agents/story-worker.md`, `foreman/hooks/doc-guard.sh`,
   `foreman/hooks/test-doc-guard.sh`, `foreman/skills/story-start/SKILL.md` § 5.
   Output: story-worker § 1 step 3 shows the exact continue command `git switch <branch>` with "(no `-C`: the guard
@@ -260,8 +271,8 @@ flowchart LR
   `foreman/.claude-plugin/plugin.json`.
   Output: `## Unreleased` becomes `## 0.11.0 (<date>)`, with a new empty `## Unreleased` above it; `plugin.json`
   and the README version line say 0.11.0; the README describes what changed for the user (reviews, CLI, CI).
-  DoD: the lint passes; the user approved the CHANGELOG entry; after the merge and push the user pulled the release
-  copy and a new session lists foreman 0.11.0.
+  DoD: the lint passes; the user approved the CHANGELOG entry; after the merge and push, `foreman:ci-watcher`
+  reports the GitHub Actions run green; the user pulled the release copy and a new session lists foreman 0.11.0.
 
 ## Phase 2 — Experiments
 
@@ -317,20 +328,25 @@ flowchart LR
   DoD: the three files hold the flow; story-finish no longer asks for the worker's full report in context; the
   global checks pass.
 
-- [ ] **R3 · Reviewers write their report to disk** · Deps: R2 · Type: agent · Lane: Review · Size: M · Resource: story-finish, diff-reviewer
+- [ ] **R3 · Reviewers write their report to disk** · Deps: R2 · Type: mixed · Lane: Review · Size: M · Resource: story-finish, diff-reviewer, security-reviewer, dod-verifier
   Context: Design › D8; Risks and open questions. Input: `foreman/agents/dod-verifier.md`,
   `foreman/agents/diff-reviewer.md`, `foreman/agents/security-reviewer.md`, `foreman/agents/test-auditor.md`,
-  `foreman/agents/lane-auditor.md`, `foreman/skills/story-finish/SKILL.md`.
-  Output: each reviewer writes its report to the path story-finish gives it (`<ID>-<reviewer>-r<N>.md`, header
+  `foreman/agents/lane-auditor.md`, `foreman/skills/story-finish/SKILL.md`, `foreman/scripts/lint.py`,
+  `foreman/tests/test_lint.py`.
+  Output: first `docs/decisions/004-reviewer-report-files.md`, settling the design's open question (are reviewer
+  report files worth giving read-only agents a Write tool?) with the user; if they decide no, the story ends with
+  the record. If yes: each reviewer writes its report to the path story-finish gives it (`<ID>-<reviewer>-r<N>.md`, header
   first) and returns `Verdict: … · critical N · major N · minor N · report: <path>`. Read-only reviewers get the
   Write tool scoped by instruction to that one path; the lint's read-only rule (F1) allows it for a
   `handoffs/` path only. story-finish relays the one-line verdicts and reads findings from the files for triage.
-  DoD: each agent file holds the instruction and the return line; the lint passes with its read-only rule updated
-  and tested; the global checks pass.
+  DoD: decision 004 is recorded and the user approved it; if it says yes, each agent file holds the instruction and
+  the return line, and `lint.py` and `test_lint.py` allow Write only with a `handoffs/` instruction, tested both
+  ways; the global checks pass.
 
-- [ ] **R4 · Report gate** · Deps: R2, X1 · Type: agent · Lane: Workers · Size: M · Resource: hooks-config
+- [ ] **R4 · Report gate** · Deps: R2, X1 · Type: agent · Lane: Workers · Size: M · Resource: hooks-config, story-finish
   Context: Design › D9; decision 001. Input: `docs/decisions/001-subagent-stop-gate.md`,
-  `foreman/hooks/hooks.json`, `foreman/hooks/worker-guard.sh` (how it identifies a worker).
+  `foreman/hooks/hooks.json`, `foreman/hooks/worker-guard.sh` (how it identifies a worker),
+  `foreman/skills/story-finish/SKILL.md` § 1 (for the fallback).
   Output: as decision 001 chose: either `foreman/hooks/report-gate.sh` (SubagentStop) with
   `foreman/hooks/test-report-gate.sh` and its `hooks.json` entry, blocking a story-worker once (guarded by
   `stop_hook_active`) when its report file is missing or lacks the header, or it says DONE with uncommitted
@@ -339,27 +355,29 @@ flowchart LR
   DoD: the hook's tests cover each blocking case, the near-miss of another agent type stopping, and the second stop
   passing; or story-finish § 1 holds the checks; the global checks pass.
 
-- [ ] **R5 · Reaper** · Deps: R1, X2, Q1, Q5 · Type: agent · Lane: Workers · Size: M · Resource: workers
+- [ ] **R5 · Reaper** · Deps: R1, R2, X2, Q1, Q5 · Type: agent · Lane: Workers · Size: M · Resource: workers
   Context: Design › D10; Architecture; decision 002. Input: `docs/decisions/002-dead-worker-signals.md`,
   `foreman/scripts/workers.py`, `foreman/tests/fixtures/transcripts/`.
   Output: `workers.py reap [<ID>]`: for each `running` worker, reads its transcript tail; a failure pattern from
   decision 002, or no write past `watch.stuck_minutes` with no report file, writes
   `.claude/worktrees/handoffs/<ID>-failure.md` (mode, last activity time, last tool call, `git status --porcelain`
   and `git diff --stat` of the worktree, head sha, the retry advice for the mode) and sets the state `dead`. Every
-  reap event appends `[ts] <ID>: <event>` to `.claude/worktrees/attention.log`. An unknown shape is mode
-  `unknown`, never a crash. Tests on the synthetic fixtures.
+  reap event appends `[ts] <ID>: <event>` to `.claude/worktrees/attention.log`, with tabs and newlines stripped
+  from the event text. An unknown shape is mode `unknown`, never a crash. `workers.py` gains a reader for
+  `.claude/foreman.json` (missing file or key → the defaults: `watch.stuck_minutes` from decision 002). Tests on the
+  synthetic fixtures.
   DoD: one test per mode in decision 002 plus `unknown`; a test that a live worker is left alone; the global checks
   pass.
 
-- [ ] **R6 · Reconcile** · Deps: R5 · Type: agent · Lane: Workers · Size: M · Resource: workers
+- [ ] **R6 · Reconcile** · Deps: R5 · Type: agent · Lane: Workers · Size: M · Resource: workers, status-skill
   Context: Design › D10. Input: `foreman/scripts/workers.py`, `foreman/skills/next/SKILL.md`,
   `foreman/skills/status/SKILL.md`.
-  Output: `workers.py reconcile [--json]` cross-checks the registry, `git worktree list`, `git branch --list
+  Output: `workers.py reconcile [--json]` runs `reap` first, then cross-checks the registry, `git worktree list`, `git branch --list
   'story/*'` and the transcripts, and classifies each story: live, idle, dead, dirty, orphan worktree, registry
   without worktree, launching without id; with the next action for each (continue, forget, ask the user). `next`
   and `status` run it first and show anything that isn't live or idle.
-  DoD: tests build a temp repo with worktrees and branches for each class; next and status name the command; the
-  global checks pass.
+  DoD: tests build a temp repo with worktrees and branches for each class, and show reconcile reaping a dead
+  worker from a fixture transcript; next and status name the command; the global checks pass.
 
 - [ ] **R7 · Watch and retry budget** · Deps: R6 · Type: agent · Lane: Workers · Size: M · Resource: workers, story-start, config-template
   Context: Design › D10; Architecture. Input: `foreman/scripts/workers.py`, `foreman/skills/story-start/SKILL.md`,
@@ -368,8 +386,9 @@ flowchart LR
   `watch.notice_minutes` (default from decision 002), one stuck escalation at `watch.stuck_minutes`, each episode
   once; registry entries gain `attempts`, `fix_rounds` and `failure`; `story-start` refuses a story past
   `max_attempts` (default 3) without the user and picks the retry by failure mode (usage limit: wait, then
-  `--continue`; context overflow: a fresh worker with a narrower task; unknown: once, then ask). The keys go in the
-  example config and setup's table.
+  `--continue`; context overflow: a fresh worker with a narrower task; unknown: once, then ask). story-start § 4
+  runs `workers.py watch --loop` in the background (the Monitor tool) while any worker runs, and relays each stuck
+  escalation. The keys go in the example config and setup's table.
   DoD: tests for the notice and stuck thresholds firing once and the counters; story-start holds the refusal and
   the retry table; `foreman.example.json` parses; the global checks pass.
 
@@ -391,14 +410,15 @@ flowchart LR
   DoD: tests for a full pass, a missing reviewer, a new head voiding a pass, a patch-id match surviving a rebase,
   and cell sanitising; the global checks pass.
 
-- [ ] **R10 · Merge gate** · Deps: R9, R3, Q3 · Type: agent · Lane: Review · Size: S · Resource: story-finish
+- [ ] **R10 · Merge gate** · Deps: R9, R3, R11, Q3 · Type: agent · Lane: Review · Size: S · Resource: story-finish
   Context: Design › D11. Input: `foreman/skills/story-finish/SKILL.md`, `foreman/scripts/workers.py`.
-  Output: story-finish § 2–3 records each reviewer's verdict with `workers.py verdict` on the head it reviewed;
+  Output: story-finish § 2–3 records each reviewer's verdict with `workers.py verdict` on the head it reviewed
+  (level: dod-verifier's weakest item level; test-auditor `test-verified`; the other reviewers `static-only`);
   § 4 runs `workers.py verdicts <ID> --head <head> --reviewers <the panel>` before asking for the merge, and refuses
   to ask while it fails, naming the missing verdicts.
   DoD: story-finish holds both steps; the global checks pass.
 
-- [ ] **R11 · Verifier levels, skip and baseline** · Deps: R9 · Type: agent · Lane: Review · Size: M · Resource: config-template
+- [ ] **R11 · Verifier levels, skip and baseline** · Deps: R9 · Type: agent · Lane: Review · Size: M · Resource: config-template, dod-verifier
   Context: Design › D11. Input: `foreman/agents/dod-verifier.md`, `foreman/templates/foreman.example.json`,
   `foreman/skills/setup/SKILL.md`.
   Output: dod-verifier gives each DoD item a level (live-verified, test-verified, static-only, blocked, failed),
@@ -409,7 +429,7 @@ flowchart LR
   DoD: dod-verifier.md holds the levels, the skip rule with its ledger condition, and the baseline procedure;
   `checks_skip_paths` is in the example config and setup's table; the global checks pass.
 
-- [ ] **R12 · Readiness check** · Deps: V1 · Type: agent · Lane: Planning · Size: M
+- [ ] **R12 · Readiness check** · Deps: V1 · Type: agent · Lane: Planning · Size: M · Resource: config-template
   Context: Design › D12. Input: `foreman/skills/setup/SKILL.md`, `foreman/agents/story-worker.md` § 1 (worktree
   setup), `foreman/agents/test-auditor.md` (scratch worktree recipe).
   Output: `foreman/agents/readiness-auditor.md` (Bash, Read, Grep, Glob; read-only apart from a scratch worktree it
@@ -420,7 +440,7 @@ flowchart LR
   guards.
   DoD: the agent file and the setup step exist; the lint passes on the new agent; the global checks pass.
 
-- [ ] **R13 · Script-built briefs** · Deps: R1, Q1 · Type: agent · Lane: Workers · Size: M · Resource: workers, story-start
+- [ ] **R13 · Script-built briefs** · Deps: R1, R2, R8, Q1 · Type: agent · Lane: Workers · Size: M · Resource: workers, story-start
   Context: Design › D13. Input: `foreman/skills/story-start/SKILL.md` §§ 3 and 5, `foreman/scripts/workers.py`,
   `foreman/scripts/backlog.py` (`show`).
   Output: `foreman/templates/worker-brief.md` (the § 3 prompt, with `{{placeholders}}` and a CONTINUE block);
@@ -458,7 +478,7 @@ flowchart LR
   DoD: tests block each default pattern in a new line, pass a near-miss (the pattern in an unchanged line, in a
   comment of a docs file, or allowed for the story), and pass the main thread; the global checks pass.
 
-- [ ] **B2 · Advisor** · Deps: H2 · Type: agent · Lane: Workers · Size: M · Resource: story-worker, story-finish, workers
+- [ ] **B2 · Advisor** · Deps: H2 · Type: agent · Lane: Workers · Size: M · Resource: story-worker, story-finish, story-start, workers, hooks-config
   Context: Design › D15. Input: `foreman/agents/story-worker.md`, `foreman/skills/story-finish/SKILL.md`,
   `foreman/skills/story-start/SKILL.md` § 4, `foreman/scripts/workers.py`.
   Output: `foreman/agents/advisor.md` (model opus; Read, Grep, Glob, Bash; read-only): reads a briefing (the
@@ -467,11 +487,12 @@ flowchart LR
   story-worker: report `NEEDS ADVICE` with that briefing after two failed attempts at the same error, or before any
   workaround. The orchestrator relays it to the advisor, resumes the worker with the verdict, and stores the
   advisor's agent id (`workers.py set <ID> --advisor <id>`) to resume it next time; more than two consults on a
-  story adds a "not atomic?" backlog note.
-  DoD: the agent file passes the lint; story-worker, story-start and story-finish hold the flow; `workers.py` stores
+  story adds a "not atomic?" backlog note. `workers.py report` and the report gate (R4) accept `NEEDS ADVICE` as a
+  status.
+  DoD: the agent file passes the lint; a test shows `report` reading a `NEEDS ADVICE` report; story-worker, story-start and story-finish hold the flow; `workers.py` stores
   the id with a test; the global checks pass.
 
-- [ ] **B3 · Andon** · Deps: H2 · Type: agent · Lane: Workers · Size: S · Resource: story-start, story-worker
+- [ ] **B3 · Andon** · Deps: H2 · Type: agent · Lane: Workers · Size: S · Resource: story-start, story-worker, status-skill
   Context: Design › D16. Input: `foreman/skills/story-start/SKILL.md`, `foreman/agents/story-worker.md`,
   `foreman/skills/status/SKILL.md`.
   Output: `.claude/worktrees/ANDON` (reason, raised by, time) as the stop signal: story-start § 1 refuses to launch
@@ -485,13 +506,13 @@ flowchart LR
   `foreman/scripts/backlog.py` (`status --json`), `foreman/scripts/workers.py` (`list --json`, `reconcile --json`).
   Output: `foreman/hooks/autopilot-stop.sh` (Stop): with no `.claude/foreman-autopilot.json`, exits quietly; corrupt
   state deletes itself and stops; otherwise stops (and records why) when nothing is ready or running, a worker is
-  NEEDS USER or BLOCKED, `ANDON` exists, the same story failed twice, or `max_iterations`, `max_stories`,
-  `deadline` or `budget_usd` is reached; else bumps `iteration` atomically and blocks with the fixed prompt "Run
+  NEEDS USER or BLOCKED, `ANDON` exists, the same story failed twice, or `max_iterations`, `max_stories` or
+  `deadline` is reached (a spend limit has no source today: H2 decides whether one is needed); else bumps `iteration` atomically and blocks with the fixed prompt "Run
   /foreman:next in autopilot mode." `foreman/hooks/test-autopilot-stop.sh` and the `hooks.json` entry.
   DoD: one test per stop reason, one for corrupt state, one for continuing with the bumped iteration; the global
   checks pass.
 
-- [ ] **B5 · Autopilot skill and merge policy** · Deps: B4, R10 · Type: agent · Lane: Autonomy · Size: M · Resource: story-finish
+- [ ] **B5 · Autopilot skill and merge policy** · Deps: B4, R10 · Type: agent · Lane: Autonomy · Size: M · Resource: story-finish, config-template
   Context: Design › D17. Input: `foreman/skills/next/SKILL.md`, `foreman/skills/story-finish/SKILL.md`,
   `foreman/hooks/autopilot-stop.sh`.
   Output: `foreman/skills/autopilot/SKILL.md`: `/foreman:autopilot [--until <time>] [--max-stories N]
@@ -501,7 +522,8 @@ flowchart LR
   the base), never the base, while `stop-at-ready` stops at the merge question. The morning summary lists what
   merged where.
   DoD: the skill passes the lint; next and story-finish hold the autopilot branches, and neither ever merges to the
-  base in autopilot; the global checks pass.
+  base in autopilot; the `autopilot` defaults are in `foreman/templates/foreman.example.json` and setup's table, and
+  setup adds `.claude/foreman-autopilot.json` to `.gitignore`; the global checks pass.
 
 - [ ] **B6 · Capped review checklist** · Deps: H2 · Type: agent · Lane: Learning · Size: S · Resource: story-finish
   Context: Design › D18. Input: `foreman/skills/story-finish/SKILL.md` § 3 (Grow the checklist).
@@ -514,7 +536,8 @@ flowchart LR
   (transcript lookup).
   Output: `foreman/scripts/retro.py index|pending|mark`: keeps `.claude/foreman-retro-index.json` (transcript path →
   mtime) for this project's transcripts and its agents', lists those new or changed since the last `mark`, and
-  drops deleted ones. `foreman/tests/test_retro.py`.
+  drops deleted ones. `foreman/tests/test_retro.py`. setup adds `.claude/foreman-retro-index.json` to `.gitignore`
+  (`foreman/skills/setup/SKILL.md`).
   DoD: tests on a temp transcripts folder for new, changed, unchanged and deleted files; the global checks pass.
 
 - [ ] **B8 · Retro skill** · Deps: B7, Q9 · Type: mixed · Lane: Learning · Size: M
@@ -529,7 +552,7 @@ flowchart LR
   DoD: the skill passes the lint; one run on this repo's own transcripts is shown to the user and they approved its
   rows or rejected them; the global checks pass.
 
-- [ ] **B9 · Merge page** · Deps: H2, R10 · Type: agent · Lane: Review · Size: M · Resource: story-finish
+- [ ] **B9 · Merge page** · Deps: H2, R10 · Type: agent · Lane: Review · Size: M · Resource: story-finish, config-template
   Context: Design › D19. Input: `foreman/skills/story-finish/SKILL.md` § 4, `foreman/scripts/workers.py` (`report`,
   `verdicts`).
   Output: `foreman/scripts/pages.py merge <ID>` writes one self-contained HTML file (no CDN; style from
@@ -538,9 +561,10 @@ flowchart LR
   from `git diff --color-moved`. HTML-escaped throughout. story-finish § 4 offers it when `review_page` is true.
   `foreman/tests/test_pages.py`.
   DoD: tests render a fixture story and check escaping of `<script>` in a diff line, the file order and the
-  findings placement; story-finish holds the offer; the global checks pass.
+  findings placement; story-finish holds the offer; `review_page` is in the example config and setup's table; the
+  global checks pass.
 
-- [ ] **B10 · Status page** · Deps: B9, Q5 · Type: agent · Lane: Planning · Size: S
+- [ ] **B10 · Status page** · Deps: B9, Q5 · Type: agent · Lane: Planning · Size: S · Resource: status-skill
   Context: Design › D19. Input: `foreman/scripts/pages.py`, `foreman/scripts/backlog.py` (`status --json`,
   `plan --json`, `graph`), `foreman/skills/status/SKILL.md`.
   Output: `pages.py status` renders the dependency graph coloured by done, in progress, ready and blocked, the

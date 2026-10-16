@@ -269,5 +269,6 @@ report pasted into the orchestrator's context (D8), verifier time saved on a doc
   story), a merged hook bug would hit every session at once.
 - `SubagentStop` input may not identify the agent type (X1); D9 may become a story-finish check instead.
 - The transcript format is internal to Claude Code and may change; D10's parser fails soft (unknown mode).
-- Wave 3 may change after G1; its stories are drafted now and revised then.
+- Wave 3 may change after G1; its stories are drafted now and revised then. D17's `budget_usd` has no spend
+  source today (no paid calls; the Stop hook sees no cost): B4 leaves it out, and G1 decides whether one is needed.
 - Open: `claude plugin validate` in CI (D1); whether reviewers' report files (D8) are worth it or only workers'.
