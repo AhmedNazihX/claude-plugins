@@ -225,7 +225,9 @@ run "$WG" 2 "$(bash_in "$W" "git -C $SCR checkout story/C1-parser")"     "git -C
 CLONE="$TMP/separate-clone"
 git clone -q "$R" "$CLONE" 2>/dev/null
 run "$WG" 0 "$(bash_in "$W" "git -C $CLONE update-ref refs/heads/main HEAD")" "git -C <separate clone> update-ref"
-run "$WG" 0 "$(bash_in "$W" "git -C $CLONE push origin HEAD:other")"     "git -C <separate clone> push"
+# Found in the Q7 re-review: a clone's origin is the shared repo, so its push moves shared branches.
+msg "$WG" "$(bash_in "$W" "git -C $CLONE push origin HEAD:story/Q8-foo")" "$REPORT" \
+  "git -C <separate clone> push: report it"
 git -C "$R" worktree remove "$SCR" 2>/dev/null
 git -C "$W" checkout -q --detach 2>/dev/null
 run "$WG" 2 "$(bash_in "$W" "git push origin HEAD:main")"                 "a detached worktree still can't push"

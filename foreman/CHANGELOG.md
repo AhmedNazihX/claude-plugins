@@ -9,8 +9,8 @@
   does. The gate says to commit the required file first. The lane guard names the config key that denies the
   folder and the story exception (`stories.<ID>.allow`). The worker guard says to put backlog changes under
   Follow-ups, to report a push, merge or rebase for the orchestrator to do, and to read old code with `git show`.
-  `worker-guard` also checks `git -C <dir>` on another worktree of the same repo, which shares its branches; only
-  a separate clone is exempt.
+  `worker-guard` also checks `git -C <dir>` on another worktree of the same repo, which shares its branches. A
+  separate clone may change its own refs but not push, since its origin can be the shared repo.
 
 ## 0.10.1 (2026-10-13)
 

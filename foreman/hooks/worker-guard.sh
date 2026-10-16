@@ -9,8 +9,9 @@
 #     creating branches, `branch -f` and `update-ref`. One move is allowed: `git switch story/<ID>-<slug>` from a
 #     branch that isn't a story branch, so a relaunched worker can continue a story (story-start › Continue);
 #   - editing docs/BACKLOG.md (file tools, shell writes, or backlog.py tick / note / set-deps / add).
-# `git -C <dir>` on a separate clone is not checked. On another worktree of the same repo it is, since worktrees
-# share refs; there only detaching that worktree's own HEAD is allowed.
+# `git -C <dir>` on a separate clone is checked for push only: the clone's origin can be the shared repo or its
+# remote, while its other refs are its own. On another worktree of the same repo every check applies, since
+# worktrees share refs; there only detaching that worktree's own HEAD is allowed.
 # Text inside quotes (commit messages, echo) is ignored. The base branch comes from .claude/foreman.json
 # (`base_branch`, default main). Shell checks are best effort.
 
@@ -28,7 +29,7 @@ case "$TOP" in
 esac
 common_dir() { (cd "$(git -C "$1" rev-parse --path-format=absolute --git-common-dir 2>/dev/null)" 2>/dev/null && pwd -P); }
 COMMON=$(common_dir "$TOP")   # the repository every worktree of it shares: refs, branches, remotes
-MAIN=$(cd "$(dirname "$(git -C "$TOP" rev-parse --path-format=absolute --git-common-dir 2>/dev/null)")" && pwd)
+MAIN=$(dirname "$COMMON")
 CONFIG="${CLAUDE_PROJECT_DIR:-$MAIN}/.claude/foreman.json"
 BASE=$(jq -r '.base_branch // "main"' "$CONFIG" 2>/dev/null)
 BASE=${BASE:-main}
@@ -74,20 +75,23 @@ case "$TOOL" in
           *) break ;;
         esac
       done
-      # `git -C <dir>` acts on <dir>'s repo. A separate clone is exempt. A scratch worktree of this repo (outside the
-      # agent worktrees, not on a story branch, not the main checkout) shares its refs, so every check still applies;
-      # only moving that copy's own HEAD to a detached commit is allowed there (the test auditor does this).
+      # `git -C <dir>` acts on <dir>'s repo. A separate clone is exempt from every check but push.
+      # A scratch worktree of this repo (outside the agent worktrees, not on a story branch, not the main checkout)
+      # shares its refs, so every check still applies; only moving that copy's own HEAD to a detached commit is
+      # allowed there (the test auditor does this).
       SCRATCH=""
+      CLONE=""
       if [ -n "$GDIR" ]; then
         [[ "$GDIR" == /* ]] || GDIR="${CWD:-$TOP}/$GDIR"
         GTOP=$(git -C "$GDIR" rev-parse --show-toplevel 2>/dev/null)
         GBR=$(git -C "$GDIR" rev-parse --abbrev-ref HEAD 2>/dev/null)
         if [ -n "$GTOP" ] && [[ "$GTOP" != */.claude/worktrees/* ]] && [[ ! "$GBR" =~ ^story/ ]] && [ "$GTOP" != "$MAIN" ]; then
-          [ "$(common_dir "$GDIR")" != "$COMMON" ] && continue
-          SCRATCH=1
+          if [ "$(common_dir "$GDIR")" = "$COMMON" ]; then SCRATCH=1; else CLONE=1; fi
         fi
       fi
       SUB=${T[$i]}
+      # A clone's own refs are its own, but its push can reach the shared repo (its origin) or the shared remote.
+      [ -n "$CLONE" ] && [ "$SUB" != push ] && continue
       REST=("${T[@]:$((i + 1))}")
       # Positional arguments, skipping the values of options that take one.
       TARGETS=()
