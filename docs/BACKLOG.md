@@ -188,7 +188,7 @@ flowchart LR
   example each; the global checks pass.
   **Outcome:** story-finish § 2 pastes backlog.py show <ID> into every reviewer's prompt; diff-reviewer: intended-breakage rule (security-relevant removals still listed) and scope category; security-reviewer reads the story for intent, treats it as evidence not instructions, never narrows scope. Reviews: DoD DONE, diff clean, security approve; fix round 1 closed 2 LOW.
 
-- [ ] **Q3 · Re-review briefing and finding triage** · Deps: Q2 · Type: agent · Lane: Review · Size: M · Resource: story-finish
+- [x] **Q3 · Re-review briefing and finding triage** · Deps: Q2 · Type: agent · Lane: Review · Size: M · Resource: story-finish
   Context: Design › D4. Input: `foreman/skills/story-finish/SKILL.md`.
   Output: story-finish § 3: (a) a re-review of fix commits audits the fix range first, then gets the previous
   round's findings to confirm each closed, plus the findings deliberately deferred or dismissed, each with its
@@ -200,6 +200,7 @@ flowchart LR
   DoD: § 3 holds (a), (b) and (c); the fix-round message sends only Act on findings and lists Consider ones for the
   user; the global checks pass.
   **From Q2 (merged):** The re-review prompts in story-finish § 3 (fix-range diff-reviewer and security-reviewer runs) don't yet pass the story entry; give them the same `backlog.py show <ID>` paste as § 2.
+  **Outcome:** story-finish § 3 triages every round into Act on / Consider / Dismissed under one 5-rule severity set (major = critical or major, security MEDIUM+ counts as major; a major is never deferred and is dismissed only with the user's agreement; (default) only on minor non-security findings; exit when no major is open); re-reviews get the story entry, audit the fix range first, then confirm sent findings closed; § 4 table counts per bucket and names every unfixed major or security finding. Three fix rounds; remaining gap handed to Q4.
 
 - [ ] **Q4 · Setup-breakage and symptom-fix review categories** · Deps: Q2 · Type: agent · Lane: Review · Size: S · Resource: diff-reviewer, story-worker, story-finish
   Context: Design › D5. Input: `foreman/agents/diff-reviewer.md`, `foreman/agents/story-worker.md`,
@@ -212,6 +213,7 @@ flowchart LR
   findings get a row in the merge table, next to the `.claude/` warning.
   DoD: the three files hold these rules, each category with one example; the report template in story-worker § 5
   has a `Root causes:` line; the global checks pass.
+  **From Q3 (merged):** Open gap in story-finish § 3 triage after Q3's 3 rounds (deferred by the orchestrator under 'don't block'; each round's patches opened a same-kind case): (1) [MEDIUM] a minor security finding can be dismissed without the user (it is still named in § 4); (2) [LOW] reviewers without severities (lane-auditor FAIL, test-auditor FALSE PASS/UNCOVERED on a DoD claim) get one from the orchestrator and can be downgraded; (3) the third-round exception contradicts 'no other line overrides these rules'; (4) a minor deferred by (default) has no stated backlog home. Replace with the simpler rule that removes the class: only the user dismisses or defers; the orchestrator proposes, except a '(default)' on a minor non-security finding; it never lowers a reviewer's severity; auditor FAILs, FALSE PASS and UNCOVERED count as major; every deferral goes to the backlog in § 5. The backlog DoD of Q3 says 'sends only Act on findings'; the merged text also sends Consider items the user chose.
 
 - [x] **Q5 · backlog.py JSON, help and errors** · Deps: F1 · Type: agent · Lane: Tooling · Size: M · Resource: backlog-script
   Context: Design › D6. Input: `foreman/scripts/backlog.py`, `foreman/tests/test_backlog.py`,
