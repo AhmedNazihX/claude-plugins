@@ -1,0 +1,107 @@
+{
+  "base_branch": "main",
+  "checks": [
+    "python3 -m unittest discover -q -s foreman/tests",
+    "for t in foreman/hooks/test-*.sh git-guardrails/tests/test-guards.sh; do bash \"$t\" >/dev/null || { echo \"FAIL $t\"; exit 1; }; done",
+    "test ! -e foreman/scripts/lint.py || python3 foreman/scripts/lint.py",
+    "claude plugin validate . && claude plugin validate foreman && claude plugin validate git-guardrails"
+  ],
+  "link_files": [],
+  "env": {},
+  "reviewers": [
+    "foreman:diff-reviewer",
+    "foreman:security-reviewer"
+  ],
+  "lanes": {},
+  "stories": {},
+  "gates": [],
+  "format": {},
+  "cost_cap_usd": 0,
+  "decisions": {
+    "reserved": {
+      "001": "X1 SubagentStop gate",
+      "002": "X2 dead-worker signals",
+      "003": "X3 Stop-hook loop",
+      "004": "R3 reviewer report files"
+    }
+  },
+  "max_review_stories": 2,
+  "review_checklist": "docs/REVIEW_CHECKLIST.md",
+  "post_merge": [],
+  "docs": {
+    "max_bytes": 20000,
+    "exclude": []
+  },
+  "guardrails": [
+    {
+      "rule": "Scripts use the Python standard library only",
+      "source": "DESIGN.md › Rules and enforcement",
+      "enforced_by": [
+        "foreman/scripts/lint.py (F1)",
+        "docs/REVIEW_CHECKLIST.md"
+      ],
+      "because": "README: the plugin installs with no dependencies"
+    },
+    {
+      "rule": "Every hook change has a test that blocks the forbidden case and passes a near-miss",
+      "source": "DESIGN.md › Rules and enforcement",
+      "enforced_by": [
+        "checks (every hooks/test-*.sh by glob)",
+        ".github/workflows/test.yml (F2)",
+        "docs/REVIEW_CHECKLIST.md",
+        "foreman:diff-reviewer"
+      ]
+    },
+    {
+      "rule": "Nothing merges to main unless every test suite passes",
+      "source": "DESIGN.md › Rules and enforcement; HANDOVER",
+      "enforced_by": [
+        "checks (story-finish runs them before the tick)",
+        ".github/workflows/test.yml (F2)"
+      ],
+      "because": "the release copy pulls from main"
+    },
+    {
+      "rule": "Only release stories change the version; others append under ## Unreleased",
+      "source": "DESIGN.md › Rules and enforcement; user decision 2026-10-16",
+      "enforced_by": [
+        "foreman/scripts/lint.py version agreement (F1)",
+        "docs/REVIEW_CHECKLIST.md",
+        ".gitattributes merge=union"
+      ]
+    },
+    {
+      "rule": "Read-only agents keep a read-only tools list",
+      "source": "DESIGN.md › Rules and enforcement",
+      "enforced_by": [
+        "foreman/scripts/lint.py (F1)",
+        "docs/REVIEW_CHECKLIST.md"
+      ]
+    },
+    {
+      "rule": "Never merge to the base branch without the user, autopilot included",
+      "source": "DESIGN.md › Rules and enforcement; README",
+      "enforced_by": [
+        "foreman:story-finish § 4 (asks)",
+        "git-guardrails (asks before every push)",
+        "B5 DoD"
+      ]
+    },
+    {
+      "rule": "Docs in plain English, short sentences, no jargon",
+      "source": "DESIGN.md › Rules and enforcement; user style",
+      "enforced_by": [
+        "docs/REVIEW_CHECKLIST.md",
+        "foreman:diff-reviewer"
+      ]
+    },
+    {
+      "rule": "Fixtures are synthetic; no text from real transcripts or the capstone in the repo",
+      "source": "BACKLOG.md › Global rules",
+      "enforced_by": [
+        "docs/REVIEW_CHECKLIST.md",
+        "foreman:security-reviewer"
+      ]
+    }
+  ]
+}

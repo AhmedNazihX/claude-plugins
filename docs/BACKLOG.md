@@ -44,13 +44,9 @@ its *Context* line, (4) the files in its *Input*. Nothing else should be needed.
 - `backlog.py tick <ID> "<note>"`: tick a story after its merge.
 
 **Global rules for every story**
-- **Checks** (from the repo root):
-  `python3 -m unittest discover -q -s foreman/tests`;
-  `for t in foreman/hooks/test-*.sh git-guardrails/tests/test-guards.sh; do bash "$t" >/dev/null || { echo "FAIL $t"; exit 1; }; done`;
-  `python3 foreman/scripts/lint.py` (from F1 on);
-  `claude plugin validate . && claude plugin validate foreman && claude plugin validate git-guardrails`.
-  This is the only list of them until `setup` copies it, verbatim, into `.claude/foreman.json` › `checks`; after
-  that, this line points to the config instead. Stories say "the global checks pass", never the commands.
+- **Checks:** the `checks` in `.claude/foreman.json` (run from the repo root): the unit tests, every hook test,
+  the lint (once F1 has created it) and `claude plugin validate`. Stories say "the global checks pass", never the
+  commands.
 - **Versions:** only V1, V2 and V3 change `foreman/.claude-plugin/plugin.json`'s version and the README's version
   line (one exception: F1 corrects the README's stale 0.10.0 to 0.10.1). Every other story appends one line under
   `## Unreleased` in `foreman/CHANGELOG.md`; `.gitattributes` merges that file with `merge=union`, so parallel
@@ -154,6 +150,7 @@ flowchart LR
   the top of `foreman/CHANGELOG.md`. Fixes to whatever the lint flags on the repo (the README still says 0.10.0).
   DoD: `python3 foreman/scripts/lint.py` exits 0 on the repo; `test_lint.py` has one test per check that fails on
   a planted violation and one that passes on a clean fixture; the global checks pass.
+  **Setup (2026-10-16):** the config's lint check is guarded (`test ! -e foreman/scripts/lint.py || …`) until F1 exists; F1 replaces it with the plain `python3 foreman/scripts/lint.py` in `.claude/foreman.json`.
 
 - [ ] **F2 · CI workflow** · Deps: F1 · Type: agent · Lane: Tooling · Size: S
   Context: Design › D1; Evaluation. Input: the global checks (this backlog › Global rules).
