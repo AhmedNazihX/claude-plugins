@@ -24,10 +24,10 @@
   `.claude/foreman.json` (unit tests, hook tests, lint, `claude plugin validate`) on Python 3.12 with `jq`.
 - Decision 001: a plugin `SubagentStop` hook can tell a story-worker apart (`agent_type`) and block it once
   (`stop_hook_active`), so the report gate (R4) is a hook, not a story-finish check.
-- `story-finish` triages review findings into Act on / Consider / Dismissed before a fix round, sends the worker
-  only Act on, and lists Consider for the user. Re-reviews of fix commits get the story entry, audit the fix range
-  first, then confirm the previous findings closed and see the ones deliberately not fixed. The merge table shows
-  each round's counts per bucket.
+- `story-finish` triages review findings into Act on / Consider / Dismissed before a fix round and lists Consider
+  for the user; Act on findings, plus Consider items the user chose to fix, go back to the worker. Re-reviews of fix
+  commits get the story entry, audit the fix range first, then confirm the previous findings closed and see the ones
+  deliberately not fixed. The merge table shows each round's counts per bucket.
 
 ## 0.10.1 (2026-10-13)
 

@@ -61,31 +61,32 @@ Once all the reviews of a round are back, triage them, even a clean round, so ea
   reason for Consider or Dismissed) for the re-review and for step 4.
   - **Act on**: a DoD FAIL, and every real finding in this story's scope that is worth fixing now.
   - **Consider**: a real minor point that is a trade-off, a scope question or a nice-to-have. The user decides:
-    fix it now, defer it to a backlog story, or drop it. Also a finding you would dismiss that needs the user's
-    agreement (below).
+    fix it now, defer it to a backlog story, or drop it. Also a finding you would defer or dismiss that needs the
+    user's agreement (below).
   - **Dismissed**: not a real problem, with a one-line reason.
 
   How to sort them:
-  - A real critical or major finding, and every security finding rated MEDIUM or higher, is Act on, never
-    Consider. The security reviewer's CRITICAL and HIGH count as major, its LOW as minor.
-  - Dismissing a critical or major finding, or any security finding, needs the user's agreement: put it in
-    Consider with the reason you would dismiss it, and move it to Dismissed only when the user agrees.
-  - Merge duplicates: the same problem raised by two reviewers (or twice by one) is one finding. A finding two
-    reviewers raised on their own weighs more: lean towards Act on.
+  - The security reviewer's CRITICAL, HIGH and MEDIUM count as major (here, at the exit rule and in Grow the
+    checklist), its LOW as minor. A real critical or major finding is Act on, never Consider.
+  - Deferring or dismissing a major finding, or dismissing any security finding, needs the user's agreement: put
+    it in Consider with your reason. If the user turns it down, it goes to Act on.
+  - Merge duplicates: the same problem raised by two reviewers (or twice by one) is one finding. It keeps the
+    highest severity among its sources, and is a security finding if the security reviewer raised it. A finding
+    two reviewers raised on their own weighs more: lean towards Act on.
   - Never dismiss a correctness finding because only one reviewer raised it. Check it against the code; if you
     can't rule it out, it's Act on.
   - Dismiss "I would have done it differently" when the code works and meets the story. Dismiss a finding that
     rests on a hypothetical caller you can't find in the repo (`rg` for it), unless it's about security. Input
     from outside the repo (hook stdin, CLI arguments, files, transcripts, CI or PR text) counts as a real caller.
   - An empty review is a valid result. Don't ask a reviewer again to make it find something.
-- **User decisions.** A decision the fix itself depends on (a trade-off, a label, a wording, a paid run) goes to
-  the user first, **one question at a time**, with your recommendation and why. Legal or domain decisions quote
-  the source verbatim with its page and heading. Consider items don't hold back the fix round: list them together
-  in the same turn, each with your recommendation. If the user has said not to be blocked, apply your
-  recommendation (except a dismissal that needs their agreement), say so, and mark it "(default)" in step 4's
+- **User decisions.** A decision the fix itself depends on (a trade-off, a label, a wording, a paid run) goes to the
+  user first, **one question at a time**, with your recommendation and why. Legal or domain decisions quote the
+  source verbatim with its page and heading. Consider items don't hold back the fix round: list them together in the
+  same turn, each with your recommendation. If the user has said not to be blocked, apply your recommendation on
+  Consider items (never on a security finding, whatever you recommend), say so, and mark it "(default)" in step 4's
   Outcome. Settle every Consider item before a paid recording (see Paid recordings last) and before step 4.
-- **Send.** If Act on is empty, there is no fix round. Otherwise send **one** message to the worker with the Act on
-  findings (plus Consider items the user chose to fix): file and line, the failure, and the fix direction. Include
+- **Send.** A fix round starts when anything is to be fixed: the Act on findings plus the Consider items the user
+  chose to fix. Send them in **one** message to the worker: file and line, the failure, and the fix direction. Include
   the user's decisions on the worker's questions, and anything a later story now needs. Run
   `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/workers.py context <ID>` first:
   - `resume`: SendMessage to the worker's `agent_id` (`workers.py show <ID>`; this only works in the session that
@@ -111,8 +112,8 @@ Once all the reviews of a round are back, triage them, even a clean round, so ea
 - Repeat until the DoD is DONE and no critical or major finding is open, with one exception: if the reviews of
   the third round's fixes find new edge cases of the same kind (each fix exposing the next case), don't send a
   fourth round. Tell the user, with a simpler design that removes the class of case, and let them choose. Only
-  minor findings can be deferred (a critical or major one is fixed, or dismissed with the user's agreement); the
-  ones the user defers go to the backlog in step 5.
+  minor findings can be deferred without the user (a major one needs their agreement); deferred findings go to
+  the backlog in step 5.
 - **Grow the checklist.** When `review_checklist` is set and a major finding is of a kind a worker could have
   caught in its own diff, it isn't on the list yet, and the same kind was found in an earlier story too, add one
   imperative line for it (with both story IDs) in the hand-over commit of step 5. One-off findings stay off the
@@ -132,8 +133,8 @@ Once all the reviews of a round are back, triage them, even a clean round, so ea
 ## 4. Merge with the user's go-ahead
 
 Summarise in a small table: the DoD verdict, the reviews, the lane reviews. For the reviews, one row per round with
-its counts per triage bucket and what became of them. Name each dismissed security finding instead of only
-counting it. For example:
+its counts per triage bucket and what became of them. Name every security finding that wasn't fixed, whatever
+its bucket, instead of only counting it. For example:
 
 | Round | Act on | Consider | Dismissed | Outcome |
 |---|---|---|---|---|
