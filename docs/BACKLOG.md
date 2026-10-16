@@ -238,10 +238,11 @@ flowchart LR
   **From Q5 (merged):** `-h`/`--help` now count only as the first word or right after the command; `--json`, `--file` and `--width` are still taken from anywhere on the line, so an unquoted `--width 3` inside note text is eaten (pre-existing). Q6's idempotent tick/note and --dry-run are the rest of D6 that Q5 left out.
   **Outcome:** backlog.py: repeat tick/note says 'already done' (exit 0), a different tick note still fails; --dry-run (first word or right after the command) prints the diff and writes nothing; writes print file:line, keep mode and symlinks, refuse multi-line notes and notes starting with a field label; tick refuses on a broken backlog and names the old problem. 115 tests; backlog.py at 834 lines (docstring explains). Two fix rounds (2 MEDIUM).
 
-- [ ] **Q11 · Split backlog.py under the line ceiling** · Deps: Q6 · Type: agent · Lane: Tooling · Size: S · Resource: backlog-script
+- [x] **Q11 · Split backlog.py under the line ceiling** · Deps: Q6 · Type: agent · Lane: Tooling · Size: S · Resource: backlog-script
   Context: Rules (800-line soft ceiling); Q6's review. Input: `foreman/scripts/backlog.py` (834 lines), `foreman/tests/test_backlog.py`.
   Output: the model part (regexes, `Story`, `parse_deps`, `Backlog`, `repo_root`, `branches`, `story_problems`) moves to `foreman/scripts/backlog_model.py`, imported by `backlog.py` as a sibling (skills run it by path, so its folder is on the import path); the docstring line explaining the overrun goes; tests load both. No behaviour change.
   DoD: `backlog.py` is under 800 lines; every existing test passes with only import setup changed; `lint.py` passes; the global checks pass.
+  **Outcome:** backlog.py split to 507 lines; the model (Story, Backlog, parse_deps, repo_root, branches, story_problems) is in scripts/backlog_model.py, imported as a sibling; CLI output unchanged; 115 tests pass. Reviews clean in round 1.
 
 - [ ] **Q7 · Hook block messages name the way through** · Deps: F1 · Type: agent · Lane: Tooling · Size: S · Resource: guard-hooks
   Context: Design › D6. Input: `foreman/hooks/gate.sh`, `foreman/hooks/lane-guard.sh`,
@@ -285,6 +286,7 @@ flowchart LR
   `is [0-9]+ bytes`; the global checks pass.
   From the orchestrator (2026-10-16): the harness creates worker worktrees at origin/<base>, not local HEAD, despite `worktree.baseRef: head`. With an unpushed base every worker in wave 1 stopped at the base check. Workaround used: the worker runs a bare `git merge --ff-only main` (worker-guard allows only the bare form) when HEAD is an ancestor of BASE_SHA. Put that step in story-worker § 1 and story-start § 3.
   **From Q7 security review (2026-10-17):** worker-guard still lets these forms through (LOW, mostly pre-existing): stuck options `checkout -B<name>`, `switch -c<name>`/`-C<name>`, `--orphan=<name>` (has_opt matches only spaced tokens); `checkout --track origin/<x>` and `checkout -` / `@{-N}` in a scratch; `git worktree add` on a branch (never checked); a `-C` path with a backslash-escaped space; `git --namespace foo …` (option value read as the subcommand); `cd <dir> && git -C <relative>`. Fix direction: match option prefixes, treat `-`/`@{-N}` as a branch, check `worktree add` (allow only --detach), and fail closed when GDIR doesn't resolve or SUB isn't a known subcommand. Also from Q6: worker-guard blocks a worker's `backlog.py … --dry-run`; allowing dry runs is optional.
+  **From Q11 (merged):** foreman/hooks/test-guards.sh:16 still copies backlog.py alone into $R/.claude/scripts/; that copy now fails to import backlog_model. Nothing runs it (CLAUDE_PLUGIN_ROOT points at the real scripts), so drop the copy or copy backlog_model.py too. Related risk: lane-guard.sh runs backlog.py with 2>/dev/null and lets the write through on failure, so a broken import silently switches lane checks off; consider failing closed.
 
 - [ ] **V1 · Release 0.11.0** · Deps: F2, Q1–Q10 · Type: mixed · Lane: Release · Size: S · Resource: version
   Context: Design › Gates; Constraints. Input: `foreman/CHANGELOG.md`, `foreman/README.md`,
