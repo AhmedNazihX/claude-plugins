@@ -1,0 +1,64 @@
+# Runs the project's checks on every push and pull request.
+#
+# The checks are listed once, in .claude/foreman.json › checks, and this workflow runs each of them from there,
+# so a check added to the config runs here too without editing this file. Today they are:
+#   - the unit tests (python3 -m unittest discover -s foreman/tests)
+#   - every foreman/hooks/test-*.sh and git-guardrails/tests/test-guards.sh, found by glob and run through bash
+#   - the lint (python3 foreman/scripts/lint.py)
+#   - claude plugin validate, for the marketplace and both plugins
+# The step "List the checks" fails if any of these is missing from the config.
+name: test
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # The lint needs Python 3.10 or later (it reads sys.stdlib_module_names).
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # The hooks and their tests parse JSON with jq. The runner image ships it; install it if it ever doesn't.
+      - name: Set up jq
+        run: command -v jq || { sudo apt-get update && sudo apt-get install -y jq; }
+
+      # `claude plugin validate` checks the manifests offline and needs no login.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install the Claude Code CLI
+        run: npm install -g @anthropic-ai/claude-code
+
+      # The hook tests build throwaway repos and commit in them, so git needs a name and email.
+      - name: Set a git identity for the tests
+        run: |
+          git config --global user.name "ci"
+          git config --global user.email "ci@example.invalid"
+
+      - name: List the checks
+        run: |
+          checks=$(jq -r '.checks[]' .claude/foreman.json)
+          printf '%s\n' "$checks"
+          for want in 'unittest discover' 'foreman/hooks/test-\*.sh' 'git-guardrails/tests/test-guards.sh' \
+                      'foreman/scripts/lint.py' 'claude plugin validate'; do
+            grep -q -- "$want" <<<"$checks" || { echo "::error::no check in .claude/foreman.json runs: $want"; exit 1; }
+          done
+
+      - name: Run the checks
+        run: |
+          failed=0
+          while IFS= read -r check; do
+            echo "::group::$check"
+            if bash -c "$check"; then echo "pass"; else echo "::error::check failed: $check"; failed=1; fi
+            echo "::endgroup::"
+          done < <(jq -r '.checks[]' .claude/foreman.json)
+          exit "$failed"

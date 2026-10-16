@@ -5,6 +5,8 @@
 - New `scripts/lint.py`: checks agent and skill frontmatter, read-only agents' tools, `foreman:` references,
   hook paths, relative `.md` links, stdlib-only imports and that the version agrees across `plugin.json`, the
   README and this file. The README version line is corrected to 0.10.1.
+- New CI workflow `.github/workflows/test.yml`: on every push and pull request it runs each check listed in
+  `.claude/foreman.json` (unit tests, hook tests, lint, `claude plugin validate`) on Python 3.12 with `jq`.
 
 ## 0.10.1 (2026-10-13)
 
