@@ -358,6 +358,7 @@ flowchart LR
   the return line, and `lint.py` and `test_lint.py` allow Write only with a `handoffs/` instruction, tested both
   ways; the global checks pass.
   **From F1 (merged):** Deferred minor findings on lint.py, for whoever next edits it (R3 changes its read-only rule): no test covers the `allowed-tools` key (TOOL_KEYS) or the `mcp__*` tool-name exemption (the test-auditor removed each and no test failed); add one test each. The bare-name check covers only a backticked name touching the label ("the `x` agent", "skill `x`"), so unlabelled names and the non-adjacent names in a list ("the `a` and `b` agents") aren't checked; external skills credited by the plugin go in EXTERNAL (now {"grilling"}).
+  **From Q4 (merged):** Two review-coverage gaps found while reviewing Q4 (pre-existing in story-finish): (1) § 3 reruns the diff reviewer only when a finding was major or the fix is large, so a small fix to a minor finding that adds a new skip/broad except/sleep is never seen by the reviewer that checks symptom fixes; (2) the paid-recording commit (§ 3 'Paid recordings last') reruns only checks, dod-verifier and test-auditor, so a recording that captured an API key or auth header merges without the security reviewer. Rerun at least the security reviewer on the recording commit.
 
 - [ ] **R4 · Report gate** · Deps: R2, X1 · Type: agent · Lane: Workers · Size: M · Resource: hooks-config, story-finish
   Context: Design › D9; decision 001. Input: `docs/decisions/001-subagent-stop-gate.md`,
