@@ -2,7 +2,7 @@
 
 - **Date:** 2026-10-16
 - **Story:** X1 (docs/BACKLOG.md)
-- **Status:** accepted (no fork: the design's first choice works; the user can reverse it before R4 starts)
+- **Status:** proposed (waiting for the user; one path, a block after `SubagentHandback`, is untested)
 
 ## Question
 
@@ -67,41 +67,47 @@ gate fired: agent_type=x1probe:worker stop_hook_active=false
 gate fired: agent_type=x1probe:worker stop_hook_active=true
 ```
 
-The logged inputs (paths shortened: `<projects>` is `~/.claude/projects/<session folder>`, `<scratch>` the
-worker's scratch folder; nothing else changed):
+The logged inputs. Replaced: `<projects>` is `~/.claude/projects/<session folder>`, `<scratch>` the worker's
+scratch folder, `<session>` the session id, `<prompt>` the prompt id, and `<agent-1>`, `<agent-2>` the two agent
+ids. Nothing else changed:
 
 ```json
-{"session_id":"03ce35f6-b62b-4ddc-a148-48d1f5d9d8c7","transcript_path":"<projects>/03ce35f6-b62b-4ddc-a148-48d1f5d9d8c7.jsonl","cwd":"<scratch>/x1-run","prompt_id":"662470fa-1de2-4297-a1ca-ca76d605e197","permission_mode":"dontAsk","agent_id":"a29ef99e9fa30467b","agent_type":"x1probe:worker","effort":{"level":"medium"},"hook_event_name":"SubagentStop","stop_hook_active":false,"agent_transcript_path":"<projects>/03ce35f6-b62b-4ddc-a148-48d1f5d9d8c7/subagents/agent-a29ef99e9fa30467b.jsonl","last_assistant_message":"worker done","background_tasks":[],"session_crons":[]}
-{"session_id":"03ce35f6-b62b-4ddc-a148-48d1f5d9d8c7","transcript_path":"<projects>/03ce35f6-b62b-4ddc-a148-48d1f5d9d8c7.jsonl","cwd":"<scratch>/x1-run","prompt_id":"662470fa-1de2-4297-a1ca-ca76d605e197","permission_mode":"dontAsk","agent_id":"a29ef99e9fa30467b","agent_type":"x1probe:worker","effort":{"level":"medium"},"hook_event_name":"SubagentStop","stop_hook_active":true,"agent_transcript_path":"<projects>/03ce35f6-b62b-4ddc-a148-48d1f5d9d8c7/subagents/agent-a29ef99e9fa30467b.jsonl","last_assistant_message":"worker done after gate","background_tasks":[],"session_crons":[]}
-{"session_id":"03ce35f6-b62b-4ddc-a148-48d1f5d9d8c7","transcript_path":"<projects>/03ce35f6-b62b-4ddc-a148-48d1f5d9d8c7.jsonl","cwd":"<scratch>/x1-run","prompt_id":"662470fa-1de2-4297-a1ca-ca76d605e197","permission_mode":"dontAsk","agent_id":"aabde499dff8ca635","agent_type":"x1probe:other","effort":{"level":"medium"},"hook_event_name":"SubagentStop","stop_hook_active":false,"agent_transcript_path":"<projects>/03ce35f6-b62b-4ddc-a148-48d1f5d9d8c7/subagents/agent-aabde499dff8ca635.jsonl","last_assistant_message":"other done","background_tasks":[],"session_crons":[]}
+{"session_id":"<session>","transcript_path":"<projects>/<session>.jsonl","cwd":"<scratch>/x1-run","prompt_id":"<prompt>","permission_mode":"dontAsk","agent_id":"<agent-1>","agent_type":"x1probe:worker","effort":{"level":"medium"},"hook_event_name":"SubagentStop","stop_hook_active":false,"agent_transcript_path":"<projects>/<session>/subagents/agent-<agent-1>.jsonl","last_assistant_message":"worker done","background_tasks":[],"session_crons":[]}
+{"session_id":"<session>","transcript_path":"<projects>/<session>.jsonl","cwd":"<scratch>/x1-run","prompt_id":"<prompt>","permission_mode":"dontAsk","agent_id":"<agent-1>","agent_type":"x1probe:worker","effort":{"level":"medium"},"hook_event_name":"SubagentStop","stop_hook_active":true,"agent_transcript_path":"<projects>/<session>/subagents/agent-<agent-1>.jsonl","last_assistant_message":"worker done after gate","background_tasks":[],"session_crons":[]}
+{"session_id":"<session>","transcript_path":"<projects>/<session>.jsonl","cwd":"<scratch>/x1-run","prompt_id":"<prompt>","permission_mode":"dontAsk","agent_id":"<agent-2>","agent_type":"x1probe:other","effort":{"level":"medium"},"hook_event_name":"SubagentStop","stop_hook_active":false,"agent_transcript_path":"<projects>/<session>/subagents/agent-<agent-2>.jsonl","last_assistant_message":"other done","background_tasks":[],"session_crons":[]}
 ```
 
 **Run 2** (the worker launched with `isolation: "worktree"`, from a scratch git repo). Same block-once pattern.
-The hook's `cwd` was the subagent's own worktree, named after its `agent_id`:
+The hook's `cwd` was the subagent's own worktree, named after its `agent_id` (here replaced by `<agent-3>`):
 
 ```json
-{"cwd":"<scratch>/x1-run2/.claude/worktrees/agent-aa518d00a599e0aa0","agent_id":"aa518d00a599e0aa0","agent_type":"x1probe:worker","stop_hook_active":false}
-{"cwd":"<scratch>/x1-run2/.claude/worktrees/agent-aa518d00a599e0aa0","agent_id":"aa518d00a599e0aa0","agent_type":"x1probe:worker","stop_hook_active":true}
+{"cwd":"<scratch>/x1-run2/.claude/worktrees/agent-<agent-3>","agent_id":"<agent-3>","agent_type":"x1probe:worker","stop_hook_active":false}
+{"cwd":"<scratch>/x1-run2/.claude/worktrees/agent-<agent-3>","agent_id":"<agent-3>","agent_type":"x1probe:worker","stop_hook_active":true}
 ```
 
-**Run 3** (an agent told to report with `SubagentHandback`). The headless session didn't give it that tool, so it
-answered in text; the gate blocked it once, and the parent received one result, the text written after the block
-(`worker done after gate`). So the parent waits until the gate lets the subagent stop. Whether a block after a
+**Run 3** (a third agent, `x1probe:handback`, told to report with `SubagentHandback`; for this run the gate's
+matcher was widened to `^x1probe:(worker|handback)$`). The headless session didn't give it that tool. Its first
+stop came with a confused text reply ("I don't have a task yet…"), not the scripted text. The gate blocked it once,
+it then replied `worker done after gate`, and the parent received one result: that text. So for an agent whose
+last message is plain text, the parent waits until the gate lets it stop. Whether a block after a
 `SubagentHandback` call holds back the report already handed over was **not** tested (see Consequences).
 
 ## Options
 
 | Option | What was compared or measured | Result | Source |
 | --- | --- | --- | --- |
-| A. `SubagentStop` hook in the plugin, matcher `^foreman:story-worker$` | Does the input name the agent type? Does a matcher pick one type? Does block-once work? | Yes to all three: `agent_type` is `x1probe:worker`; `other` never reached the gate; the second stop came with `stop_hook_active: true` and the hook let it go | Docs above; runs 1 and 2 |
+| A. `SubagentStop` hook in the plugin, matcher `^foreman:story-worker$` | Does the input name the agent type? Does a matcher pick one type? Does block-once work? | Yes to all three for agents whose last message is plain text: `agent_type` is `x1probe:worker`; `other` never reached the gate; the second stop came with `stop_hook_active: true` and the hook let it go. Untested for an agent that hands back through `SubagentHandback` | Docs above; runs 1 and 2 |
 | B. Same checks as a step at the top of story-finish § 1 | Catches a bad report only after the worker is gone, so the fix needs a relaunch (`story-start --continue`) | Works, but later and costlier than A | `docs/DESIGN.md` › D9, Risks |
 
 ## Decision
 
-R4 builds the hook (option A): `foreman/hooks/report-gate.sh`, registered in `hooks.json` under `SubagentStop`
-with matcher `^foreman:story-worker$`, blocking once (only when `stop_hook_active` is `false`). The docs and the
-live run both show the hook can tell a story-worker apart and block it exactly once; the design's rule was
-"use the hook unless the input can't identify the agent type".
+R4 builds the hook (option A), `foreman/hooks/report-gate.sh` on `SubagentStop` with matcher
+`^foreman:story-worker$`, blocking once (only when `stop_hook_active` is `false`), provided its first test run
+shows a block also holds back a `SubagentHandback` report.
+
+The rule: the design (Risks) says "`SubagentStop` input may not identify the agent type (X1); D9 may become a
+story-finish check instead." The input does identify it, and the runs showed block-once works for agents whose
+last message is plain text.
 
 ## Consequences
 
@@ -109,15 +115,19 @@ live run both show the hook can tell a story-worker apart and block it exactly o
   `git -C "$cwd"` gives the story branch (`story/<ID>-<slug>`), the head and the status; the main checkout comes
   from `--git-common-dir`, as `worker-guard.sh` does. The report file is
   `<main>/.claude/worktrees/handoffs/<ID>.md` (D8), and `agent_id` can be matched against the header's agent id.
-- **R4 reads the report file, not `last_assistant_message`.** Story-workers hand back through `SubagentHandback`,
-  and then `last_assistant_message` is not the report (docs quote above).
-- **A worker that never renamed its branch** (blocked during setup) has no story ID. The hook should let it stop.
+- **R4 reads the report file, not `last_assistant_message`.** `story-worker.md` § 5 is headed "Report (your final
+  message)", but a worker may or may not have the `SubagentHandback` tool, depending on how it was launched. When
+  it does, `last_assistant_message` is not the report (docs quote above). The file on disk (D8) is the same either
+  way.
+- **R4 accepts a story ID only from a branch that matches worker-guard's pattern**
+  `^story/[A-Z]{1,3}[0-9]+[a-z]?-`. On any other branch (for example a worker blocked during setup, before the
+  rename) the hook lets the worker stop.
+- **The report header's agent id is a sanity check only**, compared with the input's `agent_id`. It is not proof
+  of who wrote the report: anything with write access to the main checkout can write that file.
 - **Keep the matcher anchored** (`^...$`): a plugin-scoped name with a colon is read as a regular expression.
-- **Untested: block after `SubagentHandback`.** If a worker hands back and then gets blocked, the docs don't say
-  whether the parent already has the report. R4's test plan should include one interactive run that checks this.
-  If the report is already delivered, the block's message should only ask the worker to fix the file, and
-  story-finish § 1 should still read the file rather than trust the hand-back line.
+- **Revisit (R4's first task):** one interactive run of a story-worker that calls `SubagentHandback` and is then
+  blocked. If the block doesn't hold the report back from the parent, R4 falls back to option B.
 - **Revisit** if a Claude Code release drops `agent_type` or `stop_hook_active` from the `SubagentStop` input, or
   changes the plugin-scoped name format. Then fall back to option B.
-- Cost of the runs: about $0.03 in all on Haiku (run 2: $0.0070, run 3: $0.0099, from `total_cost_usd`; run 1
-  wasn't measured and is of the same size).
+- Cost of the runs, on Haiku: run 2 cost $0.0070 and run 3 cost $0.0099 (from `total_cost_usd`), $0.0169 for the
+  two. Run 1 wasn't measured.
