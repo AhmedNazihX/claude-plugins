@@ -62,7 +62,7 @@ Once all the reviews of a round are back, triage them, even a clean round, so ea
   reason for Consider or Dismissed) for the re-review and for step 4. **Only the user drops or defers a finding.**
   You propose, with your reason. The one exception is "(default)": when the user said not to be blocked, you may
   apply your own proposal to a minor finding that isn't about security, isn't a symptom fix and didn't come from
-  the security reviewer. You never lower a reviewer's severity. Major means critical or major; the security
+  the security reviewer. You never lower a reviewer's severity. Major means critical or major; a DoD FAIL, the security
   reviewer's CRITICAL, HIGH and MEDIUM, a lane-auditor FAIL and a test-auditor FALSE PASS, WEAK or UNCOVERED count
   as major. A merged duplicate keeps its highest severity, and is a security finding if any source was the
   security reviewer. Every deferral goes to the backlog in step 5. Exit when no major

@@ -98,8 +98,10 @@ listed so the merge tells everyone to rename it.
 or xfail, a sleep, a broad `except`, a type-ignore, a weakened assertion, special-casing the
 failing input, a bumped timeout. Your prompt may include the worker's `Root causes:` line.
 Major when it has no `Root cause: X because Y` line for this change (or you weren't given
-one). It stays major when the change doesn't remove the cause the line names; a skip or xfail
-answers only a cause of the form "the test itself is wrong". Example: the diff adds
+one). It stays major when the change doesn't remove the cause the line names. A skip or xfail
+is always reported as a symptom fix and stays major: a wrong test is fixed by correcting or
+deleting it, not by skipping it. Only when you confirm from the code or the story that the
+test is wrong may you rate it lower, and you still report it. Example: the diff adds
 `@pytest.mark.skip` to `test_parse_dates`, and the report has no root cause for it: major.
 
 ## Standard of evidence
