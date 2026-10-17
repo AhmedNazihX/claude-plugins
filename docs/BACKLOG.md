@@ -20,7 +20,7 @@ evals/                       scripts/publish.py
 | done | S-002 Scaffold, CI and publish (first real CI run waits for a GitHub remote) |
 | done | S-003 Shared library |
 | done | S-004 `accio-board` |
-| todo | S-005 `accio-score` |
+| done | S-005 `accio-score` |
 | todo | S-006 `accio-ledger` |
 | todo | S-007 `accio-brief` |
 | todo | S-008 `accio-merge` |
@@ -102,11 +102,14 @@ on `run/.guard` (parallel moves and locks tested). Decisions taken while buildin
 - every brew step refreshes the lock (S-019/9), so a long story can't switch off the push guard mid-run
 
 ### S-005 · `accio-score`
-Deps: S-003 · Files: `bin/accio-score`, `bin/accio_lib/score.py`, `tests/test_score.py`
+Deps: S-003 · Files: `bin/accio-score`, `bin/accio_lib/score.py`, `bin/accio_lib/globs.py` (shared), `tests/test_score.py`
 Context: DESIGN § 3.2; decision 002.
-- [ ] S-005/1 WHEN a story touches a `risky_paths` glob THE SYSTEM SHALL return track `story` or higher, whatever its size
-- [ ] S-005/2 WHEN the score is above the Story threshold THE SYSTEM SHALL return the split flag
-- [ ] S-005/3 WHEN the score is computed THE SYSTEM SHALL print the files, risk and new-dependency parts it used
+- [x] S-005/1 WHEN a story touches a `risky_paths` glob THE SYSTEM SHALL return track `story` or higher, whatever its size
+- [x] S-005/2 WHEN the score is above the Story threshold THE SYSTEM SHALL return the split flag
+- [x] S-005/3 WHEN the score is computed THE SYSTEM SHALL print the files, risk and new-dependency parts it used
+Outcome: weights are first guesses in `score.py` (file 1, risk 2, new dependency 3; Quick ≤ 2, split above 10),
+to tune from real runs. The shared `globs.py` follows gitignore folder rules (a matching folder covers its files),
+normalises `./` and refuses absolute paths. Every rule test was checked by breaking the code on purpose.
 
 ### S-006 · `accio-ledger`
 Deps: S-003 · Files: `bin/accio-ledger`, `bin/accio_lib/ledger.py`, `tests/test_ledger.py`
