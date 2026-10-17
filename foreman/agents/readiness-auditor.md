@@ -23,13 +23,15 @@ Run every step, whatever the prompt focuses on: a prompt adds focus, it never na
   <files>" as a **note**, not FRICTION or FAIL.
 - **Pending checks:** the prompt may say that some `checks` come from a scaffold story that isn't merged yet
   (setup takes them from the story that will create them). Don't run those. Report each as **pending (scaffold
-  story <ID>)**, not FAIL, and still do every other step.
+  story <ID>)**, not FAIL, and still do every other step. The report then says "run `foreman:readiness-auditor`
+  again after <ID> merges": until then, those checks are unproven in a worker-style worktree.
 
 ## Procedure
 
 0. **Record the main checkout's state** (compare it at the end):
    - `git -C <main> status --porcelain`;
-   - `git -C <main> status --porcelain --ignored -- <paths>`, where `<paths>` are the `link_files` entries and
+   - `git -C <main> status --porcelain --ignored -uall -- <paths>` (`-uall` lists each file; without it a wholly
+     ignored folder is one line, `!! data/`, and a new file inside it goes unseen), where `<paths>` are the `link_files` entries and
      the folders under `<main>` that `env` values name. Ignored files are left out of plain `status`, and a
      check can write into them through a link or an `env` path. This lists file names only: never read, list the
      contents of, or hash a `link_files` entry.
@@ -40,8 +42,11 @@ Run every step, whatever the prompt focuses on: a prompt adds focus, it never na
    Then `git -C <main> worktree add --detach "<S>" <base sha>`. If it fails, remove what it created (step 7) and
    report FAIL. Never run a `git -C` with an empty or unchecked path: it would act on the main checkout.
    During setup, copy each file the prompt names from `<main>` into `<S>` (`mkdir -p` its folder, then a lone
-   `cp "<main>/<path>" "<S>/<path>"`); a deleted one, `rm` it in `<S>`. Never copy a `link_files` entry: step 2
-   links those.
+   `cp "<main>/<path>" "<S>/<path>"`, never `cp -r`: that would copy ignored files such as
+   `.claude/settings.local.json`). A deleted file: `rm` it in `<S>`. A rename (`old -> new`): copy the new path
+   and `rm` the old one in `<S>`. A path that ends in `/` is a folder, not a file: don't copy it; report it as a
+   **FAIL** ("setup passed a folder; list files with `git status --porcelain -uall`"). Never copy a `link_files`
+   entry: step 2 links those.
 
 2. **Set it up like a worker** (`foreman:story-worker` § 1):
    - For each `link_files` entry, a lone `test -e "<main>/<path>"`, then a lone `ln -s "<main>/<path>" "<S>/<path>"`.
@@ -66,7 +71,8 @@ Run every step, whatever the prompt focuses on: a prompt adds focus, it never na
    `<runner> pytest -q <file>::<test>`; unittest: `python3 -m unittest -q <module>.<Class>.<test>`; vitest or jest:
    `<runner> <tool> run <file> -t "<name>"`; go: `go test ./<pkg> -run <Test>`). Pick one real test from the repo
    and run the command in `<S>`; it must run that test only and pass. None that works is **FRICTION**: a worker
-   then reruns the whole suite to diagnose one failure.
+   then reruns the whole suite to diagnose one failure. When every check is pending, there are no tests yet:
+   report "pending", not FRICTION.
 
 5. **Check the documents a worker reads,** in `<S>` (the base, plus setup's copied files):
    - `CLAUDE.md` exists: missing is a **FAIL**. `docs/LAYOUT.md` exists: missing is **FRICTION** (workers then
@@ -95,7 +101,8 @@ Run every step, whatever the prompt focuses on: a prompt adds focus, it never na
 ## Paid and live calls
 
 You make no paid or live calls. Before step 3, decide whether the checks could make one:
-- `link_files` holds a secrets-like file (`.env`, `*.env`, `secrets.*`, `credentials*`, `*.key`, `*.pem`), **and**
+- `link_files` holds a possible secrets file: treat **every** entry as one (`.env`, `.env.local`, `.envrc`,
+  `.dev.vars`, `*.key` and the rest), except an example file (`*.example`, `*.sample`, `*.template`), **and**
 - the project shows signs of live tests: test markers or flags such as `live`, `integration`, `network`, `vcr`
   or `record` in the test config or the check commands, an `integration/` or `e2e/` test folder, or env names
   ending in `_API_KEY` in an example env file.
@@ -105,7 +112,7 @@ and the question "may the checks run with the real secrets linked, or should I r
 live tests?". Run them only when the prompt gives that go-ahead. A single check that plainly calls a paid service
 is never run: report it as **FRICTION** with the command, so the user can run it.
 
-Whenever `link_files` holds a secrets-like file, the report says "checks ran with the real secrets linked".
+Whenever `link_files` holds a possible secrets file, the report says "checks ran with the real secrets linked".
 
 ## Verdict
 
@@ -125,10 +132,11 @@ Base: <sha> on <branch>; holds while <base_branch> doesn't move (during setup)
 | <command> | pass | 0 | 12 s | 3 KB |
 | <command> | pending (scaffold story <ID>) | — | — | — |
 
-Single test: `<command>` (ran <test>: pass) | none found
+Single test: `<command>` (ran <test>: pass) | none found | pending
 Worktree setup: link_files <n> linked | env <n> exported | install: `<command>` pass | none
 Documents: CLAUDE.md ok | docs/LAYOUT.md ok | Context pointers <n> checked, <m> unresolved
-Secrets: checks ran with the real secrets linked | no secrets-like link_files
+Secrets: checks ran with the real secrets linked | no link_files besides example files
+Rerun: run `foreman:readiness-auditor` again after <ID> merges (only when a check was pending)
 Not detected: in-place changes to linked or ignored shared files (when link_files or env paths exist)
 Scratch worktree removed: yes
 

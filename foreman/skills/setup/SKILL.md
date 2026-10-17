@@ -74,8 +74,9 @@ Start the `foreman:readiness-auditor` agent. In a throwaway worktree set up like
 
 - the main checkout's path;
 - that it runs **during setup**, and every file § 3 and the guardrails skill wrote or changed but haven't been
-  committed yet (from `git status --porcelain`). It copies them into its worktree and reports them as a note
-  ("commit before starting stories"), not as a problem;
+  committed yet, one per line from `git status --porcelain -uall` (one line per file, never a folder; ignored
+  files stay out). It copies them into its worktree and reports them as a note ("commit before starting
+  stories"), not as a problem;
 - the `checks` that come from a scaffold story that isn't merged yet, with the story's ID (see § 2). It reports
   them as pending instead of running them.
 
@@ -112,5 +113,7 @@ List what was written, then go back to `next` (without asking), which merges the
 go-ahead. The loop: `/foreman:status` shows what can run, `/foreman:story-start <IDs>`
 launches workers, `/foreman:story-finish <ID>` reviews and merges; `/foreman:next` always picks the
 right step. Offer to commit, and say that every file setup wrote must be committed before the first story
-starts: workers branch from the commit, so they don't see uncommitted changes. The first backlog story is usually `Solo` (the scaffold), since every worktree
-branches from it.
+starts: workers branch from the commit, so they don't see uncommitted changes. If § 4 reported pending checks,
+say: "run `foreman:readiness-auditor` again after <ID> merges", so the scaffold's checks are proven in a
+worker-style worktree before the next wave. The first backlog story is usually `Solo` (the scaffold), since every
+worktree branches from it.
