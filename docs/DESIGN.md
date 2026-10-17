@@ -302,7 +302,9 @@ user gets one plain line: re-add, or carry on without it. Uninstall removes only
 
 ### 4.6 Scripts
 All scripts are in `bin/` and use only the Python 3 standard library. **Every script finds the main checkout's
-`.accio/` with `git rev-parse --git-common-dir`, from any worktree**, so worktrees never read stale state. `bin/` is
+`.accio/` with `git rev-parse --git-common-dir`, from any worktree**, so worktrees never read stale state.
+Submodules work. A repo made with `git init --separate-git-dir` does not support story worktrees, because git
+doesn't record its main checkout; `accio-hooks install` warns about it. `bin/` is
 on PATH inside workflow agents, but `${CLAUDE_PLUGIN_ROOT}` is not set there (spike S-001), so briefs give each
 script's absolute path.
 

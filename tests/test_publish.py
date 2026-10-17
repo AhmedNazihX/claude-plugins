@@ -6,22 +6,9 @@ import sys
 import tempfile
 import unittest
 
-ROOT = pathlib.Path(__file__).resolve().parents[1]
+from support import ROOT, commit_all, git, write
+
 PUBLISH = ROOT / "scripts" / "publish.py"
-
-
-def git(cwd, *args):
-    subprocess.run(["git", *args], cwd=cwd, check=True, capture_output=True, text=True)
-
-
-def commit_all(cwd):
-    git(cwd, "add", "-A")
-    git(cwd, "-c", "user.name=t", "-c", "user.email=t@example.com", "commit", "-q", "-m", "snapshot")
-
-
-def write(path, text):
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(text, encoding="utf-8")
 
 
 class PublishTest(unittest.TestCase):

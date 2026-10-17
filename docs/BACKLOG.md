@@ -18,7 +18,7 @@ evals/                       scripts/publish.py
 |---|---|
 | done | S-001 Spike: workflow, named agents, worktree (verdict GO; decision 010) |
 | done | S-002 Scaffold, CI and publish (first real CI run waits for a GitHub remote) |
-| todo | S-003 Shared library |
+| done | S-003 Shared library |
 | todo | S-004 `accio-board` |
 | todo | S-005 `accio-score` |
 | todo | S-006 `accio-ledger` |
@@ -74,11 +74,14 @@ because the repo has no GitHub remote yet.
 ### S-003 · Shared library
 Deps: S-002 · Files: `bin/accio_lib/{paths,config,story}.py`, `tests/test_lib.py`, `tests/fixtures/`
 Context: DESIGN § 4.6 (git common dir), § 5.1, § 5.2, § 4.4 (silent exit outside accio repos).
-- [ ] S-003/1 WHEN called from the main checkout or from a worktree outside the repo THE SYSTEM SHALL return the same main `.accio/` path
-- [ ] S-003/2 WHEN the repo has no `.accio/` THE SYSTEM SHALL return none, without raising
-- [ ] S-003/3 WHEN `config.json` lacks a key THE SYSTEM SHALL return the default from DESIGN § 5.2
-- [ ] S-003/4 WHEN a story file is parsed THE SYSTEM SHALL return its frontmatter and its numbered DoD lines, including `(no test)` marks
-- [ ] S-003/5 WHEN a story file has malformed frontmatter THE SYSTEM SHALL fail with the file name and the line
+- [x] S-003/1 WHEN called from the main checkout or from a worktree outside the repo THE SYSTEM SHALL return the same main `.accio/` path
+- [x] S-003/2 WHEN the repo has no `.accio/` THE SYSTEM SHALL return none, without raising
+- [x] S-003/3 WHEN `config.json` lacks a key THE SYSTEM SHALL return the default from DESIGN § 5.2
+- [x] S-003/4 WHEN a story file is parsed THE SYSTEM SHALL return its frontmatter and its numbered DoD lines, including `(no test)` marks
+- [x] S-003/5 WHEN a story file has malformed frontmatter THE SYSTEM SHALL fail with the file name and the line
+Outcome: `bin/accio_lib/` (paths, config, story, frozen). Strict on purpose after review: only § 5.1 keys, DoD
+section required and every line in it checked, read-only results. A worktree of a `--separate-git-dir` repo is not
+supported (pinned by a test; S-012/13 warns). 54 tests pass.
 
 ### S-004 · `accio-board`
 Deps: S-003 · Files: `bin/accio-board`, `bin/accio_lib/board.py`, `tests/test_board.py`
@@ -167,6 +170,7 @@ Context: DESIGN § 4.5, § 12.1; decisions 004 and 009.
 - [ ] S-012/10 WHEN anyone force-pushes THE SYSTEM SHALL block it
 - [ ] S-012/11 WHEN `uninstall` runs THE SYSTEM SHALL remove only the marked lines
 - [ ] S-012/12 WHEN `install` runs THE SYSTEM SHALL write no allow rules to the project's settings (decision 010)
+- [ ] S-012/13 WHEN `install` runs in a repo whose git dir is separate (`git init --separate-git-dir`) THE SYSTEM SHALL warn that story worktrees aren't supported there
 
 ### S-013 · `protego`
 Deps: S-003 · Files: `hooks/protego.py`, `hooks/hooks.json`, `tests/test_protego.py`
