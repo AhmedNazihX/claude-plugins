@@ -36,6 +36,8 @@
   anywhere else is refused. Every write prints `<file>:<line>`.
 - New CI workflow `.github/workflows/test.yml`: on every push and pull request it runs each check listed in
   `.claude/foreman.json` (unit tests, hook tests, lint, `claude plugin validate`) on Python 3.12 with `jq`.
+  `test-guards.sh` names its test repo's branch `main` (`git init -b main`): Apple's git defaults to `main`,
+  Linux git to `master`, so three worker-guard tests failed only on the runner.
 - Decision 001: a plugin `SubagentStop` hook can tell a story-worker apart (`agent_type`) and block it once
   (`stop_hook_active`), so the report gate (R4) is a hook, not a story-finish check.
 - Decision 003 (proposed): a plugin `Stop` hook loop works headless on Claude Code 2.1.302. B4's hook will count in

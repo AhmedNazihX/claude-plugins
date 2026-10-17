@@ -30,7 +30,7 @@ cat > "$R/docs/BACKLOG.md" <<'MD'
   Output: x. DoD: y.
 MD
 echo '{}' > "$R/eval/cases.json"
-git -C "$R" init -q && git -C "$R" add -A && git -C "$R" commit -q -m init
+git -C "$R" init -q -b main && git -C "$R" add -A && git -C "$R" commit -q -m init
 # The plugin reads the project config via CLAUDE_PROJECT_DIR and its helper via CLAUDE_PLUGIN_ROOT.
 export CLAUDE_PROJECT_DIR="$R" CLAUDE_PLUGIN_ROOT="$SRC/.."
 
