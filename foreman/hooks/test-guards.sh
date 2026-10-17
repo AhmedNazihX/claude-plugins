@@ -148,6 +148,19 @@ CLAUDE_PLUGIN_ROOT="$BROKEN" run "$GUARD" 2 "$(file_in Read "$W" "$W/src/app/mod
   "a failing backlog.py blocks even outside the denied folder"
 CLAUDE_PLUGIN_ROOT="$BROKEN" CLAUDE_PROJECT_DIR="$TMP/no-lanes" run "$GUARD" 0 \
   "$(file_in Read "$W" "$W/eval/cases.json")" "near-miss: a failing backlog.py with no lane deny lists passes"
+# Q10 review: lanes whose deny lists are empty or missing have nothing to enforce.
+echo '{"lanes": {"a": {"deny": []}, "b": {"allow": ["x"]}}}' > "$TMP/no-lanes/.claude/foreman.json"
+CLAUDE_PLUGIN_ROOT="$BROKEN" CLAUDE_PROJECT_DIR="$TMP/no-lanes" run "$GUARD" 0 \
+  "$(file_in Read "$W" "$W/eval/cases.json")" "near-miss: a failing backlog.py with empty or allow-only lanes passes"
+# Q10 review: a warning on stderr from a working backlog.py must not turn the lanes off.
+WARN="$TMP/warn-plugin"
+mkdir -p "$WARN/scripts"
+printf 'import os, sys\nprint("a warning", file=sys.stderr, flush=True)\nreal = %s\nos.execv(sys.executable, [sys.executable, real] + sys.argv[1:])\n' \
+  "'$SRC/../scripts/backlog.py'" > "$WARN/scripts/backlog.py"
+CLAUDE_PLUGIN_ROOT="$WARN" msg "$GUARD" "$(file_in Read "$W" "$W/eval/cases.json")" "$LANE_KEY" \
+  "a backlog.py warning on stderr keeps the lane check on"
+CLAUDE_PLUGIN_ROOT="$WARN" run "$GUARD" 0 "$(file_in Read "$W" "$W/src/app/models.py")" \
+  "near-miss: with the warning, a file outside the denied folder passes"
 git -C "$R" worktree remove "$S" 2>/dev/null
 
 git -C "$W" checkout -q -b story/C2-guidelines
@@ -313,6 +326,53 @@ msg "$WG" "$(bash_in "$W" "python3 backlog.py show B4 --dry-run; python3 backlog
   "a dry run in another call doesn't cover a tick"
 git -C "$R" worktree remove --force "$TMP/wt-d" 2>/dev/null
 git -C "$R" worktree remove "$SCR" 2>/dev/null
+echo "worker guard, Q10 review: branch renames, plumbing, wrappers, --git-dir, dry runs, paths and refs"
+RENAME_ALT="git branch -m story/<ID>-<slug>"
+MERGE_ALT="run 'git merge main'"
+msg "$WG" "$(bash_in "$W" "git branch -m main oldmain")"                   "$RENAME_ALT" "branch -m <old> <new> renames another branch"
+msg "$WG" "$(bash_in "$W" "git branch -m other")"                          "$RENAME_ALT" "branch -m to a non-story name"
+msg "$WG" "$(bash_in "$W" "git branch -M story/C1-parser")"                "$RENAME_ALT" "branch -M can overwrite a branch"
+msg "$WG" "$(bash_in "$W" "git branch -c story/C1-parser copy")"           "$REPORT" "branch -c copies a branch"
+msg "$WG" "$(bash_in "$W" "git branch -qf other HEAD")"                    "$REPORT" "branch -qf (bundled force)"
+run "$WG" 0 "$(bash_in "$W" "git branch -m story/B4-cases")"               "near-miss: the worker's own rename to its story name"
+run "$WG" 0 "$(bash_in "$W" "git branch --list")"                          "near-miss: branch --list"
+msg "$WG" "$(bash_in "$W" "git symbolic-ref HEAD refs/heads/main")"        "$REPORT" "symbolic-ref with a write"
+msg "$WG" "$(bash_in "$W" "git send-pack $R main")"                        "$REPORT" "send-pack"
+msg "$WG" "$(bash_in "$W" "git http-push https://example.invalid/r main")" "$REPORT" "http-push"
+run "$WG" 0 "$(bash_in "$W" "git symbolic-ref HEAD")"                      "near-miss: symbolic-ref read"
+msg "$WG" "$(bash_in "$W" "timeout 60 git p")"                             "$ALIAS_ALT" "an alias after timeout <secs>"
+msg "$WG" "$(bash_in "$W" "stdbuf -o0 git p")"                             "$ALIAS_ALT" "an alias after stdbuf"
+msg "$WG" "$(bash_in "$W" "nice -n 10 git p")"                             "$ALIAS_ALT" "an alias after nice -n <n>"
+msg "$WG" "$(bash_in "$W" "true & git p")"                                 "$ALIAS_ALT" "an alias after a lone &"
+msg "$WG" "$(bash_in "$W" "git config alias.p push")"                      "$ALIAS_ALT" "config writes an alias"
+msg "$WG" "$(bash_in "$W" "git config --global --add alias.p push")"       "$ALIAS_ALT" "config --add writes an alias"
+msg "$WG" "$(bash_in "$W" "git config set include.path $TMP/x")"           "$ALIAS_ALT" "config set include.path"
+run "$WG" 0 "$(bash_in "$W" "git config --get alias.p")"                   "near-miss: config reads an alias"
+run "$WG" 0 "$(bash_in "$W" "git config core.pager cat")"                  "near-miss: config sets another key"
+run "$WG" 0 "$(bash_in "$W" "timeout 60 git status 2>&1")"                 "near-miss: timeout git status 2>&1"
+msg "$WG" "$(bash_in "$W" "git -C $CLONE --git-dir=$R/.git update-ref refs/heads/main HEAD")" "$REPORT" \
+  "clone -C with --git-dir on the shared repo"
+msg "$WG" "$(bash_in "$W" "GIT_DIR=$R/.git git -C $CLONE branch -f main HEAD")" "$REPORT" "clone -C with GIT_DIR="
+# Git reads a second -C relative to the first: here `rel` is the shared repo for git, a clone from the worker's cwd.
+mkdir -p "$TMP/dd"; ln -s "$R" "$TMP/dd/rel"; ln -s "$TMP/rel-clone" "$W/rel"
+msg "$WG" "$(bash_in "$W" "git -C $TMP/dd -C rel update-ref refs/heads/main HEAD")" "$REPORT" "two -C options"
+run "$WG" 0 "$(bash_in "$W" "git -C rel update-ref refs/heads/main HEAD")" "near-miss: one -C on the clone"
+rm "$W/rel"
+msg "$WG" "$(bash_in "$W" "python3 backlog.py note B4 -- --dry-run")"     "$FOLLOW" "--dry-run after -- is note text"
+msg "$WG" "$(bash_in "$W" "python3 backlog.py tick B4 done # --dry-run")" "$FOLLOW" "--dry-run in a comment"
+msg "$WG" "$(bash_in "$W" "python3 backlog.py tick --dry-run B4 done > out.txt")" "$FOLLOW" "a dry run with a redirection"
+git -C "$R" branch eval/cases.json 2>/dev/null                            # a branch named like a tracked file
+msg "$WG" "$(bash_in "$W" "git checkout eval/cases.json")"                 "$READ_ALT" "a name that is a branch and a file"
+run "$WG" 0 "$(bash_in "$W" "git checkout -- eval/cases.json")"            "near-miss: the same name after --"
+git -C "$R" branch -D eval/cases.json >/dev/null 2>&1
+run "$WG" 0 "$(bash_in "$W" 'git merge --message="x y" main')"            "near-miss: merge --message=<quoted> main"
+msg "$WG" "$(bash_in "$W" 'git merge --message="x y" story/C1-parser')"   "$REPORT" "merge --message=<quoted> <story>"
+echo x > "$W/sp file.txt"; git -C "$W" add "sp file.txt"; git -C "$W" commit -q -m "sp file"
+run "$WG" 0 "$(bash_in "$W" 'git checkout sp\ file.txt')"                 "near-miss: checkout a tracked file with an escaped space"
+msg "$WG" "$(bash_in "$W" 'git checkout no\ such')"                       "git checkout no such (" \
+  "an escaped space prints as a space"
+msg "$WG" "$(bash_in "$W" "git pull --rebase=true origin main")"           "$MERGE_ALT" "pull --rebase=true"
+msg "$WG" "$(bash_in "$W" "git pull origin main other")"                   "$MERGE_ALT" "pull the base and another branch"
 # Found in the 0.3.4 trial: the orchestrator's shell was still in a worktree after `cd <worktree> && uv run pytest`.
 MERGE="git merge --no-ff story/B4-cases -m 'merge: story B4'"
 run "$WG" 0 "$(jq -nc --arg c "cd $R && $MERGE" --arg d "$W" '{tool_name:"Bash",cwd:$d,tool_input:{command:$c}}')" \

@@ -62,7 +62,7 @@ ALLOW: <comma-separated, or empty>
 COST_CAP_USD: <cost_cap_usd from the config, or 0 for "ask before any paid call">
 PARALLEL: <the other stories in this set, and whether any of them may change a shared resource>
 Setup note: if the base check fails and your HEAD is an ancestor of BASE_SHA, run the bare command
-`git merge --ff-only <base branch>` (the only form worker-guard allows), then the base check again.
+`git merge --ff-only <base branch>` alone (no `-C`, nothing chained), then the base check again.
 
 Story entry:
 <paste the full output of `backlog.py show <ID>`>

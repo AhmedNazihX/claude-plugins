@@ -29,8 +29,8 @@ parallel batch: if the sparse checkout is refused, the branch must not have been
 1. **Check the base.** Run `git merge-base --is-ancestor <BASE_SHA> HEAD`. If it fails, check whether your HEAD is
    simply behind: the harness can create the worktree at `origin/<base>` instead of the local base, when the base
    isn't pushed. If `git merge-base --is-ancestor HEAD <BASE_SHA>` succeeds, run the bare command
-   `git merge --ff-only <base>` (`base_branch` in `.claude/foreman.json`, default `main`; no `-C` and nothing
-   chained: the guard allows only this form), then run the base check again. If it still fails, stop and report
+   `git merge --ff-only <base>` (`base_branch` in `.claude/foreman.json`, default `main`), alone: no `-C`, nothing
+   chained. Then run the base check again. If it still fails, stop and report
    `BLOCKED: wrong base`. With `CONTINUE`, skip this step: step 3 runs the check after the switch.
 2. **Sparse checkout,** only if `DENY` isn't empty. Do this *before* renaming the branch: on a story branch the
    lane guard blocks every `sparse-checkout` command except `list`.

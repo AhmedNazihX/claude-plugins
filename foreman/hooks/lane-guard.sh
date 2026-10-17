@@ -35,9 +35,12 @@ if [ -z "$RULE" ]; then
     "(with the deny list next to it)." >&2; exit 2; }
   ROOT_FOR_BACKLOG=$(git -C "${CWD:-.}" rev-parse --show-toplevel 2>/dev/null)
   # A lookup that fails (a broken backlog.py, a story missing from the backlog) must not switch the lanes off.
-  if ! INFO=$(cd "$ROOT_FOR_BACKLOG" 2>/dev/null && python3 "$BACKLOG_PY" info "$ID" 2>&1); then
-    jq -e '[.lanes // {} | .[] | .deny // [] | length] | add // 0 > 0' "$CONFIG" >/dev/null 2>&1 || exit 0
-    echo "BLOCKED: foreman's lane guard couldn't find story $ID's lane: $(printf '%s' "$INFO" | tail -n 1)." \
+  # Its stderr goes to a file, so a warning on success can't spoil the JSON.
+  ERRF=$(mktemp) || { echo "BLOCKED: foreman's lane guard couldn't make a temp file." >&2; exit 2; }
+  trap 'rm -f "$ERRF"' EXIT
+  if ! INFO=$(cd "$ROOT_FOR_BACKLOG" 2>/dev/null && python3 "$BACKLOG_PY" info "$ID" 2>"$ERRF"); then
+    jq -e '[.lanes // {} | .[] | .deny // [] | length] | (add // 0) > 0' "$CONFIG" >/dev/null 2>&1 || exit 0
+    echo "BLOCKED: foreman's lane guard couldn't find story $ID's lane: $(tail -n 1 "$ERRF")." \
       "Stop and ask the user to fix 'backlog.py info $ID', or to add a rule under .claude/foreman.json › stories.$ID" \
       "(with the deny list next to it)." >&2
     exit 2

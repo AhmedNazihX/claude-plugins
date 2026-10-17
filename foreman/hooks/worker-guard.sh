@@ -7,15 +7,19 @@
 #   - push, rebase, pull (except `git pull <remote> <base>`), merging anything but the base branch (`git merge
 #     <base>` stays allowed: story-finish asks for it to resolve conflicts), moving to another branch or commit,
 #     creating branches (switch/checkout -b/-c/--track/--orphan, stuck forms included, and `worktree add` without
-#     --detach), fetching into a branch (a refspec with a destination), `branch -f` and `update-ref`. One move is
-#     allowed: the bare `git switch story/<ID>-<slug>` from a branch that isn't a story branch, so a relaunched
-#     worker can continue a story (story-start › Continue);
-#   - editing docs/BACKLOG.md (file tools, shell writes, or backlog.py tick / note / set-deps / add without --dry-run);
-#   - aliases: `git -c alias.…`, and any git subcommand git doesn't list (an alias can hide a push).
+#     --detach), fetching into a branch (a refspec with a destination), `branch -f/-c/-M`, `branch -m` except
+#     renaming this branch to a story name, `update-ref`, `symbolic-ref` writes, `send-pack` and `http-push`. One
+#     move is allowed: the bare `git switch story/<ID>-<slug>` from a branch that isn't a story branch, so a
+#     relaunched worker can continue a story (story-start › Continue);
+#   - editing docs/BACKLOG.md (file tools, shell writes, or backlog.py tick / note / set-deps / add without a plain
+#     --dry-run flag);
+#   - aliases: `git -c alias.…`, `git config` writes to alias.* or include*, and any git subcommand git doesn't
+#     list (an alias can hide a push).
 # `git -C <dir>` on a separate clone is checked for push only: the clone's origin can be the shared repo or its
 # remote, while its other refs are its own. On another worktree of the same repo every check applies, since
 # worktrees share refs; there only detaching that worktree's own HEAD is allowed. A `-C` path the guard can't
-# resolve (quoted, or relative after a `cd`) is checked as this worktree, with every check.
+# resolve (quoted, or relative after a `cd`) is checked as this worktree, with every check, and so is any part where
+# the repo is named another way too (--git-dir, --work-tree, a second -C, or GIT_DIR= and the like).
 # Text inside quotes (commit messages, echo) is ignored. The base branch comes from .claude/foreman.json
 # (`base_branch`, default main). Shell checks are best effort.
 
@@ -60,13 +64,16 @@ has_short() {  # has_short <letters>: a short option among them, alone, bundled 
   local a; for a in "${REST[@]}"; do [[ "$a" =~ ^-[a-zA-Z]*[$1] ]] && return 0; done; return 1
 }
 # The words before `git` in a command part: nothing, VAR=value, or a wrapper that runs its arguments as a command.
+# A number (timeout 60) or the word after a short option (nice -n 10, timeout -s KILL) is a wrapper's value.
 is_command_position() {
-  local t
+  local t prev=""
   for t in "$@"; do
     case "$t" in
-      *=* | -* | _q_ | env | command | exec | time | nice | nohup | sudo | xargs | if | then | do | else | while | until | '!' | '{') ;;
-      *) return 1 ;;
+      *=* | -* | _q_ | [0-9]* | env | command | exec | time | timeout | nice | nohup | stdbuf | sudo | xargs | \
+      if | then | do | else | while | until | '!' | '{') ;;
+      *) [[ "$prev" =~ ^-[a-zA-Z]$ ]] || return 1 ;;
     esac
+    prev=$t
   done
 }
 KNOWN=""
@@ -81,11 +88,22 @@ check_alias() {  # check_alias <name=value of a `git -c` or `--config-env`>
   return 0
 }
 
+is_dry_run() {  # is_dry_run <backlog.py call>: --dry-run as a flag, before any `--`, with no comment or redirection
+  local w words
+  [[ "$1" == *[\#\<\>]* ]] && return 1
+  read -ra words <<<"$1"
+  for w in "${words[@]}"; do
+    [ "$w" = -- ] && return 1
+    [ "$w" = --dry-run ] && return 0
+  done
+  return 1
+}
+
 check_backlog_py() {  # backlog.py's writing commands, unless the same call is a dry run
-  local seg writes='[[:space:]](tick|note|set-deps|add)([[:space:]]|$)' dry='[[:space:]]--dry-run([[:space:]]|$)'
+  local seg writes='[[:space:]](tick|note|set-deps|add)([[:space:]]|$)'
   while IFS= read -r seg; do
     [[ "$seg" =~ $writes ]] || continue
-    [[ "$seg" =~ $dry ]] && continue
+    is_dry_run "$seg" && continue
     block "changing the backlog with backlog.py." "$ALT_BACKLOG"
   done <<<"$(printf '%s\n' "$1" | grep -oE 'backlog\.py[^;&|]*')"
 }
@@ -104,10 +122,7 @@ check_switch() {  # switch|checkout, with SUB, REST, TARGETS, GDIR and SCRATCH s
   t=${TARGETS[0]}
   [ "$t" = _q_ ] && block "git $SUB with a quoted argument (the guard can't check it)." "$ALT_RESTORE"
   case "$t" in -* | *@\{-*) block "git $SUB $t (the previous branch; a worker stays on its story branch)." "$ALT_READ" ;; esac
-  if [ "$SUB" = checkout ]; then                               # a path: restoring files is fine
-    { [ -e "$TOP/$t" ] || [ -e "${CWD:-$TOP}/$t" ]; } && return
-    git -C "${CWD:-$TOP}" ls-files --error-unmatch -- "$t" >/dev/null 2>&1 && return
-  fi
+  # A commit or branch first: a name can be both a branch and a file, and without `--` git takes the branch.
   if git -C "$TOP" rev-parse --verify --quiet "$t^{commit}" >/dev/null; then
     # A scratch worktree may check out a commit (detached), never a branch: its commits would move that branch.
     [ -n "$SCRATCH" ] && ! git -C "$TOP" show-ref --verify --quiet "refs/heads/$t" && return
@@ -121,8 +136,36 @@ check_switch() {  # switch|checkout, with SUB, REST, TARGETS, GDIR and SCRATCH s
     fi
     block "git $SUB $t (a worker stays on its story branch)." "$ALT_READ"
   fi
+  if [ "$SUB" = checkout ]; then                               # a path: restoring files is fine
+    { [ -e "$TOP/$t" ] || [ -e "${CWD:-$TOP}/$t" ]; } && return
+    git -C "${CWD:-$TOP}" ls-files --error-unmatch -- "$t" >/dev/null 2>&1 && return
+  fi
   # Neither a file nor a commit: git would guess a branch from a remote one (`origin/<t>`) and create it.
   block "git $SUB $t (not a file or a commit here; git may create a branch from a remote one)." "$ALT_RESTORE"
+}
+
+check_branch() {  # no forcing, copying or force-renaming; -m only renames this branch to a story branch
+  local alt="Rename your own branch with 'git branch -m story/<ID>-<slug>'."
+  if has_short f || has_prefix --force; then block "git branch -f." "$ALT_REPORT"; fi
+  if has_short cC || has_prefix --copy; then block "git branch -c (a copy makes a branch)." "$ALT_REPORT"; fi
+  if has_short M; then block "git branch -M (it can overwrite another branch)." "$alt"; fi
+  has_short m || has_prefix --move || return 0
+  [ "${#TARGETS[@]}" = 1 ] && [[ "${TARGETS[0]}" =~ ^story/[A-Z]{1,3}[0-9]+[a-z]?-[^[:space:]]+$ ]] && return 0
+  block "git branch -m ${TARGETS[*]} (only renaming your own branch to its story name is allowed)." "$alt"
+}
+
+check_config() {  # writing an alias, or an include that could bring one in
+  local t key="" n=${#TARGETS[@]}
+  case "${TARGETS[0]}" in get | list) return 0 ;; esac
+  for t in "${TARGETS[@]}"; do
+    case "$(printf '%s' "$t" | tr '[:upper:]' '[:lower:]')" in alias.* | include.* | includeif.*) key=$t ;; esac
+  done
+  [ -n "$key" ] || return 0
+  case "${TARGETS[0]}" in set | unset) n=$((n - 1)) ;; esac
+  if [ "$n" -ge 2 ] || has_prefix --add || has_prefix --replace-all; then
+    block "git config $key (an alias can hide any git command)." "$ALT_ALIAS"
+  fi
+  return 0
 }
 
 check_worktree() {  # `git worktree add` only for a detached scratch copy
@@ -150,12 +193,15 @@ check_git_part() {
   is_command_position "${T[@]:0:$i}" && at_cmd=1
   i=$((i + 1))
   GDIR=""
+  local override=$REDIRECTED                                 # the repo is named some other way than one -C
   while [ $i -lt ${#T[@]} ]; do
     case "${T[$i]}" in
-      -C) GDIR=${T[$((i + 1))]//_s_/ }; i=$((i + 2)) ;;
+      -C) [ -n "$GDIR" ] && override=1; GDIR=${T[$((i + 1))]//_s_/ }; i=$((i + 2)) ;;
       -c | --config-env) check_alias "${T[$((i + 1))]}"; i=$((i + 2)) ;;
       --config-env=*) check_alias "${T[$i]#--config-env=}"; i=$((i + 1)) ;;
-      --git-dir | --work-tree | --namespace | --super-prefix) i=$((i + 2)) ;;
+      --git-dir | --work-tree) override=1; i=$((i + 2)) ;;
+      --git-dir=* | --work-tree=*) override=1; i=$((i + 1)) ;;
+      --namespace | --super-prefix) i=$((i + 2)) ;;
       -*) i=$((i + 1)) ;;
       *) break ;;
     esac
@@ -171,7 +217,7 @@ check_git_part() {
     elif [ -z "$CDED" ]; then rdir="${CWD:-$TOP}/$GDIR"      # after a `cd`, a relative path is unknown here
     fi
   fi
-  if [ -n "$rdir" ]; then
+  if [ -n "$rdir" ] && [ -z "$override" ]; then
     gtop=$(git -C "$rdir" rev-parse --show-toplevel 2>/dev/null)
     gbr=$(git -C "$rdir" rev-parse --abbrev-ref HEAD 2>/dev/null)
     if [ -n "$gtop" ] && [[ "$gtop" != */.claude/worktrees/* ]] && [[ ! "$gbr" =~ ^story/ ]] && [ "$gtop" != "$MAIN" ]; then
@@ -196,8 +242,9 @@ collect_targets() {  # TARGETS: the positional arguments in REST; for merge and 
     case "$SUB:$a" in
       merge:-m | merge:-X | merge:-s | merge:-F | merge:--strategy | merge:--strategy-option | merge:--file | \
       merge:--message | merge:--into-name | pull:-X | pull:-s | pull:--strategy | pull:--strategy-option) skip=1 ;;
+      *:-*=) skip=1 ;;                                      # --message="x y" reads as `--message= _q_`
       *:-?* | *:--) ;;
-      *) TARGETS+=("$a") ;;
+      *) TARGETS+=("${a//_s_/ }") ;;
     esac
   done
 }
@@ -207,9 +254,14 @@ check_sub() {  # the subcommand's own checks, with SUB, REST and TARGETS set
   case "$SUB" in
     push) block "git push." "$ALT_REPORT" ;;
     rebase) block "git rebase (story branches are merged, never rebased)." "$ALT_REPORT" ;;
-    update-ref) block "git update-ref." "$ALT_REPORT" ;;
+    update-ref | send-pack | http-push) block "git $SUB." "$ALT_REPORT" ;;
+    symbolic-ref)
+      if [ "${#TARGETS[@]}" -ge 2 ] || has_short d || has_prefix --delete; then
+        block "git symbolic-ref with a write." "$ALT_REPORT"
+      fi ;;
+    config) check_config ;;
     pull)
-      if has_opt --rebase || has_opt -r || [ "${#TARGETS[@]}" -lt 2 ] || [ "${TARGETS[1]}" != "$BASE" ]; then
+      if has_prefix --rebase || has_short r || [ "${#TARGETS[@]}" -ne 2 ] || [ "${TARGETS[1]}" != "$BASE" ]; then
         block "git pull." "To take the base branch in, run 'git merge $BASE'."
       fi ;;
     merge)
@@ -217,8 +269,7 @@ check_sub() {  # the subcommand's own checks, with SUB, REST and TARGETS set
       for a in "${TARGETS[@]}"; do
         [ "$a" = "$BASE" ] || [ "$a" = "origin/$BASE" ] || block "git merge $a (only 'git merge $BASE' is allowed, to resolve conflicts)." "$ALT_REPORT"
       done ;;
-    branch)
-      if has_opt -f || has_opt --force; then block "git branch -f." "$ALT_REPORT"; fi ;;
+    branch) check_branch ;;
     fetch) check_fetch ;;
     worktree) check_worktree ;;
     switch | checkout) check_switch ;;
@@ -241,9 +292,12 @@ case "$TOOL" in
     fi
     SWITCHED=""
     CDED=""
+    REDIRECTED=""   # GIT_DIR and the like point git at a repo other than the -C path
+    [[ "$CMD" =~ (^|[^A-Za-z0-9_])GIT_(DIR|WORK_TREE|COMMON_DIR)= ]] && REDIRECTED=1
+    # Parts: split on && || ; | ( ) ` and a lone & (not the & of 2>&1 or &>).
     while IFS= read -r part; do
       check_git_part "$part"
-    done <<<"$(printf '%s\n' "$CMD" | sed -E 's/(\&\&|\|\||;|\||\(|\)|`)/\n/g')"
+    done <<<"$(printf '%s\n' "$CMD" | sed -E 's/(\&\&|\|\||;|\||\(|\)|`)/\n/g; s/([^>])&([^>]|$)/\1\n\2/g')"
     ;;
 esac
 exit 0
