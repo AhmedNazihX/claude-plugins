@@ -15,12 +15,8 @@ from accio_lib import config, cost, paths, story  # noqa: E402
 
 def budgets_for(accio, story_ids):
     settings = config.load(accio)["budgets"]
-    found = {}
-    for story_id in story_ids:
-        parsed = story.parse(accio / "stories" / f"{story_id}.md")
-        track = "quick" if parsed.meta["track"] == "quick" else "story"
-        found[story_id] = parsed.meta.get("budget_tokens", settings[track])
-    return found
+    return {story_id: cost.budget_for(story.parse(accio / "stories" / f"{story_id}.md"), settings)
+            for story_id in story_ids}
 
 
 def main(argv=None):

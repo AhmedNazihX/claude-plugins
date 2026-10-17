@@ -131,6 +131,12 @@ def story_tokens(run_dirs, story_ids):
     return {**result, "_unattributed": unattributed, "_unattributed_unknown": unattributed_unknown}
 
 
+def budget_for(parsed, budgets):
+    """A story's token budget: its own `budget_tokens`, else config `budgets` for its track (a feature uses the
+    story budget)."""
+    return parsed.meta.get("budget_tokens", budgets["quick" if parsed.meta["track"] == "quick" else "story"])
+
+
 def report(run_dirs, budgets):
     """Per-story tokens against budgets, the iteration total, and whether anything is unknown."""
     totals = story_tokens(run_dirs, tuple(budgets))

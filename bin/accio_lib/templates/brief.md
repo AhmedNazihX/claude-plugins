@@ -9,7 +9,7 @@ $notes
 - Start every Bash command that touches files with `cd $worktree_q &&`, or use `git -C $worktree_q`.
 - Work test-first. Tag every test with the DoD line it proves (for example `$story_id/1` in its name or a comment).
 - Make small checkpoint commits as you go.
-- Write your report to `$report`.
+- Write your report to `$report`, with these short sections: $report_sections (the review summary quotes them).
 
 ## Definition of Done
 $dod

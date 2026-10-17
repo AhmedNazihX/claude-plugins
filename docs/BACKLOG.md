@@ -25,7 +25,7 @@ evals/                       scripts/publish.py
 | done | S-007 `accio-brief` |
 | done | S-008 `accio-merge` |
 | done | S-009 `accio-cost` |
-| todo | S-010 `accio-summary` |
+| done | S-010 `accio-summary` |
 | done | S-011 Secret patterns and `pre-commit` |
 | todo | S-012 `accio-hooks`: install, chain, verify, `pre-push` |
 | todo | S-013 `protego` |
@@ -168,10 +168,15 @@ the report is partial (S-019 note).
 ### S-010 · `accio-summary`
 Deps: S-004, S-009 · Files: `bin/accio-summary`, `bin/accio_lib/summary.py`, `tests/test_summary.py`
 Context: DESIGN § 3.5, § 7.2.
-- [ ] S-010/1 WHEN a run ends THE SYSTEM SHALL write `run/owl.md` with, per READY story: what changed, how to try it, risks, token cost
-- [ ] S-010/2 WHEN a story is BLOCKED THE SYSTEM SHALL include its one question
-- [ ] S-010/3 WHEN a story has a stacked parent THE SYSTEM SHALL say that accepting it requires the parent
-- [ ] S-010/4 WHEN the summary is written THE SYSTEM SHALL keep it within about 150 tokens per story
+- [x] S-010/1 WHEN a run ends THE SYSTEM SHALL write `run/owl.md` with, per READY story: what changed, how to try it, risks, token cost
+- [x] S-010/2 WHEN a story is BLOCKED THE SYSTEM SHALL include its one question
+- [x] S-010/3 WHEN a story has a stacked parent THE SYSTEM SHALL say that accepting it requires the parent
+- [x] S-010/4 WHEN the summary is written THE SYSTEM SHALL keep it within about 150 tokens per story
+Outcome: owl.md reads the three report sections both briefs ask for (any case, `##`/`###`, optional `:`;
+subsections stay inside, headings in code fences ignored, CommonMark fence closing); section length comes from the
+room left under 150 tokens (worst case measured at exactly 150); stacked children name parents to accept and the
+ones not yet in review; missing, unreadable and blank files are told apart. `cost.budget_for` is shared with
+`accio-cost`; `--run` is required. Two review rounds.
 
 ### S-011 · Secret patterns and `pre-commit`
 Deps: S-003 · Files: `bin/accio_lib/secret_scan.py` (not `secrets.py`, which would read like Python's own module), `tests/test_secret_scan.py`
