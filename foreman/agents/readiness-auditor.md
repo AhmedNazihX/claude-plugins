@@ -30,12 +30,16 @@ Run every step, whatever the prompt focuses on: a prompt adds focus, it never na
 
 0. **Record the main checkout's state** (compare it at the end):
    - `git -C <main> status --porcelain`;
-   - `git -C <main> status --porcelain --ignored -uall -- <paths>` (`-uall` lists each file; without it a wholly
-     ignored folder is one line, `!! data/`, and a new file inside it goes unseen), where `<paths>` are the `link_files` entries and
-     the folders under `<main>` that `env` values name. Ignored files are left out of plain `status`, and a
-     check can write into them through a link or an `env` path. This lists file names only: never read, list the
-     contents of, or hash a `link_files` entry.
-   With no `link_files` and no `env` path under `<main>`, skip the second command.
+   - `git -C <main> status --porcelain --ignored -- <link_files entries>`, without `-uall`: it shows whether each
+     entry exists, never the names inside a folder entry (`secrets/`, `.aws/`). Never read, list the contents of,
+     or hash a `link_files` entry.
+   - For each folder under `<main>` that an `env` value names, one command that prints only a count and a hash of
+     the file names, never the listing (a data or cache folder can hold thousands of files):
+     `git -C <main> status --porcelain --ignored -uall -- "<folder>" | tee >(wc -l >&2) | shasum`.
+     `-uall` is needed: without it a wholly ignored folder is one line, `!! data/`, and a new file inside it goes
+     unseen.
+   Ignored files are left out of plain `status`, and a check can write into them through a link or an `env` path.
+   Skip the second command with no `link_files`, and the third with no `env` folder under `<main>`.
 
 1. **Make the scratch worktree.** Run `mktemp -d` on its own and note the path it prints; each Bash call is a fresh
    shell, so use that literal path (`<S>` below is `<that path>/scratch`) in every later command, never a variable.
@@ -88,8 +92,9 @@ Run every step, whatever the prompt focuses on: a prompt adds focus, it never na
      nothing is **FRICTION**: name the story, the pointer and the closest heading. Don't read the design or the
      backlog whole; a hook may block a long `.md` file.
 
-6. **Compare the main checkout:** run both step 0 commands again; each must equal its step 0 output. If one
-   doesn't, say what changed (a check that creates or deletes files in the main checkout, through a link or an
+6. **Compare the main checkout:** run the step 0 commands again; each output (for an `env` folder, its count and
+   hash) must equal its step 0 output. If one doesn't, say what changed, naming the `env` folder whose count or
+   hash moved (a check that creates or deletes files in the main checkout, through a link or an
    `env` path, is **FRICTION**). This sees new and removed files only: a check that changes an existing ignored
    file in place (a linked `.env`, a database under an `env` folder) is not detected, so say that in the report
    when `link_files` or `env` paths exist.
