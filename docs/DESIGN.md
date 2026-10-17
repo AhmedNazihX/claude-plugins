@@ -247,7 +247,7 @@ The build itself is the workflow `/accio:brew` (§ 4.3), not a skill.
 | `auror` | security reviewer (risky paths) | Sonnet | same as examiner | same |
 | `headmaster` | judge | Sonnet | read-only plus Write to the ledger | `{ruling | question}` |
 | `quill` | writes story files from the design (in `sort`) | Sonnet | Read, Write to `.accio/stories/` | `stories: N · summary: <path>` |
-| `librarian` (v1.1) | doc lookups, quotes only | Haiku | Read, Grep | quotes with `file:line` |
+| `librarian` | doc lookups, quotes only | Haiku | Read, Grep | quotes with `file:line` |
 
 ### 4.3 Workflow
 - `workflows/brew.js`: the § 3.4 pipeline, invoked as `/accio:brew`.
@@ -264,7 +264,7 @@ them.
 | `fidelius` | PreToolUse Write/Edit | blocks key-shaped values; never echoes the secret; test fixtures build fake keys at runtime by concatenation, so they need no exemption |
 | `boundary` | PreToolUse Write/Edit | inside an accio worktree, blocks writes outside that worktree; the one exception is `.accio/run/<ID>/` in the main repo |
 | `session-start` | SessionStart | injects ≤ 10 lines: the board summary, the next step and the plain-words rule (plugins can't ship rules); points to `brew-by-hand` when workflows are off |
-| `doc-size` (v1.1) | PreToolUse Read | blocks a whole-file read of `.md` files over 40 KB and points to `librarian`, or to reading by section with offset/limit |
+| `doc-size` | PreToolUse Read | blocks a whole-file read of `.md` files over 40 KB and points to `librarian`, or to reading by section with offset/limit |
 
 ### 4.5 Native git hooks
 `accio` installs these into each project with `bin/accio-hooks install`, which is run by `wand` or on first `brew`:
@@ -460,8 +460,8 @@ Next: /accio:owl
 - **Scripts:** `unittest`, with fixtures. These cover stacking in `ready --json`, the `dropped` status, the
   DoD-tag check, and `accio-merge` finding the breaking story.
 - **Hooks:** payload tests that pipe JSON in and expect exit 2 or a pass. They cover the safe-alternative text, a
-  secret-shaped value that must never be echoed, `boundary`'s one exception, and a silent exit in a repo without
-  `.accio/`.
+  secret-shaped value that must never be echoed, `boundary`'s one exception, `doc-size`'s 40 KB limit, and a
+  silent exit in a repo without `.accio/`.
 - **Native git hooks:** tests in a temp repo with a staged fake key, a force-push to a local bare remote, a push to
   base with and without `CLAUDECODE=1` and the token, and chaining into a husky-style hooks folder.
 - **Workflow:** `brew.js` runs with a stubbed `agent()`. Tests cover the cap of 2 rounds, a timeout turning into
@@ -475,11 +475,11 @@ Next: /accio:owl
 
 ## 10. v1 scope (decisions 001 and 009)
 
-**In v1** (about 24–25 stories):
+**In v1** (about 27 stories):
 - the skills `wand`, `sort`, `prophecy`, `owl`, `map` and `vow`
 - the workflow `workflows/brew.js`
-- every agent except `librarian`
-- the hooks `protego`, `fidelius`, `boundary` and `session-start`
+- every agent
+- the hooks `protego`, `fidelius`, `boundary`, `doc-size` and `session-start`
 - the native git hooks, with chaining and `verify`
 - the scripts except the `pensieve` metrics
 - `brew-by-hand`, only if spike S-001 needs it
@@ -487,7 +487,6 @@ Next: /accio:owl
 **In v1.1:**
 - `telescope` (decision 008)
 - `reparo` and `lumos`
-- `doc-size` with `librarian`
 - the plain output style
 
 **In v2:**

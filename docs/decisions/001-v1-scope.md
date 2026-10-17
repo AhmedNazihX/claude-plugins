@@ -25,7 +25,9 @@ follows as later iterations.
 
 ## Amendment (2026-10-17, design grilling, decision 009)
 - **Recount:** the design had grown to about 31 v1 stories, close to option B's size.
-- **Moved to v1.1:** `telescope`, `reparo`, `lumos`, `doc-size` with `librarian`, and the plain output style.
+- **Moved to v1.1:** `telescope`, `reparo`, `lumos`, and the plain output style.
+- **Kept in v1:** `doc-size` with `librarian`. `analysis.md` §2.3 and §3.1 list them among foreman's lessons that
+  worked, so cutting them would be a step back.
 - **Conditional:** `brew-by-hand` is built only if spike S-001 needs it.
-- **v1 is now about 24–25 stories.** It keeps the whole loop: `wand` (with `wandmaker`), `sort`, `prophecy`,
-  `brew`, `owl`, `map`, `vow`, plus the safety layer.
+- **v1 is now about 27 stories** (the backlog count). It keeps the whole loop: `wand` (with `wandmaker`), `sort`,
+  `prophecy`, `brew`, `owl`, `map`, `vow`, plus the safety layer and `doc-size`.

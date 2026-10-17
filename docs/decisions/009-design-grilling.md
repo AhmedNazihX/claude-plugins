@@ -64,14 +64,15 @@ in Claude Code's Bash tool on 2026-10-17. The spike checks it inside workflow ag
 Commits). The checkpoint commits are kept. `git log --first-parent` shows one line per story. Undo is
 `git revert -m 1 <merge>`.
 
-**v1 size: about 24–25 stories.** These move to v1.1:
+**v1 size: about 27 stories.** These move to v1.1:
 - `telescope` (amends 008)
 - `reparo`
 - `lumos`
-- `doc-size` with `librarian`
 - the plain output style
 
 `brew-by-hand` is built only if spike S-001 shows it is needed. `wand` keeps `wandmaker`'s 2–3 options.
+`doc-size` with `librarian` was first moved to v1.1 too, then kept in v1. A check against `analysis.md` §2.3 and
+§3.1 showed that cutting it was a step back from a foreman lesson that worked.
 
 **How accio is built.** By hand, in plain Claude sessions, from a lean `docs/BACKLOG.md`: about 25 stories in
 build order, each with deps, files and numbered EARS DoD lines. No lanes, waves or critical path. There is no
@@ -91,7 +92,7 @@ foreman story workflow and no dogfood cutover.
 | Confinement | guard + snapshot | either alone: no backstop if hooks don't fire in workflow agents, or detection without prevention |
 | `pre-push` | only Claude | everyone: trains the user to type `--no-verify`; force-push only: breaks "pushing always asks" (005) |
 | Merge style | merge commit | squash: breaks `git branch -d` and stacked children; rebase + ff: 40–80 wip commits per iteration |
-| v1 size | cut add-ons (~25) | everything (~31): close to 001's rejected option B; light `wand`: saves ~2 stories but drops the options step |
+| v1 size | cut add-ons, keep `doc-size` (~27) | everything (~31): close to 001's rejected option B; light `wand`: saves ~2 stories but drops the options step |
 | Build accio | by hand | foreman only, or foreman then accio: the user's choice |
 
 Story counts and token figures are Claude's rough estimates, not measurements.

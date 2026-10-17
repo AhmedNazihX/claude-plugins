@@ -32,6 +32,7 @@ evals/                       scripts/publish.sh
 | todo | S-014 `fidelius` |
 | todo | S-015 `boundary` |
 | todo | S-016 `session-start` |
+| todo | S-028 `doc-size` and `librarian` |
 | todo | S-017 Build agents: `portkey`, `house-elf`, `prefect` |
 | todo | S-018 Review agents and findings template |
 | todo | S-019 `brew.js`: load, prepare, implement, check, outcome |
@@ -182,6 +183,15 @@ Context: DESIGN § 4.4, § 10 (workflows off).
 - [ ] S-016/1 WHEN the repo has `.accio/` THE SYSTEM SHALL inject at most 10 lines: board summary, next step, plain-words rule
 - [ ] S-016/2 WHEN workflows are disabled THE SYSTEM SHALL say so and point to `/accio:brew-by-hand`
 - [ ] S-016/3 WHEN the repo has no `.accio/` THE SYSTEM SHALL print nothing
+
+### S-028 · `doc-size` and `librarian`
+Deps: S-013 · Files: `hooks/doc_size.py`, `hooks/hooks.json`, `agents/librarian.md`, `tests/test_doc_size.py`
+Context: DESIGN § 4.2, § 4.4; `analysis.md` § 2.3 (foreman's `doc-guard` and `doc-reader`). Built here, after
+S-016, but numbered last because it was added later.
+- [ ] S-028/1 WHEN Read targets a `.md` file over 40 KB with no offset or limit THE SYSTEM SHALL exit 2 and point to `librarian` or to reading by section
+- [ ] S-028/2 WHEN the read has an offset or limit, or the file is 40 KB or less THE SYSTEM SHALL allow it
+- [ ] S-028/3 WHEN the repo has no `.accio/` THE SYSTEM SHALL exit 0 silently
+- [ ] S-028/4 (no test) `librarian` runs on Haiku with Read and Grep only, and returns quotes with `file:line`
 
 ### S-017 · Build agents: `portkey`, `house-elf`, `prefect`
 Deps: S-007, S-006, S-015 · Files: `agents/{portkey,house-elf,prefect}.md`, `bin/accio_lib/checks.py`, `tests/test_checks.py`
