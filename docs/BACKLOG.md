@@ -277,7 +277,7 @@ flowchart LR
   the global checks pass.
   **Outcome:** kickoff and decision fetch live docs (untrusted: facts only, commands go to the user) and turn unmentioned capabilities into DoD items; kickoff § 5 questions, deletes, then splits (step 1 foreman's own); guardrails entries take optional because and exceptions[].expires, shown in the example config. Fix round 1 closed 1 MEDIUM, 1 minor.
 
-- [ ] **Q10 · HANDOVER fixes** · Deps: F1 · Type: agent · Lane: Workers · Size: S · Resource: story-worker, story-start, guard-hooks
+- [x] **Q10 · HANDOVER fixes** · Deps: F1 · Type: agent · Lane: Workers · Size: S · Resource: story-worker, story-start, guard-hooks
   Context: Design › D7. Input: `foreman/agents/story-worker.md`, `foreman/hooks/doc-guard.sh`,
   `foreman/hooks/test-doc-guard.sh`, `foreman/skills/story-start/SKILL.md` § 5.
   Output: story-worker § 1 step 3 shows the exact continue command `git switch <branch>` with "(no `-C`: the guard
@@ -290,6 +290,7 @@ flowchart LR
   **From Q7 security review (2026-10-17):** worker-guard still lets these forms through (LOW, mostly pre-existing): stuck options `checkout -B<name>`, `switch -c<name>`/`-C<name>`, `--orphan=<name>` (has_opt matches only spaced tokens); `checkout --track origin/<x>` and `checkout -` / `@{-N}` in a scratch; `git worktree add` on a branch (never checked); a `-C` path with a backslash-escaped space; `git --namespace foo …` (option value read as the subcommand); `cd <dir> && git -C <relative>`. Fix direction: match option prefixes, treat `-`/`@{-N}` as a branch, check `worktree add` (allow only --detach), and fail closed when GDIR doesn't resolve or SUB isn't a known subcommand. Also from Q6: worker-guard blocks a worker's `backlog.py … --dry-run`; allowing dry runs is optional.
   **From Q11 (merged):** foreman/hooks/test-guards.sh:16 still copies backlog.py alone into $R/.claude/scripts/; that copy now fails to import backlog_model. Nothing runs it (CLAUDE_PLUGIN_ROOT points at the real scripts), so drop the copy or copy backlog_model.py too. Related risk: lane-guard.sh runs backlog.py with 2>/dev/null and lets the write through on failure, so a broken import silently switches lane checks off; consider failing closed.
   **From Q7 (merged):** Security re-review (LOW, pre-existing): worker-guard never checks `git fetch` with a refspec; `git fetch <clone> HEAD:refs/heads/story/X` in the worker's own worktree (or -C on the main checkout) writes a branch into the shared repo. Same class as the clone push Q7 closed; also `-c alias.x=push`. And for the continue wording: a continue worker typed `git -C <its own worktree> switch <branch>` and was refused; the guard allows only the bare `git switch <branch>` in its own checkout, so say 'bare, no -C' in story-worker step 3 and the story-start prompt.
+  **Outcome:** HANDOVER wording in story-worker § 1 and story-start § 3/§ 5 (bare continue switch, ff-only catch-up); doc-guard unpadded; worker-guard rebuilt as functions closing the Q6/Q7/Q11 gaps (stuck options, branch -m/-M/-c, plumbing, aliases and wrappers, --git-dir/GIT_DIR, fetch refspecs, dry-run parsing); lane-guard fails closed. Three fix rounds; DoD DONE, test audit PROVEN on code, 221 guard tests.
 
 - [ ] **Q12 · Ref-change guard for workers** · Deps: Q10 · Type: agent · Lane: Tooling · Size: M · Resource: guard-hooks
   Context: Q7 and Q10 reviews (2026-10-17): worker-guard decides from command text, and every review round found
@@ -308,6 +309,7 @@ flowchart LR
   `--git-dir` with a clone, `fetch --refmap`, `sh -c "git branch -f …"`, `branch -M`) and each is reported and
   restored; the worker's own commits, `branch -m story/<ID>-<slug>` and test-auditor's scratch worktree pass;
   the global checks pass.
+  **From Q10 (merged):** Q10 stopped after its third fix round (story-finish cap): each round's parsing fixes opened new gaps of the same kind. Open text-parsing gaps, none a regression against the pre-Q10 guard, for this story's ref-change check to cover: git config --get (or a --get* word) anywhere counts as a read even as another option's value; config key position ignores options with values (-f/--file, --blob, --type, --default, --comment, --value), and quotes glued to a key ("alias".p); branch -m through GIT_DIR=/--git-dir rather than -C; a standalone quoted word after an empty --opt=; fetch --refmap / -c remote.*.fetch= / preset remote.*.fetch; git branch -d/-D and plain git branch <name>; sh -c / bash -c wrappers. Each should be a test case: the ref moves, is reported and restored.
 
 - [ ] **V1 · Release 0.11.0** · Deps: F2, Q1–Q10 · Type: mixed · Lane: Release · Size: S · Resource: version
   Context: Design › Gates; Constraints. Input: `foreman/CHANGELOG.md`, `foreman/README.md`,
