@@ -93,7 +93,7 @@ relevant passages, and `doc-guard.sh` blocks reading one whole past the config's
 | Skills | `next`, `kickoff`, `work-breakdown`, `setup`, `guardrails`, `status`, `story-start` (with `--continue`), `story-finish`, `decision`, `handover` |
 | Agents | `story-worker`, `dod-verifier`, `diff-reviewer`, `security-reviewer`, `test-auditor`, `lane-auditor`, `backlog-reviewer`, `doc-reader`, `ci-watcher` |
 | Hooks | `gate.sh` (nothing under a path until a given file is committed), `lane-guard.sh` (a lane never sees its denied folders), `worker-guard.sh` (a worker never pushes, rebases, merges another branch, moves to another branch or edits the backlog; its one allowed move is `git switch` onto a story branch when continuing), `format.sh` (formats edited files with the project's formatter), `doc-guard.sh` (no whole `Read` of a long `.md` file) |
-| Scripts | `backlog.py` (check, plan, status, show, deps, info, tick, note, set-deps, add, graph), `workers.py` (record, set, list, show, forget, context) |
+| Scripts | `backlog.py` (check, plan, status, show, deps, info, tick, note, set-deps, add, graph; `--json` on status, plan and deps; `--dry-run` on writes), `workers.py` (record, set, list, show, forget, context), `lint.py` (frontmatter, references, hooks, links, imports, versions) |
 
 Each project keeps only its own facts: `docs/DESIGN.md`, `docs/BACKLOG.md`, `docs/decisions/`,
 `.claude/foreman.json`, and any project-specific skills, agents and rules.
@@ -120,10 +120,23 @@ bash hooks/test-doc-guard.sh              # doc guard hook
 claude plugin validate .
 ```
 
+A GitHub Actions workflow (`.github/workflows/test.yml`) runs the same checks on every push and pull request.
+
 ## Version
 
-0.10.1. See [CHANGELOG.md](CHANGELOG.md), which also has the migration steps for projects that used the plugin under
-its old name, `story-workflow`.
+0.11.0. What changed for you in this release:
+
+- **Reviews.** Every reviewer sees the story's backlog entry. Findings are sorted into Act on, Consider and
+  Dismissed; only you drop or defer one, and a major finding is never deferred.
+- **`backlog.py`.** `--json` output, a `--help` for each command, `--dry-run` on every write, and a repeated `tick`
+  or `note` does no harm.
+- **Guards.** Every BLOCKED message ends with the way through. `worker-guard` refuses many more forms of git
+  command, git aliases among them, and `lane-guard` blocks a story branch whose story it can't look up in the backlog, when a lane has a
+  deny list.
+- **CI.** A GitHub Actions workflow runs the checks, including the new `lint.py`, on every push and pull request.
+
+See [CHANGELOG.md](CHANGELOG.md) for the full list and the upgrade notes. It also has the migration steps for
+projects that used the plugin under its old name, `story-workflow`.
 
 ## Credits
 
