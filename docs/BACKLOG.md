@@ -30,7 +30,7 @@ evals/                       scripts/publish.sh
 | todo | S-012 `accio-hooks`: install, chain, verify, `pre-push` |
 | todo | S-013 `protego` |
 | todo | S-014 `fidelius` |
-| todo | S-015 `boundary` |
+| todo | S-015 `curfew` |
 | todo | S-016 `session-start` |
 | todo | S-028 `doc-size` and `librarian` |
 | todo | S-017 Build agents: `portkey`, `house-elf`, `prefect` |
@@ -173,8 +173,8 @@ Context: DESIGN § 4.4, § 6.
 - [ ] S-014/1 WHEN Write/Edit content holds a reported secret THE SYSTEM SHALL exit 2 without echoing the value
 - [ ] S-014/2 WHEN the repo has no `.accio/` THE SYSTEM SHALL exit 0 silently
 
-### S-015 · `boundary`
-Deps: S-013 · Files: `hooks/boundary.py`, `hooks/hooks.json`, `tests/test_boundary.py`
+### S-015 · `curfew`
+Deps: S-013 · Files: `hooks/curfew.py`, `hooks/hooks.json`, `tests/test_curfew.py`
 Context: DESIGN § 4.4, § 6; decision 009.
 - [ ] S-015/1 WHEN the session runs in an accio worktree and Write/Edit targets a path outside it THE SYSTEM SHALL exit 2 naming the allowed folder
 - [ ] S-015/2 WHEN the target is `.accio/run/<ID>/` of that story THE SYSTEM SHALL allow it

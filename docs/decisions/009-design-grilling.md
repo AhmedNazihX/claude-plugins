@@ -50,11 +50,13 @@ cannot be tested is marked `(no test)` and skipped. `examiner` judges only wheth
 its line.
 
 **Worktree confinement: a guard and a snapshot.**
-- A `PreToolUse` Write/Edit hook, `boundary`, blocks writes outside the current accio worktree. The one exception
+- A `PreToolUse` Write/Edit hook, `curfew`, blocks writes outside the current accio worktree. The one exception
   is `.accio/run/<ID>/` in the main repo.
 - `prefect` snapshots the main checkout's `git status` before and after each story. A change sends the story to
   Blocked, with the list of changed files.
 - Accepted gap: shell writes outside the main checkout (the stance of decision 004).
+- Name: `curfew` (students stay in their dorms after hours, and prefects enforce it). `ward` was turned down
+  because it is one letter from `wand`.
 
 **`pre-push` guards by where and when.** A push to base without a valid `owl` token is blocked:
 1. **during a `brew` run, from anyone.** The run holds `run/brew.lock`, refreshed on every status move and stale

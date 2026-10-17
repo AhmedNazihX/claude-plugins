@@ -240,7 +240,7 @@ The build itself is the workflow `/accio:brew` (§ 4.3), not a skill.
 | `seeker` | researcher (live docs and code facts in `wand`; better ways via `telescope` in v1.1) | Sonnet | Read, Grep, Glob, WebSearch, WebFetch | `findings: <path>` |
 | `wandmaker` | architect, 2–3 options | Opus | read-only | `options: <path>` |
 | `portkey` | worktree and brief | Haiku | Bash (scripts only) | `{worktree, brief, base}` |
-| `house-elf` | implementer | Sonnet / Opus | all, inside its worktree (enforced by `boundary`, § 4.4) | `{status, head, report}` |
+| `house-elf` | implementer | Sonnet / Opus | all, inside its worktree (enforced by `curfew`, § 4.4) | `{status, head, report}` |
 | `prefect` | checks, ledger, DoD tags, main snapshot | Haiku | Bash | `{pass, failing[], skipped}` |
 | `examiner` | spec reviewer and backlog checker | Sonnet | read-only plus Write to its findings path | `{verdict, counts, path}` |
 | `professor` | quality reviewer | Sonnet | same as examiner | same |
@@ -262,7 +262,7 @@ them.
 |---|---|---|
 | `protego` | PreToolUse Bash | blocks a short list: `reset --hard`, `clean -f`, `rm -rf` outside the repo, `--no-verify`, `core.hooksPath` changes, force branch delete (`-D`; `-d` is allowed because git refuses it on unmerged branches), `unset CLAUDECODE` / `env -u CLAUDECODE`; every block names the safe alternative; defers to dcg if installed |
 | `fidelius` | PreToolUse Write/Edit | blocks key-shaped values; never echoes the secret; test fixtures build fake keys at runtime by concatenation, so they need no exemption |
-| `boundary` | PreToolUse Write/Edit | inside an accio worktree, blocks writes outside that worktree; the one exception is `.accio/run/<ID>/` in the main repo |
+| `curfew` | PreToolUse Write/Edit | inside an accio worktree, blocks writes outside that worktree; the one exception is `.accio/run/<ID>/` in the main repo |
 | `session-start` | SessionStart | injects ≤ 10 lines: the board summary, the next step and the plain-words rule (plugins can't ship rules); points to `brew-by-hand` when workflows are off |
 | `doc-size` | PreToolUse Read | blocks a whole-file read of `.md` files over 40 KB and points to `librarian`, or to reading by section with offset/limit |
 
@@ -382,7 +382,7 @@ A missing key falls back to its default.
 | `pre-push` (native) | force-push by anyone; a push to base without the one-time `owl` token during a run, from a story worktree, or by Claude (§ 4.5) | `--no-verify` (blocked); outside a run, Claude deliberately unsetting `CLAUDECODE` in the main chat (accepted: the user is watching, and `protego` warns) |
 | `protego` (Claude) | a short destructive list, early with an alternative | wrapping the command (accepted: the git hooks are the wall) |
 | `fidelius` (Claude) | secret values in Write/Edit | — |
-| `boundary` (Claude) | Write/Edit outside the agent's worktree | shell writes (accepted; the main snapshot catches those in the main checkout) |
+| `curfew` (Claude) | Write/Edit outside the agent's worktree | shell writes (accepted; the main snapshot catches those in the main checkout) |
 | main snapshot (`prefect`) | any change to the main checkout during a story | — |
 | remote check (`prefect`) | a push to base that got past every hook during a story | — |
 | One-time override | — | a block during a build makes the agent return BLOCKED with `needs override: <command>`; the question comes up at `owl`; a grant writes `run/overrides.json` (command, folder, 24 h expiry, 1 use) |
@@ -467,7 +467,7 @@ Next: /accio:owl
 - **Scripts:** `unittest`, with fixtures. These cover stacking in `ready --json`, the `dropped` status, the
   DoD-tag check, and `accio-merge` finding the breaking story.
 - **Hooks:** payload tests that pipe JSON in and expect exit 2 or a pass. They cover the safe-alternative text, a
-  secret-shaped value that must never be echoed, `boundary`'s one exception, `doc-size`'s 40 KB limit, and a
+  secret-shaped value that must never be echoed, `curfew`'s one exception, `doc-size`'s 40 KB limit, and a
   silent exit in a repo without `.accio/`.
 - **Native git hooks:** tests in a temp repo with a staged fake key, a force-push to a local bare remote, a push to
   base during a run, from a story worktree, and with and without `CLAUDECODE=1` and the token, a stale lock, and chaining into a husky-style hooks folder.
@@ -486,7 +486,7 @@ Next: /accio:owl
 - the skills `wand`, `sort`, `prophecy`, `owl`, `map` and `vow`
 - the workflow `workflows/brew.js`
 - every agent
-- the hooks `protego`, `fidelius`, `boundary`, `doc-size` and `session-start`
+- the hooks `protego`, `fidelius`, `curfew`, `doc-size` and `session-start`
 - the native git hooks, with chaining and `verify`
 - the scripts except the `pensieve` metrics
 - `brew-by-hand`, only if spike S-001 needs it
@@ -516,7 +516,7 @@ It also checks these points:
 - how the opt-in and permission prompt behave when a user types `/accio:brew`
 - **whether agents inside a workflow prompt for tool permissions.** If they do, the § 12.1 allow rules must cover them.
 - whether `bin/` is on PATH, and `${CLAUDE_PLUGIN_ROOT}` is set, inside workflow agents
-- whether `protego`, `fidelius` and `boundary` fire inside workflow agents
+- whether `protego`, `fidelius` and `curfew` fire inside workflow agents
 - whether `CLAUDECODE=1` is set inside workflow agents (the `pre-push` rule needs it)
 - what `/accio:brew` does when workflows are disabled. The fallback message must come from the `session-start` hook
   or from `map`, not from the workflow.
@@ -534,7 +534,7 @@ It also checks these points:
 |---|---|
 | Workflow unknowns (named agents, worktrees, usage) | S-001 spike with defined fallbacks |
 | Workflow disabled (`disableWorkflows`) or a headless run needs an allow rule | `session-start` and `map` detect this and point to `brew-by-hand` |
-| Hooks don't fire inside workflow agents | the spike checks it; the main snapshot backs up `boundary`; the native git hooks don't depend on it |
+| Hooks don't fire inside workflow agents | the spike checks it; the main snapshot backs up `curfew`; the native git hooks don't depend on it |
 | A crash leaves `run/brew.lock` behind and blocks the user's pushes | every status move refreshes the lock; it counts as stale after 30 min, and the hook says so |
 | The track score misjudges | risky paths force Story; the user can override in `prophecy` |
 | Parallel stories conflict on merge | file boundaries per story; on conflict, back to Ready and rebase |

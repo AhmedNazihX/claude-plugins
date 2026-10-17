@@ -43,6 +43,6 @@ Session evidence: git-guardrails blocked a harmless `grep -r` because it *could*
 - **Hooks chain into existing hook managers.** They append to plain and husky hooks under a `# accio` marker. For
   lefthook and the pre-commit framework, setup warns with a snippet. `accio-hooks verify` runs at every `brew` and
   `owl`.
-- **A `boundary` Write/Edit guard keeps agents inside their worktree,** backed by a `git status` snapshot of the
+- **A `curfew` Write/Edit guard keeps agents inside their worktree,** backed by a `git status` snapshot of the
   main checkout.
 - **All Claude hooks act only in repos that have `.accio/`.**
