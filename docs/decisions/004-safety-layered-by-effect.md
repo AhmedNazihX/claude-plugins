@@ -16,7 +16,7 @@ Date: 2026-10-17 · Status: decided by the user
 4. **A one-time override granted by the user,** valid only for that exact command in that folder.
 
 ## Why
-Foreman's guards matched command text, and every review round found new bypasses: aliases, `--git-dir`, `sh -c`,
+Guards that match command text keep losing to new bypasses: aliases, `--git-dir`, `sh -c`,
 `GIT_DIR=`. Git runs its own hooks whatever form the command takes. A narrow list keeps false blocks rare.
 Session evidence: git-guardrails blocked a harmless `grep -r` because it *could* read `.env`.
 
@@ -36,8 +36,10 @@ Session evidence: git-guardrails blocked a harmless `grep -r` because it *could*
 - **`protego` allows `git branch -d`.** Git refuses it on unmerged branches. Only `-D` is blocked.
 
 ## Amendment (2026-10-17, design grilling, decision 009)
-- **`pre-push` blocks only Claude's pushes to base:** it blocks when `CLAUDECODE=1` is set and there is no valid
-  `owl` token. Pushes from the user's own terminal pass. Force-push stays blocked for everyone.
+- **`pre-push` guards a push to base without the `owl` token by where and when:** during a `brew` run (a lock
+  file), from a story worktree, or, outside a run, when `CLAUDECODE=1` is set. Pushes from the user's own terminal
+  outside a run pass. Force-push stays blocked for everyone. As a backstop, `prefect` compares `origin/<base>`
+  before and after each story.
 - **Hooks chain into existing hook managers.** They append to plain and husky hooks under a `# accio` marker. For
   lefthook and the pre-commit framework, setup warns with a snippet. `accio-hooks verify` runs at every `brew` and
   `owl`.

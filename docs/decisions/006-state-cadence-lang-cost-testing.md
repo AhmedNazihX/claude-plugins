@@ -33,9 +33,9 @@ runs on macOS and Linux from the first story.
 - `claude plugin eval` for skill triggering, with free graders only and `--max-cost-usd 2`.
 
 ## Why
-- Per-story files keep agent reads small. Foreman's single BACKLOG.md was 659 lines.
+- Per-story files keep agent reads small; a single backlog file grows to hundreds of lines.
 - The 8-story cap also limits the user's review load.
-- The portable CI answers foreman's Linux CI failure.
+- Portable CI catches platform-specific failures early.
 
 ## Open
 - The budgets are first guesses, to be tuned from measured runs.

@@ -56,9 +56,17 @@ its line.
   Blocked, with the list of changed files.
 - Accepted gap: shell writes outside the main checkout (the stance of decision 004).
 
-**`pre-push` blocks only Claude.** A push to base is blocked when `CLAUDECODE=1` is set and there is no valid `owl`
-token. Pushes from the user's own terminal pass. Force-push is blocked for everyone. `CLAUDECODE=1` was verified
-in Claude Code's Bash tool on 2026-10-17. The spike checks it inside workflow agents.
+**`pre-push` guards by where and when.** A push to base without a valid `owl` token is blocked:
+1. **during a `brew` run, from anyone.** The run holds `run/brew.lock`, refreshed on every status move and stale
+   after 30 minutes without a refresh.
+2. **from a story worktree, always.**
+3. **outside a run, when `CLAUDECODE=1` is set.** Pushes from the user's own terminal pass.
+
+Force-push is blocked for everyone. As a backstop, `prefect` compares `origin/<base>` before and after each story,
+and `protego` warns on `unset CLAUDECODE`. What is left is Claude in the main chat, outside a run, deliberately
+unsetting the variable in front of the user. `CLAUDECODE=1` was verified in Claude Code's Bash tool on 2026-10-17.
+The spike checks it inside workflow agents. This replaces a first answer that relied on `CLAUDECODE` alone, which
+one `unset` defeats during the unattended run.
 
 **Merge style.** One `--no-ff` merge commit per story, with the message `<type>(S-012): <title>` (Conventional
 Commits). The checkpoint commits are kept. `git log --first-parent` shows one line per story. Undo is
@@ -71,12 +79,12 @@ Commits). The checkpoint commits are kept. `git log --first-parent` shows one li
 - the plain output style
 
 `brew-by-hand` is built only if spike S-001 shows it is needed. `wand` keeps `wandmaker`'s 2–3 options.
-`doc-size` with `librarian` was first moved to v1.1 too, then kept in v1. A check against `analysis.md` §2.3 and
-§3.1 showed that cutting it was a step back from a foreman lesson that worked.
+`doc-size` with `librarian` was first moved to v1.1 too, then kept in v1. A check against `analysis.md` §3.1 (long
+docs read whole flood the context) showed that cutting it was a step back.
 
-**How accio is built.** By hand, in plain Claude sessions, from a lean `docs/BACKLOG.md`: about 25 stories in
-build order, each with deps, files and numbered EARS DoD lines. No lanes, waves or critical path. There is no
-foreman story workflow and no dogfood cutover.
+**How accio is built.** By hand, in plain Claude sessions, from a lean `docs/BACKLOG.md`: about 27 stories in
+build order, each with deps, files and numbered EARS DoD lines. No lanes, waves or critical path, and no
+external workflow plugin or dogfood cutover.
 
 ## Options compared
 | Topic | Chosen | Rejected, and why |
@@ -90,10 +98,10 @@ foreman story workflow and no dogfood cutover.
 | Full checks | once, before push | CI after push: `main` can break; every story: full suite × stories × rounds |
 | DoD → test | numbered + tagged | reviewer judges: tokens on every review, and it varies from run to run (F2) |
 | Confinement | guard + snapshot | either alone: no backstop if hooks don't fire in workflow agents, or detection without prevention |
-| `pre-push` | only Claude | everyone: trains the user to type `--no-verify`; force-push only: breaks "pushing always asks" (005) |
+| `pre-push` | where + when | `CLAUDECODE` only: one `unset` defeats it during the run; terminal check: blocks GUI pushes and can be faked; everyone: trains the user to type `--no-verify`; force-push only: breaks "pushing always asks" (005) |
 | Merge style | merge commit | squash: breaks `git branch -d` and stacked children; rebase + ff: 40–80 wip commits per iteration |
 | v1 size | cut add-ons, keep `doc-size` (~27) | everything (~31): close to 001's rejected option B; light `wand`: saves ~2 stories but drops the options step |
-| Build accio | by hand | foreman only, or foreman then accio: the user's choice |
+| Build accio | by hand | another workflow plugin, or switching to accio mid-way: the user's choice |
 
 Story counts and token figures are Claude's rough estimates, not measurements.
 

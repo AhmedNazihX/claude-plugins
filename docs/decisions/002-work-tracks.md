@@ -19,10 +19,10 @@ override any of them.
 ## Options compared
 - A, plugin picks with override (chosen): adds no extra questions, but it can misjudge, which the risky-path rule
   limits.
-- B, user always picks: adds one question per item, the prompt fatigue foreman had.
+- B, user always picks: adds one question per item, which causes prompt fatigue.
 - C, two tracks only: simplest, but big features get no design step.
 
-Rough cost per item, guessed from foreman's runs (not measured): Quick ~20–50k tokens, Story ~150–400k.
+Rough cost per item, rough guesses (not measured): Quick ~20–50k tokens, Story ~150–400k.
 
 ## Amendment (2026-10-17, design review)
 - **A Quick item inside an iteration gets a minimal story file:** frontmatter plus 1–3 DoD lines. The board, the

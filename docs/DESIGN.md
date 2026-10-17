@@ -45,7 +45,7 @@ A solo developer working on their own repo. Accepted stories reach `main` by a d
 - Not a replacement for the project's own CI. accio runs the project's checks; it is not a CI system.
 - No team or pull-request flow in v1 (decision 009).
 
-### Foreman's failures this design must not repeat (F1–F4)
+### Failures this design must not repeat (F1–F4)
 - **F1:** too much ceremony
 - **F2:** review loops and stuck agents
 - **F3:** too many prompts
@@ -130,17 +130,17 @@ This is the unattended part. The full spec is in `docs/research/build-engine.md`
 
 | Step | Agent | Model | Rule |
 |---|---|---|---|
-| 0 load | `portkey` | Haiku | `accio-board ready --json`, in dependency order; also recovers stories a crash left in *Doing* (§ 12.6); `accio-hooks verify` |
+| 0 load | `portkey` | Haiku | `accio-board ready --json`, in dependency order; also recovers stories a crash left in *Doing* (§ 12.6); `accio-hooks verify`; writes `run/brew.lock` (§ 4.5) |
 | 1 prepare | `portkey` | Haiku | `accio-brief` creates or reuses the worktree and branch `story/<ID>` (§ 12.3), from base or from the parent's head when stacked, and writes `brief.md`, including review notes from a rejection |
 | 2 implement | `house-elf` | Sonnet; Opus if complex or risky | reads only the brief; test-first; tags each test with its DoD line; checkpoint commits; `report.md`; returns a status |
-| 3 check | `prefect` | Haiku | the ledger skips an exact key that already passed (§ 12.4); checks scoped to the change; **boundary check:** a diff outside the story's `files` (plus tests) becomes a finding; **DoD tags:** every numbered line not marked `(no test)` has a tagged test; **main snapshot:** the main checkout's `git status` is unchanged |
+| 3 check | `prefect` | Haiku | the ledger skips an exact key that already passed (§ 12.4); checks scoped to the change; **boundary check:** a diff outside the story's `files` (plus tests) becomes a finding; **DoD tags:** every numbered line not marked `(no test)` has a tagged test; **main snapshot:** the main checkout's `git status` is unchanged; **remote check:** `origin/<base>` has not moved |
 | 4 review | `examiner` + `professor` (+ `auror` on risky paths); Quick track: 1 combined reviewer | Sonnet | read-only; review package as a file; confidence ≥ 80 |
 | 5 judge | `headmaster` | Sonnet | only when a finding conflicts with the story, or on NEEDS_CONTEXT; rules it, or marks the story needs-user |
 | 6 fix | a fresh `house-elf` | one tier up in round 2 | **≤ 2 rounds**; the re-review covers only the fix diff, and only the reviewers that raised findings run |
 | 7 outcome | `prefect` | Haiku | `accio-board move` + `accio-ledger record`: READY → *Review*; otherwise *Blocked*, with one plain question in `run/questions/<ID>.md` |
 
 At most 3 stories are in progress at once. A `stallMs` timeout turns a silent agent into a failure. The run returns
-one table (§ 7.2) of about 1–2k tokens.
+one table (§ 7.2) of about 1–2k tokens. When it ends, also on failure, it removes `run/brew.lock`.
 
 **Stacking (decision 009).** A child is held back until its parent reaches READY in the same run, and its slot goes
 to another story. The child then branches from the parent's verified head. If the parent ends BLOCKED, the child
@@ -260,7 +260,7 @@ them.
 
 | Hook | Event | Does |
 |---|---|---|
-| `protego` | PreToolUse Bash | blocks a short list: `reset --hard`, `clean -f`, `rm -rf` outside the repo, `--no-verify`, `core.hooksPath` changes, force branch delete (`-D`; `-d` is allowed because git refuses it on unmerged branches); every block names the safe alternative; defers to dcg if installed |
+| `protego` | PreToolUse Bash | blocks a short list: `reset --hard`, `clean -f`, `rm -rf` outside the repo, `--no-verify`, `core.hooksPath` changes, force branch delete (`-D`; `-d` is allowed because git refuses it on unmerged branches), `unset CLAUDECODE` / `env -u CLAUDECODE`; every block names the safe alternative; defers to dcg if installed |
 | `fidelius` | PreToolUse Write/Edit | blocks key-shaped values; never echoes the secret; test fixtures build fake keys at runtime by concatenation, so they need no exemption |
 | `boundary` | PreToolUse Write/Edit | inside an accio worktree, blocks writes outside that worktree; the one exception is `.accio/run/<ID>/` in the main repo |
 | `session-start` | SessionStart | injects ≤ 10 lines: the board summary, the next step and the plain-words rule (plugins can't ship rules); points to `brew-by-hand` when workflows are off |
@@ -269,9 +269,16 @@ them.
 ### 4.5 Native git hooks
 `accio` installs these into each project with `bin/accio-hooks install`, which is run by `wand` or on first `brew`:
 - **`pre-commit`:** a secret scan, with gitleaks if installed and built-in patterns otherwise.
-- **`pre-push`:** blocks force-push for everyone. It blocks a push to the base branch when `CLAUDECODE=1` is set
-  (Claude is pushing) and there is no valid `owl` token. Pushes from the user's own terminal pass (decision 009).
-  `! git push` typed inside Claude Code counts as Claude.
+- **`pre-push`:** blocks force-push for everyone. A push to the base branch without a valid `owl` token is
+  blocked by **where and when** it happens (decision 009):
+  1. **During a `brew` run, from anyone.** `brew.js` writes `run/brew.lock` at the start and removes it at the end.
+     Every status move refreshes it. A lock with no refresh for 30 minutes counts as stale, and the hook says so.
+  2. **From a story worktree, always.** Nothing legitimate pushes from one in v1.
+  3. **Outside a run, when `CLAUDECODE=1` is set** (Claude is pushing). `! git push` typed inside Claude Code
+     counts as Claude. Pushes from the user's own terminal pass.
+
+  **Backstop:** `prefect` records where `origin/<base>` points before and after each story. If it moved, the story
+  goes to Blocked and the user is told at `owl`.
 
 **Existing hook managers (decision 009).** `accio-hooks install` finds the active hooks folder
 (`core.hooksPath`) and the known manager files:
@@ -318,7 +325,7 @@ until the spike.
   board.md                  # GENERATED by accio-board — never hand-edit
   iterations/<N>.md         # plan + outcome per iteration
   config.json               # checks, risky paths, budgets, base branch, push mode
-  run/                      # gitignored: ledger.tsv, status.json, main-snapshot, briefs, reports, findings, questions/, overrides.json, owl.md, push-ok
+  run/                      # gitignored: ledger.tsv, status.json, brew.lock, main-snapshot, briefs, reports, findings, questions/, overrides.json, owl.md, push-ok
 # worktrees live OUTSIDE the project, in <repo>/../.<repo>-accio-wt/<ID>/ (and integrate-<N>/ at owl),
 # so the project's tools never scan them
 ```
@@ -372,11 +379,12 @@ A missing key falls back to its default.
 | Layer | Stops | Bypass |
 |---|---|---|
 | `pre-commit` (native) | secrets in staged files | `--no-verify` (blocked by protego) |
-| `pre-push` (native) | force-push by anyone; Claude's push to base without the one-time `owl` token (§ 3.5) | `--no-verify` (blocked); `unset CLAUDECODE` (accepted: deliberate evasion) |
+| `pre-push` (native) | force-push by anyone; a push to base without the one-time `owl` token during a run, from a story worktree, or by Claude (§ 4.5) | `--no-verify` (blocked); outside a run, Claude deliberately unsetting `CLAUDECODE` in the main chat (accepted: the user is watching, and `protego` warns) |
 | `protego` (Claude) | a short destructive list, early with an alternative | wrapping the command (accepted: the git hooks are the wall) |
 | `fidelius` (Claude) | secret values in Write/Edit | — |
 | `boundary` (Claude) | Write/Edit outside the agent's worktree | shell writes (accepted; the main snapshot catches those in the main checkout) |
 | main snapshot (`prefect`) | any change to the main checkout during a story | — |
+| remote check (`prefect`) | a push to base that got past every hook during a story | — |
 | One-time override | — | a block during a build makes the agent return BLOCKED with `needs override: <command>`; the question comes up at `owl`; a grant writes `run/overrides.json` (command, folder, 24 h expiry, 1 use) |
 
 All Claude hooks act only in repos that have `.accio/`.
@@ -404,8 +412,7 @@ Messages show only a prefix of the secret.
   - a test written from each EARS line, carrying its tag (`S-012/1`)
   - `prefect` fails a numbered line that has no tagged test, with a grep and no model (decision 009)
   - `examiner` judges only whether each tagged test really checks its line
-- A break-the-code test audit (mutate the code and expect a test to fail) is a **v2** candidate; foreman's
-  `test-auditor` showed it pays off.
+- A break-the-code test audit (mutate the code and expect a test to fail) is a **v2** candidate.
 
 ### 7.2 Report template (every user-facing message)
 ```
@@ -463,7 +470,7 @@ Next: /accio:owl
   secret-shaped value that must never be echoed, `boundary`'s one exception, `doc-size`'s 40 KB limit, and a
   silent exit in a repo without `.accio/`.
 - **Native git hooks:** tests in a temp repo with a staged fake key, a force-push to a local bare remote, a push to
-  base with and without `CLAUDECODE=1` and the token, and chaining into a husky-style hooks folder.
+  base during a run, from a story worktree, and with and without `CLAUDECODE=1` and the token, a stale lock, and chaining into a husky-style hooks folder.
 - **Workflow:** `brew.js` runs with a stubbed `agent()`. Tests cover the cap of 2 rounds, a timeout turning into
   Blocked, the WIP limit of 3, a ledger skip, a judge question, a held-back child, and a child skipped when its
   parent is BLOCKED.
@@ -528,13 +535,14 @@ It also checks these points:
 | Workflow unknowns (named agents, worktrees, usage) | S-001 spike with defined fallbacks |
 | Workflow disabled (`disableWorkflows`) or a headless run needs an allow rule | `session-start` and `map` detect this and point to `brew-by-hand` |
 | Hooks don't fire inside workflow agents | the spike checks it; the main snapshot backs up `boundary`; the native git hooks don't depend on it |
+| A crash leaves `run/brew.lock` behind and blocks the user's pushes | every status move refreshes the lock; it counts as stale after 30 min, and the hook says so |
 | The track score misjudges | risky paths force Story; the user can override in `prophecy` |
 | Parallel stories conflict on merge | file boundaries per story; on conflict, back to Ready and rebase |
 | A rejected parent wastes its children's build | stacking is capped at 2 levels; children are rebuilt only once the parent is fixed |
 | A hook manager hides the native wall | chaining for plain and husky; a snippet for the others; `verify` at every `brew` and `owl` |
 | The budgets are guesses | tune them from `accio-cost` after the first two iterations |
 | Lore names hurt clarity | every description and report in plain words; a README mapping table |
-| Skills cached per session slow dogfooding | test with `claude --plugin-dir`; one source tree published by a script (foreman's drift lesson) |
+| Skills cached per session slow dogfooding | test with `claude --plugin-dir`; one source tree published by a script (a second copy drifts) |
 
 ---
 
@@ -561,7 +569,8 @@ on a permission prompt (spike S-001 confirms whether workflow agents prompt at a
 | `board.md` | `accio-board` only | together with the stories |
 | `run/status.json` | `accio-board move` (from `portkey`/`prefect`) | never (runtime); `owl` folds it into the story files |
 | `run/ledger.tsv` | `accio-ledger` (from `prefect`, `headmaster`) | never |
-| `run/main-snapshot` | `prefect` (before and after each story) | never |
+| `run/main-snapshot` | `prefect` (before and after each story: `git status` and `origin/<base>`) | never |
+| `run/brew.lock` | `brew.js` (start and end), refreshed by `accio-board move` | never |
 | `run/<ID>/brief.md`, `report.md`, `findings-*.md` | `accio-brief`; `house-elf`; each reviewer | never |
 | `run/questions/<ID>.md` | `headmaster` (needs-user), or an agent's `needs override` | never; answers go into the story at `owl` |
 
@@ -593,7 +602,7 @@ from = merge-base with base, or the parent's head for a stacked child
 | Agent | Reply |
 |---|---|
 | `house-elf` | `status ∈ {DONE, DONE_WITH_CONCERNS, NEEDS_CONTEXT, BLOCKED}` |
-| `prefect` | `{pass: bool, failing: [check], skipped: bool, out_of_bounds: [path], untagged: [dod-id], main_changed: [path]}` |
+| `prefect` | `{pass: bool, failing: [check], skipped: bool, out_of_bounds: [path], untagged: [dod-id], main_changed: [path], remote_moved: bool}` |
 | reviewers | `{verdict ∈ {pass, fail}, counts: {critical, major, minor}, path}` |
 | `headmaster` | `{kind ∈ {ruling, question}, text, path}` |
 

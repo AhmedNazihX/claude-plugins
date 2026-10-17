@@ -20,7 +20,7 @@ The record also settles three points that were going to be separate decisions:
 The full comparison is in `docs/research/build-engine.md`.
 - A, Workflow everywhere: the strongest control, but weak on judgement calls, and new and unproven.
 - B, superpowers-style skill controller: the proven mainstream, but its caps and stuck-agent detection depend on
-  the model following instructions, which foreman's failures 2 and 3 show is the weak point.
+  the model following instructions, which is the weak point for review loops and stuck agents.
 - C, hybrid (chosen): caps sit in code where drift hurts, and judgement sits in skills and a judge agent.
 
 ## Consequences

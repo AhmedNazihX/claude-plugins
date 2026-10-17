@@ -14,20 +14,20 @@ Deferred to later versions: a deep stack/architecture workshop, and retro flow m
 | Option | Rough size | Feedback | Main risk |
 |---|---|---|---|
 | A: core loop (chosen) | ~15–20 stories | early | planning and retro are basic at first |
-| B: full lifecycle | ~35–45 stories (foreman reached 45) | late | repeats foreman's ceremony before any real use |
+| B: full lifecycle | ~35–45 stories | late | heavy ceremony before any real use |
 | C: build engine only | ~8–10 stories | early but partial | doesn't test the iteration and grilling ideas |
 
-Story counts are estimates, based on foreman's 45-story backlog (`~/Workspace/claude-plugins/docs/BACKLOG.md`).
+Story counts are rough estimates.
 
 ## Why
-Foreman's big design ran ahead of feedback. A puts a usable loop in front of the user first, and the rest
+A big design up front runs ahead of feedback. A puts a usable loop in front of the user first, and the rest
 follows as later iterations.
 
 ## Amendment (2026-10-17, design grilling, decision 009)
 - **Recount:** the design had grown to about 31 v1 stories, close to option B's size.
 - **Moved to v1.1:** `telescope`, `reparo`, `lumos`, and the plain output style.
-- **Kept in v1:** `doc-size` with `librarian`. `analysis.md` §2.3 and §3.1 list them among foreman's lessons that
-  worked, so cutting them would be a step back.
+- **Kept in v1:** `doc-size` with `librarian`. Reading long docs whole floods the context (`analysis.md`
+  §3.1), so cutting them would be a step back.
 - **Conditional:** `brew-by-hand` is built only if spike S-001 needs it.
 - **v1 is now about 27 stories** (the backlog count). It keeps the whole loop: `wand` (with `wandmaker`), `sort`,
   `prophecy`, `brew`, `owl`, `map`, `vow`, plus the safety layer and `doc-size`.

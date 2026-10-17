@@ -149,11 +149,14 @@ Context: DESIGN § 4.5, § 12.1; decisions 004 and 009.
 - [ ] S-012/2 WHEN husky is active THE SYSTEM SHALL append the `# accio` call to `.husky/<hook>` after the project's lines
 - [ ] S-012/3 WHEN lefthook or the pre-commit framework is found THE SYSTEM SHALL edit nothing and print a copy-paste snippet
 - [ ] S-012/4 WHEN `verify` runs THE SYSTEM SHALL report a missing marker, an inactive hooks folder, or a stale plugin path, and rewrite a stale path
-- [ ] S-012/5 WHEN a push to base comes with `CLAUDECODE=1` and no valid token THE SYSTEM SHALL block it; WHEN `CLAUDECODE` is unset THE SYSTEM SHALL allow it
-- [ ] S-012/6 WHEN the token matches the pushed sha THE SYSTEM SHALL allow one fast-forward push and delete the token
-- [ ] S-012/7 WHEN anyone force-pushes THE SYSTEM SHALL block it
-- [ ] S-012/8 WHEN `uninstall` runs THE SYSTEM SHALL remove only the marked lines
-- [ ] S-012/9 WHEN `install` runs THE SYSTEM SHALL propose the § 12.1 allow rules and write them only after approval
+- [ ] S-012/5 WHEN `run/brew.lock` is fresh and a push to base has no valid token THE SYSTEM SHALL block it, whoever pushes
+- [ ] S-012/6 WHEN a push to base comes from a story worktree without a valid token THE SYSTEM SHALL block it
+- [ ] S-012/7 WHEN no run is live THE SYSTEM SHALL block a tokenless push to base with `CLAUDECODE=1`, and allow it without
+- [ ] S-012/8 WHEN `run/brew.lock` has had no refresh for 30 min THE SYSTEM SHALL treat it as stale and say so
+- [ ] S-012/9 WHEN the token matches the pushed sha THE SYSTEM SHALL allow one fast-forward push and delete the token
+- [ ] S-012/10 WHEN anyone force-pushes THE SYSTEM SHALL block it
+- [ ] S-012/11 WHEN `uninstall` runs THE SYSTEM SHALL remove only the marked lines
+- [ ] S-012/12 WHEN `install` runs THE SYSTEM SHALL propose the § 12.1 allow rules and write them only after approval
 
 ### S-013 · `protego`
 Deps: S-003 · Files: `hooks/protego.py`, `hooks/hooks.json`, `tests/test_protego.py`
@@ -162,6 +165,7 @@ Context: DESIGN § 4.4; decision 004.
 - [ ] S-013/2 WHEN the command is `git branch -d` THE SYSTEM SHALL allow it
 - [ ] S-013/3 WHEN the repo has no `.accio/` THE SYSTEM SHALL exit 0 silently
 - [ ] S-013/4 WHEN dcg is installed THE SYSTEM SHALL defer to it
+- [ ] S-013/5 WHEN a command unsets `CLAUDECODE` (`unset`, `env -u`) THE SYSTEM SHALL exit 2 and explain that accio's push guard needs it
 
 ### S-014 · `fidelius`
 Deps: S-011, S-013 · Files: `hooks/fidelius.py`, `hooks/hooks.json`, `tests/test_fidelius.py`
@@ -186,7 +190,7 @@ Context: DESIGN § 4.4, § 10 (workflows off).
 
 ### S-028 · `doc-size` and `librarian`
 Deps: S-013 · Files: `hooks/doc_size.py`, `hooks/hooks.json`, `agents/librarian.md`, `tests/test_doc_size.py`
-Context: DESIGN § 4.2, § 4.4; `analysis.md` § 2.3 (foreman's `doc-guard` and `doc-reader`). Built here, after
+Context: DESIGN § 4.2, § 4.4; `analysis.md` § 3.1 (long docs read whole). Built here, after
 S-016, but numbered last because it was added later.
 - [ ] S-028/1 WHEN Read targets a `.md` file over 40 KB with no offset or limit THE SYSTEM SHALL exit 2 and point to `librarian` or to reading by section
 - [ ] S-028/2 WHEN the read has an offset or limit, or the file is 40 KB or less THE SYSTEM SHALL allow it
@@ -200,6 +204,7 @@ Context: DESIGN § 3.4 steps 0–3 and 7, § 4.2, § 12.5.
 - [ ] S-017/2 WHEN the diff touches a file outside the story's `files` (plus tests) THE SYSTEM SHALL list it in `out_of_bounds`
 - [ ] S-017/3 WHEN a numbered DoD line not marked `(no test)` has no tagged test THE SYSTEM SHALL list it in `untagged`
 - [ ] S-017/4 WHEN the main checkout's `git status` differs from the snapshot THE SYSTEM SHALL list the paths in `main_changed`
+- [ ] S-017/6 WHEN `origin/<base>` moved during the story THE SYSTEM SHALL set `remote_moved` and the story goes to Blocked
 - [ ] S-017/5 (no test) each agent file sets the model from § 4.2, the tools from § 4.2 and the reply schema from § 12.5
 
 ### S-018 · Review agents and findings template
@@ -220,6 +225,7 @@ Context: DESIGN § 3.4, § 12.6; `docs/research/build-engine.md` "Option C in de
 - [ ] S-019/5 WHEN the ledger reports a skip THE SYSTEM SHALL not re-run that step
 - [ ] S-019/6 WHEN a story was left in *Doing* by a crash THE SYSTEM SHALL resume it at check or prepare as in § 12.6
 - [ ] S-019/7 WHEN the run ends THE SYSTEM SHALL return the § 7.2 table only
+- [ ] S-019/8 WHEN a run starts THE SYSTEM SHALL write `run/brew.lock`, refresh it on every status move, and remove it when the run ends, also on failure
 
 ### S-020 · `brew.js`: review, judge, fix rounds, budgets
 Deps: S-018, S-019 · Files: `workflows/brew.js`, `tests/workflow/brew-review.test.mjs`

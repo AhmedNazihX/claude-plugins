@@ -30,4 +30,4 @@ Example iteration: 4 stories, 1 of them blocked.
 |---|---|
 | A, two checkpoints (chosen) | about 3 |
 | B, hands-off (auto-merge to an iteration branch) | about 2; a bad story lands before the user sees it |
-| C, careful (confirm every merge and push) | 7 or more; this is foreman's prompt fatigue |
+| C, careful (confirm every merge and push) | 7 or more; prompt fatigue |
