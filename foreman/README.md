@@ -131,7 +131,8 @@ A GitHub Actions workflow (`.github/workflows/test.yml`) runs the same checks on
 - **`backlog.py`.** `--json` output, a `--help` for each command, `--dry-run` on every write, and a repeated `tick`
   or `note` does no harm.
 - **Guards.** Every BLOCKED message ends with the way through. `worker-guard` refuses many more forms of git
-  command, git aliases among them, and `lane-guard` blocks when it can't read the backlog in a lane with a deny list.
+  command, git aliases among them, and `lane-guard` blocks a story branch whose story it can't look up in the backlog, when a lane has a
+  deny list.
 - **CI.** A GitHub Actions workflow runs the checks, including the new `lint.py`, on every push and pull request.
 
 See [CHANGELOG.md](CHANGELOG.md) for the full list and the upgrade notes. It also has the migration steps for

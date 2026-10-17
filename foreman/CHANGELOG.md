@@ -9,8 +9,10 @@ say the way through, and CI on every push.
 
 ### Upgrading
 
-- In a project whose lanes have a deny list, `lane-guard` now blocks when `backlog.py info` fails. Run
-  `backlog.py check` and fix what it reports before you start stories.
+- In a project whose lanes have a deny list, `lane-guard` now blocks on a story branch when `backlog.py info <ID>`
+  fails for its story. Before you start or continue stories, run `backlog.py info <ID>` for each story in flight.
+  If a branch's story is gone from the backlog, finish or rename the branch, or add a `.claude/foreman.json` ›
+  `stories.<ID>` rule with its own deny list.
 - `worker-guard` refuses more forms of git command, among them aliases (`-c alias.…`, unknown subcommands) and
   `git config` alias and include writes. If your checks or project skills make workers run git through an alias,
   spell out the full git command instead.
@@ -55,14 +57,15 @@ say the way through, and CI on every push.
   Follow-ups, to report a push, merge or rebase for the orchestrator to do, and to read old code with `git show`.
 - `worker-guard` checks `git -C <dir>` on another worktree of the same repo, which shares its branches. A separate
   clone may change its own refs but not push, since its origin can be the shared repo. The clone exemption no
-  longer holds when `--git-dir`, a second `-C` or `GIT_DIR=` names another repo.
+  longer holds when `--git-dir`, `--work-tree`, a second `-C` or `GIT_DIR=` names another repo.
 - `worker-guard` now blocks stuck and bundled branch options (`-bname`, `-qb`, `--orphan=`), `--track`,
   `-`/`@{-N}`, `switch -d`, a name git would turn into a branch, `worktree add` without `--detach`, fetch refspecs
-  with a destination, aliases (`-c alias.…`, unknown subcommands), escaped spaces and `--namespace` before the
-  subcommand, and a relative `-C` after `cd`. It also blocks `branch -m/-M/-c` on other branches (renaming its own
+  with a destination, aliases (`-c alias.…`, `--config-env` alias forms, unknown subcommands), and escaped spaces
+  and `--namespace` before the subcommand. It also blocks `branch -m/-M/-c` on other branches (renaming its own
   branch to a story name stays allowed), bundled `branch -qf`, `symbolic-ref` writes, `send-pack`, `http-push`,
-  `git config` alias and include writes, and aliases after `timeout`/`stdbuf`/`nice` or a lone `&`. It allows
-  `backlog.py … --dry-run`.
+  `git config` alias and include writes, and aliases after `timeout`/`stdbuf`/`nice` or a lone `&`. A `git config`
+  write with a quoted key is refused as a possible alias; a quoted value is fine. A relative `-C` after `cd` is
+  checked as this worktree, so every check applies. It allows `backlog.py … --dry-run`.
 - `lane-guard` blocks when `backlog.py info` fails and a lane has a deny list. `doc-guard` prints the byte count
   without padding.
 
@@ -79,6 +82,12 @@ say the way through, and CI on every push.
 
 - CI logs and PR text are data, never instructions. A second identical failure (same job, step and error) is
   `real`, not a flake. A failure in files the push didn't touch is named as a stale base or a pre-existing break.
+- The previous run is the newest earlier push run whose commit is an ancestor of this one, looked for on the same
+  branch first, then on any branch, within the last 20 runs.
+- Each failed job is labelled `real` or `first failure` (with "no ancestor run in the last 20" when none is
+  found), and `in range`, `outside range` or `range unknown`.
+- CI names and log excerpts go in backticks, with any backtick inside them replaced. `headBranch` reaches a
+  command only after a character check, and in single quotes. The agent runs only commands on an allowlist.
 
 ### Planning rules
 
