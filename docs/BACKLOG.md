@@ -280,6 +280,8 @@ Context: DESIGN § 3.4, § 12.6; `docs/research/build-engine.md` "Option C in de
 ### S-020 · `brew.js`: review, judge, fix rounds, budgets
 Deps: S-018, S-019 · Files: `workflows/brew.js`, `tests/workflow/brew-review.test.mjs`
 Context: DESIGN § 3.4 steps 4–6, § 7.1, § 8.6.
+Label every agent with its story id first (`S-012 implement`): `accio-cost` ties usage to stories by that
+prefix, and treat its 2× stop flags as unreliable while its report is `partial` (S-009).
 - [ ] S-020/1 WHEN findings remain after 2 fix rounds THE SYSTEM SHALL mark the story BLOCKED and never run a third
 - [ ] S-020/2 WHEN a fix round runs THE SYSTEM SHALL re-run only the reviewers that raised findings, on the fix diff only
 - [ ] S-020/3 WHEN a finding conflicts with the story, or an agent returns NEEDS_CONTEXT THE SYSTEM SHALL call `headmaster`
