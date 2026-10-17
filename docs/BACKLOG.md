@@ -318,6 +318,7 @@ flowchart LR
   reports the GitHub Actions run green; the user pulled the release copy and a new session lists foreman 0.11.0.
   **From F2 (merged):** First Actions run must show the pinned `@anthropic-ai/claude-code@2.1.302` install and `claude plugin validate` passing on the runner: the install is required, so its failure fails the whole job. Pinned actions: checkout v4.4.0, setup-python v5.6.0, setup-node v4.4.0.
   **User decision (2026-10-17):** CI removed. F2's workflow (.github/workflows/test.yml) was deleted after its first Actions run failed on Linux (foreman/hooks/test-guards.sh exits 1 on ubuntu, passes on macOS; run 38974723879). V1's 'first green run in Actions' DoD item no longer applies; the global checks run locally only.
+  **From orchestrator (merged):** User decision (2026-10-17, later): CI restored (e0ffe45). The Linux failure was test-guards.sh's plain `git init`: Apple's git defaults to main, Linux git to master, so three worker-guard tests had no main branch to protect. Now `git init -b main`; all checks pass in a python:3.12-slim container, Q10's merged tests too. The 'green Actions run' DoD item applies again: launch ci-watcher after the release push.
 
 ## Phase 2 — Experiments
 
