@@ -27,7 +27,7 @@ Detect what you can; ask only for the rest, **one question at a time**, with a r
 | Config key | How to fill it |
 | --- | --- |
 | `base_branch` | `git symbolic-ref refs/remotes/origin/HEAD`, or the current branch |
-| `checks` | Copied **verbatim** from the backlog's **Global rules for every story** section (the marker is a bold line, not a heading — find it with `rg -n -i -A6 'global rules' docs/BACKLOG.md` rather than reading the whole backlog). Look for a `- **Checks:**` line with the commands, or (once a project has already run `setup` before) a line pointing at `.claude/foreman.json` › `checks` instead — follow that pointer rather than re-typing stale commands. Else derive from the repo: `pyproject.toml` means uv/ruff/pyright/pytest, `package.json` scripts mean lint, typecheck, test. Confirm with the user. Before the scaffold story exists, use the commands it will create and say so. |
+| `checks` | Copied **verbatim** from the backlog's **Global rules for every story** section (the marker is a bold line, not a heading — find it with `rg -n -i -A6 'global rules' docs/BACKLOG.md` rather than reading the whole backlog). Look for a `- **Checks:**` line with the commands, or (once a project has already run `setup` before) a line pointing at `.claude/foreman.json` › `checks` instead — follow that pointer rather than re-typing stale commands. Else derive from the repo: `pyproject.toml` means uv/ruff/pyright/pytest, `package.json` scripts mean lint, typecheck, test. Confirm with the user. Before the scaffold story exists, use the commands it will create and say so; note the story's ID and those commands for § 4. |
 | `link_files` | Gitignored local files a worker needs, such as `.env` (from `.gitignore` and `.env.example`) |
 | `env` | Shared paths workers need, e.g. `{"APP_DATA_DIR": "{MAIN}/data"}`; empty if none |
 | `reviewers` | Review agents run by `story-finish` on every story; default `["foreman:diff-reviewer", "foreman:security-reviewer"]` (the security reviewer judges each diff against the design's *Data, security and compliance* section) |
@@ -68,16 +68,28 @@ and records each in the config's `guardrails` registry.
 
 ## 4. Readiness check
 
-Start the `foreman:readiness-auditor` agent with the main checkout's path. In a throwaway worktree set up like a
-worker's, it runs every `checks` command (timed), finds a command that runs one test alone, and checks that
-`CLAUDE.md`, `docs/LAYOUT.md` and the backlog's Context pointers resolve. It removes the worktree when done.
+Start the `foreman:readiness-auditor` agent. In a throwaway worktree set up like a worker's, it runs every
+`checks` command (timed), finds a command that runs one test alone, and checks that `CLAUDE.md`,
+`docs/LAYOUT.md` and the backlog's Context pointers resolve. It removes the worktree when done. Its prompt gives:
+
+- the main checkout's path;
+- that it runs **during setup**, and every file § 3 and the guardrails skill wrote or changed but haven't been
+  committed yet (from `git status --porcelain`). It copies them into its worktree and reports them as a note
+  ("commit before starting stories"), not as a problem;
+- the `checks` that come from a scaffold story that isn't merged yet, with the story's ID (see § 2). It reports
+  them as pending instead of running them.
+
+Then:
 
 - **PASS:** go on.
 - **FRICTION:** show the user the problems and the fixes it suggests (a quiet flag, a missing layout file, a
   Context pointer to correct). Fix the ones they accept, then go on.
 - **FAIL:** fix the setup problems (a missing `link_files` entry, a wrong `env` path, a check that doesn't run)
   and run it again. A check that already fails at the base is a story of its own: tell the user, and don't start
-  stories until it passes.
+  other stories until it passes. Pending checks are not a FAIL: the scaffold story may start, and it makes them
+  pass.
+- **NEEDS USER:** it found real secrets linked and signs of live tests. Ask the user whether the checks may run
+  that way (or with the flag it names), then run it again with the answer in the prompt.
 
 Show the single-test command it found, so the user can add it to `CLAUDE.md` for the workers.
 
@@ -99,5 +111,6 @@ the required file is committed. New settings may need a Claude Code restart; tel
 List what was written, then go back to `next` (without asking), which merges the planning branch with the user's
 go-ahead. The loop: `/foreman:status` shows what can run, `/foreman:story-start <IDs>`
 launches workers, `/foreman:story-finish <ID>` reviews and merges; `/foreman:next` always picks the
-right step. Offer to commit. The first backlog story is usually `Solo` (the scaffold), since every worktree
+right step. Offer to commit, and say that every file setup wrote must be committed before the first story
+starts: workers branch from the commit, so they don't see uncommitted changes. The first backlog story is usually `Solo` (the scaffold), since every worktree
 branches from it.
