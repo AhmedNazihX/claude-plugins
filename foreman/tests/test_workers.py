@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -388,6 +389,175 @@ class ReportTest(unittest.TestCase):
         result = self.run_cli("report", "Z7", "--field", "cost")
         self.assertEqual(result.returncode, 1)
         self.assertIn("one of status, evidence, needs-user, checks", result.stderr)
+
+    def test_a_reviewer_range_that_isnt_two_shas_exits_2(self) -> None:
+        path = self.handoffs / "Z7-foreman-diff-reviewer-r1.md"
+        original = path.read_text(encoding="utf-8")
+        for bad in ("main..HEAD", "1a2b3c4", "1a2b3c4...3f9c2ab"):
+            with self.subTest(bad=bad):
+                path.write_text(original.replace("1a2b3c4..3f9c2ab", bad, 1), encoding="utf-8")
+                result = self.run_cli("report", "Z7", *REVIEWER, "--field", "status")
+                self.assertEqual(result.returncode, 2, bad)
+                self.assertIn("isn't <sha>..<sha>", result.stderr)
+
+
+# A git that reads no user or system config, so commit signing, hooks and aliases can't change the test repo.
+GIT_ENV = {
+    "GIT_CONFIG_GLOBAL": os.devnull, "GIT_CONFIG_NOSYSTEM": "1",
+    "GIT_AUTHOR_NAME": "Test", "GIT_AUTHOR_EMAIL": "test@example.com",
+    "GIT_COMMITTER_NAME": "Test", "GIT_COMMITTER_EMAIL": "test@example.com",
+}
+REVIEWERS = "foreman:diff-reviewer,foreman:security-reviewer"
+
+
+class VerdictTest(unittest.TestCase):
+    """`verdict` and `verdicts`, in a throwaway repo: main, and a story branch Z7 off it."""
+
+    def setUp(self) -> None:
+        self.tmp = tempfile.TemporaryDirectory()
+        self.repo = Path(self.tmp.name) / "repo"
+        self.repo.mkdir()
+        self.ledger = Path(self.tmp.name) / "ledger.tsv"
+        self.env = {**os.environ, **GIT_ENV}
+        self.git("init", "-q", "-b", "main")
+        self.commit("base.txt", "base\n")
+        self.git("switch", "-q", "-c", "story/Z7-sample")
+        self.commit("story.txt", "story\n")
+
+    def tearDown(self) -> None:
+        self.tmp.cleanup()
+
+    def git(self, *args: str) -> str:
+        return subprocess.run(["git", *args], cwd=self.repo, env=self.env, capture_output=True, text=True,
+                              check=True).stdout.strip()
+
+    def commit(self, name: str, text: str) -> str:
+        (self.repo / name).write_text(text, encoding="utf-8")
+        self.git("add", name)
+        self.git("commit", "-q", "-m", f"add {name}")
+        return self.git("rev-parse", "HEAD")
+
+    def run_cli(self, *args: str) -> subprocess.CompletedProcess[str]:
+        return subprocess.run(
+            [sys.executable, str(SCRIPT), "--ledger", str(self.ledger), *args],
+            capture_output=True, text=True, cwd=self.repo, env=self.env,
+        )
+
+    def verdict(self, reviewer: str, sha: str, verdict: str = "pass", level: str = "test-verified",
+                evidence: str = "handoffs/Z7-r1.md") -> None:
+        result = self.run_cli("verdict", "Z7", reviewer, sha, verdict, "--level", level, "--evidence", evidence)
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def verdicts(self, head: str, reviewers: str = REVIEWERS) -> subprocess.CompletedProcess[str]:
+        return self.run_cli("verdicts", "Z7", "--head", head, "--reviewers", reviewers)
+
+    def rows(self) -> list[list[str]]:
+        return [line.split("\t") for line in self.ledger.read_text(encoding="utf-8").splitlines()]
+
+    def test_a_pass_from_every_reviewer_on_the_head_exits_0(self) -> None:
+        head = self.git("rev-parse", "HEAD")
+        self.verdict("foreman:diff-reviewer", head[:7], level="static-only")
+        self.verdict("foreman:security-reviewer", head)
+        result = self.verdicts(head[:10])
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("passed " + head[:12], result.stdout)
+        self.assertEqual(self.rows()[0], ["ts", "story", "reviewer", "sha", "verdict", "level", "evidence"])
+        self.assertEqual(self.rows()[1][1:], ["Z7", "foreman:diff-reviewer", head, "pass", "static-only",
+                                              "handoffs/Z7-r1.md"])
+
+    def test_a_missing_reviewer_exits_2_and_is_named(self) -> None:
+        head = self.git("rev-parse", "HEAD")
+        self.verdict("foreman:diff-reviewer", head)
+        result = self.verdicts(head)
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("foreman:security-reviewer: no verdict", result.stderr)
+        self.assertNotIn("foreman:diff-reviewer:", result.stderr)
+
+    def test_a_later_fail_voids_an_earlier_pass(self) -> None:
+        head = self.git("rev-parse", "HEAD")
+        self.verdict("foreman:diff-reviewer", head)
+        self.verdict("foreman:security-reviewer", head)
+        self.verdict("foreman:security-reviewer", head, verdict="fail", level="live-verified")
+        result = self.verdicts(head)
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("foreman:security-reviewer: latest verdict is fail (live-verified)", result.stderr)
+
+    def test_a_new_head_voids_a_pass(self) -> None:
+        old = self.git("rev-parse", "HEAD")
+        self.verdict("foreman:diff-reviewer", old)
+        self.verdict("foreman:security-reviewer", old)
+        new = self.commit("fix.txt", "fix\n")
+        result = self.verdicts(new)
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("foreman:diff-reviewer: no verdict", result.stderr)
+        self.assertIn("foreman:security-reviewer: no verdict", result.stderr)
+
+    def test_a_pass_survives_a_rebase_with_the_same_patch_id(self) -> None:
+        old = self.git("rev-parse", "HEAD")
+        self.verdict("foreman:diff-reviewer", old)
+        self.verdict("foreman:security-reviewer", old)
+        self.git("switch", "-q", "main")
+        self.commit("other.txt", "another story\n")
+        self.git("switch", "-q", "story/Z7-sample")
+        self.git("rebase", "-q", "main")
+        rebased = self.git("rev-parse", "HEAD")
+        self.assertNotEqual(rebased, old)
+        result = self.verdicts(rebased)
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_a_new_head_that_only_changes_indentation_voids_a_pass(self) -> None:
+        reviewed = self.commit("guard.py", "if bad:\n    raise SystemExit(1)\n")
+        self.verdict("foreman:diff-reviewer", reviewed)
+        self.verdict("foreman:security-reviewer", reviewed)
+        dedented = self.commit("guard.py", "if bad:\nraise SystemExit(1)\n")
+        result = self.verdicts(dedented)
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("foreman:diff-reviewer: no verdict", result.stderr)
+        self.assertIn("foreman:security-reviewer: no verdict", result.stderr)
+
+    def test_a_malformed_row_is_skipped_with_a_warning_and_the_others_count(self) -> None:
+        head = self.git("rev-parse", "HEAD")
+        self.verdict("foreman:diff-reviewer", head)
+        with open(self.ledger, "a", encoding="utf-8") as handle:
+            handle.write("not\ta\trow\n")
+        self.verdict("foreman:security-reviewer", head)
+        result = self.verdicts(head)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn(f"{self.ledger}:3: skipped, not 7 cells", result.stderr)
+
+    def test_another_storys_verdicts_dont_count(self) -> None:
+        head = self.git("rev-parse", "HEAD")
+        for reviewer in REVIEWERS.split(","):
+            result = self.run_cli("verdict", "Z8", reviewer, head, "pass", "--level", "test-verified",
+                                  "--evidence", "x")
+            self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(self.verdicts(head).returncode, 2)
+
+    def test_cells_lose_tabs_and_line_breaks_and_formulas_are_quoted(self) -> None:
+        head = self.git("rev-parse", "HEAD")
+        for evidence in ("=HYPERLINK(\"x\")\tsecond\r\nthird", "+1", "-1", "@SUM(A1)", "plain/path.md"):
+            self.verdict("foreman:diff-reviewer", head, evidence=evidence)
+        cells = [row[-1] for row in self.rows()[1:]]
+        self.assertEqual(cells, ["'=HYPERLINK(\"x\") second third", "'+1", "'-1", "'@SUM(A1)", "plain/path.md"])
+        self.assertTrue(all(len(row) == 7 for row in self.rows()))
+
+    def test_bad_verdicts_are_refused_and_not_written(self) -> None:
+        head = self.git("rev-parse", "HEAD")
+        for args, message in (
+            (("Z7", "a", head, "maybe", "--level", "static-only"), "one of pass, fail"),
+            (("Z7", "a", head, "pass", "--level", "quick"), "one of live-verified"),
+            (("Z7", "a", head, "pass", "--level", "blocked"), "a pass can't be blocked"),
+            (("Z7", "a", head, "pass", "--level", "failed"), "a pass can't be failed"),
+            (("Z7", "a", "main", "pass", "--level", "static-only"), "isn't a commit"),
+            (("Z7", "a", "0" * 40, "pass", "--level", "static-only"), "isn't a commit"),
+            (("../Z7", "a", head, "pass", "--level", "static-only"), "an ID has only"),
+            (("Z7", "a\tb", head, "pass", "--level", "static-only"), "a reviewer name has only"),
+        ):
+            with self.subTest(args=args):
+                result = self.run_cli("verdict", *args, "--evidence", "x")
+                self.assertEqual(result.returncode, 1, args)
+                self.assertIn(message, result.stderr)
+        self.assertFalse(self.ledger.exists())
 
 
 if __name__ == "__main__":

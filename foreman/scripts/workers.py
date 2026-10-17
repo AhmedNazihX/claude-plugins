@@ -26,9 +26,16 @@ Usage (from anywhere inside the repo, the main checkout or a story worktree):
   workers.py report <ID> [--reviewer NAME --round N] [--field status|evidence|needs-user|checks]
                          check a report file's header, then print one section (or, with no --field, the whole
                          report); exit 2 when the file or a header line is missing
+  workers.py verdict <ID> <reviewer> <sha> <pass|fail> --level <level> --evidence <path>
+                         append a reviewer's verdict on a commit to the ledger; level is one of live-verified,
+                         test-verified, static-only, blocked, failed (a pass can't be blocked or failed)
+  workers.py verdicts <ID> --head <sha> --reviewers a,b,c [--base REF]
+                         exit 0 only when every named reviewer passed this head, or an earlier sha with the same
+                         patch-id; else exit 2 and list what is missing
 Options: --registry PATH (default: <main checkout>/.claude/worktrees/workers.json)
          --transcripts DIR (default: ~/.claude/projects; where `context` looks for agent-<id>.jsonl)
          --handoffs DIR (default: <main checkout>/.claude/worktrees/handoffs; where the report files live)
+         --ledger PATH (default: <main checkout>/.claude/worktrees/ledger.tsv; where the verdicts are kept)
 
 Report files. A worker writes its full report to handoffs/<ID>.md; a reviewer to handoffs/<ID>-<NAME>-r<N>.md,
 where a ':' in NAME becomes '-' (foreman:diff-reviewer, round 1 -> R1-foreman-diff-reviewer-r1.md). The file
@@ -39,7 +46,8 @@ starts with a header: one `Key: value` line per key, in any order, before the fi
             Agent: <agent-id>  the worker's agent id
             Time: <ISO time>   when the report was written
   reviewer: Reviewer: <NAME>   the reviewer's name, as given to --reviewer (or its file-name form)
-            Range: <a>..<b>    the commit range reviewed
+            Range: <a>..<b>    the commit range reviewed; <b> is the head its verdict is for (two shas,
+                               7 to 40 hex digits each)
             Verdict: <verdict> the reviewer's verdict
 A missing key or an empty value exits 2. After the header comes the report itself, as story-worker § 5 lays it
 out. --field picks one part of it:
@@ -50,8 +58,18 @@ out. --field picks one part of it:
 A section runs from its label line to the next blank line or the next label line. A report without the section
 exits 1.
 
-Every change (record, set, forget) holds an exclusive lock on workers.json.lock, next to the registry, for its
-whole load-modify-save, and writes through a temp file and a rename. Parallel calls never lose an entry, and a
+The verdict ledger. ledger.tsv has one tab-separated row per verdict: ts, story, reviewer, sha, verdict, level,
+evidence. It is append-only. Tabs, carriage returns and newlines in a cell become a space, and a cell that starts
+with = + - or @ gets a leading ' so a spreadsheet never reads it as a formula. `verdict` resolves the sha to the
+full commit id, so it runs inside the repo. A reviewer's latest row on a matching sha decides: a fail after a
+pass voids it. An earlier sha matches the head when `git patch-id --verbatim` of its diff from the base branch
+(--base, default foreman.json's base_branch, else main) equals the head's: a rebase that changes nothing keeps
+its verdicts, a new commit voids them. --verbatim (git 2.39 or later) keeps whitespace, so a change that only
+moves a line's indentation, which can change what Python does, voids them too. Each `verdict` holds an exclusive
+lock on ledger.tsv.lock, next to the ledger, while it appends its row, and flushes the row to disk (fsync).
+
+Every registry change (record, set, forget) holds an exclusive lock on workers.json.lock, next to the registry,
+for its whole load-modify-save, and writes through a temp file and a rename. Parallel calls never lose an entry, and a
 reader never sees a half-written file.
 
 An agent id reaches its worker only from the session that launched it. A new session continues the story with
@@ -100,8 +118,19 @@ SECTION_LABELS = (
     "Follow-ups", "Outcome note",
 )
 FIELDS = {"evidence": "DoD evidence", "needs-user": "Needs user", "checks": "Checks:"}
-# Exit code for a report that breaks the contract (no file, or a header line missing).
+RANGE = re.compile(r"([0-9a-f]{7,40})\.\.([0-9a-f]{7,40})")
+# Exit code for a report that breaks the contract (no file, or a header line missing), and for a merge gate
+# that isn't met (`verdicts` with a reviewer missing).
 CONTRACT_BROKEN = 2
+LEDGER_NAME = Path(".claude") / "worktrees" / "ledger.tsv"
+LEDGER_COLUMNS = ("ts", "story", "reviewer", "sha", "verdict", "level", "evidence")
+VERDICTS = ("pass", "fail")
+LEVELS = ("live-verified", "test-verified", "static-only", "blocked", "failed")
+# A pass claims the change works; a blocked or failed check can't back that claim.
+NOT_A_PASS = ("blocked", "failed")
+CELL_BREAKS = re.compile(r"[\t\r\n]+")
+FORMULA_START = ("=", "+", "-", "@")
+DEFAULT_BASE = "main"
 
 
 def main_checkout() -> Path:
@@ -128,7 +157,7 @@ def load(path: Path) -> dict[str, dict[str, object]]:
 
 @contextmanager
 def locked(path: Path) -> Iterator[None]:
-    """Hold an exclusive lock on the registry's lock file. Closing the file releases it."""
+    """Hold an exclusive lock on <path>.lock, the lock file next to the given path. Closing the file releases it."""
     path.parent.mkdir(parents=True, exist_ok=True)
     with open(path.with_name(path.name + ".lock"), "a", encoding="utf-8") as handle:
         fcntl.flock(handle, fcntl.LOCK_EX)
@@ -371,6 +400,8 @@ def check_header(header: dict[str, str], path: Path, sid: str, reviewer: tuple[s
     name = reviewer[0]
     if header["Reviewer"] not in (name, name.replace(":", "-")):
         raise broken(f"{path}: header says Reviewer: {header['Reviewer']}, expected {name}")
+    if not RANGE.fullmatch(header["Range"]):
+        raise broken(f"{path}: Range: {header['Range']!r} isn't <sha>..<sha>")
 
 
 def is_label(line: str) -> bool:
@@ -426,14 +457,149 @@ def cmd_report(handoffs: Path, sid: str, args: list[str]) -> None:
     print(found)
 
 
+def git(*args: str, stdin: str | None = None) -> str | None:
+    """A git command's stdout, or None when it fails."""
+    result = subprocess.run(["git", *args], capture_output=True, text=True, input=stdin)
+    return result.stdout if result.returncode == 0 else None
+
+
+def full_sha(sha: str) -> str | None:
+    """The full commit id of a sha, or None when it names no commit here."""
+    if not HEAD_SHA.fullmatch(sha):
+        return None
+    out = git("rev-parse", "--verify", "--quiet", f"{sha}^{{commit}}")
+    return out.strip() if out else None
+
+
+def patch_id(sha: str, base: str) -> str | None:
+    """`git patch-id --verbatim` of the change from where sha left base to sha; None for no change or no commit.
+
+    --verbatim, not --stable: --stable ignores whitespace, so a dedent that changes behaviour would keep a pass."""
+    fork = git("merge-base", base, sha)
+    diff = git("diff", "--no-ext-diff", "--no-color", "--binary", fork.strip(), sha) if fork else None
+    out = git("patch-id", "--verbatim", stdin=diff) if diff else None
+    return out.split()[0] if out and out.strip() else None
+
+
+def cell(value: str) -> str:
+    """One ledger cell: no tab or line break, and no leading formula character."""
+    flat = CELL_BREAKS.sub(" ", value)
+    return "'" + flat if flat.startswith(FORMULA_START) else flat
+
+
+def append_row(ledger: Path, row: tuple[str, ...]) -> None:
+    """Append one row under the ledger's lock, writing the column names first into a new ledger."""
+    with locked(ledger):
+        is_new = not ledger.exists() or ledger.stat().st_size == 0
+        with open(ledger, "a", encoding="utf-8") as handle:
+            if is_new:
+                handle.write("\t".join(LEDGER_COLUMNS) + "\n")
+            handle.write("\t".join(cell(value) for value in row) + "\n")
+            handle.flush()
+            os.fsync(handle.fileno())
+
+
+def cmd_verdict(ledger: Path, args: list[str]) -> None:
+    level, evidence = option(args, "--level"), option(args, "--evidence")
+    if len(args) != 4 or level is None or evidence is None:
+        raise SystemExit("verdict needs <ID> <reviewer> <sha> <pass|fail> --level <level> --evidence <path>")
+    sid, reviewer, sha, verdict = args
+    if not STORY_ID.fullmatch(sid):
+        raise SystemExit(f"story ID {sid!r}: an ID has only letters, digits, '-' and '_'")
+    if not REVIEWER_NAME.fullmatch(reviewer):
+        raise SystemExit(f"reviewer {reviewer!r}: a reviewer name has only letters, digits, '-', '_' and ':'")
+    if verdict not in VERDICTS:
+        raise SystemExit(f"verdict {verdict!r}: one of {', '.join(VERDICTS)}")
+    if level not in LEVELS:
+        raise SystemExit(f"--level {level!r}: one of {', '.join(LEVELS)}")
+    if verdict == "pass" and level in NOT_A_PASS:
+        raise SystemExit(f"a pass can't be {level}: record it as fail")
+    commit = full_sha(sha)
+    if commit is None:
+        raise SystemExit(f"{sha!r} isn't a commit in this repo")
+    append_row(ledger, (now(), sid, reviewer, commit, verdict, level, evidence))
+    print(f"Recorded {sid}: {reviewer} {verdict} ({level}) on {commit[:12]}.")
+
+
+def ledger_rows(ledger: Path, sid: str) -> list[dict[str, str]]:
+    """The story's rows, oldest first. A row with the wrong number of cells is reported and skipped."""
+    if not ledger.exists():
+        return []
+    rows = []
+    for number, line in enumerate(ledger.read_text(encoding="utf-8").splitlines(), start=1):
+        cells = line.split("\t")
+        if len(cells) != len(LEDGER_COLUMNS):
+            print(f"{ledger}:{number}: skipped, not {len(LEDGER_COLUMNS)} cells", file=sys.stderr)
+            continue
+        row = dict(zip(LEDGER_COLUMNS, cells))
+        if row["story"] == sid and row["ts"] != "ts":
+            rows.append(row)
+    return rows
+
+
+def base_branch() -> str:
+    """foreman.json's base_branch, or main."""
+    try:
+        config = json.loads((main_checkout() / ".claude" / "foreman.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return DEFAULT_BASE
+    value = config.get("base_branch") if isinstance(config, dict) else None
+    return value if isinstance(value, str) and value else DEFAULT_BASE
+
+
+def missing_pass(rows: list[dict[str, str]], name: str, matches: dict[str, bool]) -> str | None:
+    """None when the reviewer's latest row on a matching sha is a pass, else what is missing."""
+    mine = [row for row in rows if row["reviewer"] == name and matches[row["sha"]]]
+    if not mine:
+        return f"{name}: no verdict on this head or on an earlier sha with the same patch-id"
+    last = mine[-1]
+    if last["verdict"] != "pass":
+        return f"{name}: latest verdict is {last['verdict']} ({last['level']}) on {last['sha'][:12]}"
+    return None
+
+
+def cmd_verdicts(ledger: Path, sid: str, args: list[str]) -> None:
+    head, names, base = option(args, "--head"), option(args, "--reviewers"), option(args, "--base")
+    if args or head is None or names is None:
+        raise SystemExit("verdicts needs <ID> --head <sha> --reviewers a,b,c [--base REF]")
+    reviewers = [name.strip() for name in names.split(",") if name.strip()]
+    if not reviewers:
+        raise SystemExit("--reviewers needs at least one name")
+    commit = full_sha(head)
+    if commit is None:
+        raise SystemExit(f"--head {head!r} isn't a commit in this repo")
+    rows = ledger_rows(ledger, sid)
+    base = base or base_branch()
+    head_id = patch_id(commit, base)
+    matches = {sha: sha == commit or (head_id is not None and patch_id(sha, base) == head_id)
+               for sha in {row["sha"] for row in rows}}
+    missing = [problem for problem in (missing_pass(rows, name, matches) for name in reviewers) if problem]
+    if missing:
+        print(f"{sid}: not every reviewer passed {commit[:12]}:", file=sys.stderr)
+        for problem in missing:
+            print(f"  {problem}", file=sys.stderr)
+        raise SystemExit(CONTRACT_BROKEN)
+    print(f"{sid}: {', '.join(reviewers)} passed {commit[:12]}.")
+
+
 def main(argv: list[str]) -> None:
     args = list(argv)
     registry = option(args, "--registry")
     transcripts = Path(option(args, "--transcripts") or Path.home() / ".claude" / "projects")
     handoffs_dir = option(args, "--handoffs")
+    ledger_file = option(args, "--ledger")
     if not args:
         raise SystemExit(__doc__)
     command, rest = args[0], args[1:]
+    if command in ("verdict", "verdicts"):
+        ledger = Path(ledger_file) if ledger_file else main_checkout() / LEDGER_NAME
+        if command == "verdict":
+            cmd_verdict(ledger, rest)
+        elif not rest:
+            raise SystemExit("verdicts needs a story ID")
+        else:
+            cmd_verdicts(ledger, rest[0], rest[1:])
+        return
     if command in ("report", "handoff-path"):
         if not rest:
             raise SystemExit(f"{command} needs a story ID")
