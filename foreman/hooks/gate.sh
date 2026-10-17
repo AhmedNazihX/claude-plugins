@@ -23,7 +23,8 @@ committed() {  # committed <dir inside the repo> <repo-relative file>
 }
 
 block() {
-  echo "BLOCKED: $1 Gate: '$2' may only be written after '$3' is committed — $4. (.claude/foreman.json › gates)" >&2
+  echo "BLOCKED: $1 Gate: '$2' may only be written after '$3' is committed — $4. (.claude/foreman.json › gates)" \
+       "Commit '$3' first, then write here; if another story makes it, report this as BLOCKED until it is merged." >&2
   exit 2
 }
 

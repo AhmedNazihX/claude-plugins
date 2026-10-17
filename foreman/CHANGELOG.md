@@ -48,6 +48,12 @@
   (security MEDIUM and up) is never deferred and is dismissed only with the user's agreement. Re-reviews of fix
   commits get the story entry, audit the fix range first, then confirm the previous findings closed and see the ones
   deliberately not fixed. The merge table shows each round's counts per bucket.
+- `gate`, `lane-guard` and `worker-guard`: every BLOCKED message now ends with the way through, as `doc-guard`
+  does. The gate says to commit the required file first. The lane guard names the config key that denies the
+  folder and the story exception (`stories.<ID>.allow`). The worker guard says to put backlog changes under
+  Follow-ups, to report a push, merge or rebase for the orchestrator to do, and to read old code with `git show`.
+  `worker-guard` also checks `git -C <dir>` on another worktree of the same repo, which shares its branches. A
+  separate clone may change its own refs but not push, since its origin can be the shared repo.
 
 ## 0.10.1 (2026-10-13)
 
