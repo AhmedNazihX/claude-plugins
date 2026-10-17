@@ -166,9 +166,12 @@ check_config() {  # writing an alias, or an include that could bring one in
   has_prefix --get && return 0
   case "${TARGETS[0]}" in set | unset) n=$((n - 1)) ;; esac
   [ "$n" -ge 2 ] || [ "${TARGETS[0]}" = set ] || has_prefix --add || has_prefix --replace-all || return 0
-  for t in "${TARGETS[@]}"; do                                 # a write: a quoted key could be an alias too
+  local key=${TARGETS[0]}
+  case "$key" in set | unset) key=${TARGETS[1]} ;; esac
+  [ "$key" = _q_ ] && block "git config with a quoted key (it could be an alias)." "$ALT_ALIAS"  # a value may be quoted
+  for t in "${TARGETS[@]}"; do
     case "$(printf '%s' "$t" | tr '[:upper:]' '[:lower:]')" in
-      alias.* | include.* | includeif.* | _q_) block "git config $t (an alias can hide any git command)." "$ALT_ALIAS" ;;
+      alias.* | include.* | includeif.*) block "git config $t (an alias can hide any git command)." "$ALT_ALIAS" ;;
     esac
   done
   return 0

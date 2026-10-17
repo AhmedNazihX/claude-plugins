@@ -386,6 +386,8 @@ msg "$WG" "$(bash_in "$W" 'git config "alias.p" push')"                   "$ALIA
 msg "$WG" "$(bash_in "$W" 'git config set "alias.p" push')"               "$ALIAS_ALT" "config set with a quoted key"
 run "$WG" 0 "$(bash_in "$W" 'git config --get "alias.p"')"                "near-miss: config --get with a quoted key"
 run "$WG" 0 "$(bash_in "$W" 'git config get "alias.p"')"                  "near-miss: config get with a quoted key"
+run "$WG" 0 "$(bash_in "$W" 'git config user.name "A B"')"                "near-miss: config with a quoted value"
+run "$WG" 0 "$(bash_in "$W" 'git config set user.name "A B"')"            "near-miss: config set with a quoted value"
 msg "$WG" "$(bash_in "$W" "true&git p")"                                   "$ALIAS_ALT" "an alias after & with no spaces"
 msg "$WG" "$(bash_in "$W" "a&b&git p")"                                    "$ALIAS_ALT" "an alias after two adjacent &"
 run "$WG" 0 "$(bash_in "$W" "git status 2>&1")"                            "near-miss: git status 2>&1"
