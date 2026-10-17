@@ -16,7 +16,7 @@ evals/                       scripts/publish.sh
 
 | Status | Story |
 |---|---|
-| todo | S-001 Spike: workflow, named agents, worktree |
+| doing | S-001 Spike: workflow, named agents, worktree (paused; see `docs/research/spike-s001.md`) |
 | todo | S-002 Scaffold, CI and publish |
 | todo | S-003 Shared library |
 | todo | S-004 `accio-board` |
