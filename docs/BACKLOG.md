@@ -291,6 +291,24 @@ flowchart LR
   **From Q11 (merged):** foreman/hooks/test-guards.sh:16 still copies backlog.py alone into $R/.claude/scripts/; that copy now fails to import backlog_model. Nothing runs it (CLAUDE_PLUGIN_ROOT points at the real scripts), so drop the copy or copy backlog_model.py too. Related risk: lane-guard.sh runs backlog.py with 2>/dev/null and lets the write through on failure, so a broken import silently switches lane checks off; consider failing closed.
   **From Q7 (merged):** Security re-review (LOW, pre-existing): worker-guard never checks `git fetch` with a refspec; `git fetch <clone> HEAD:refs/heads/story/X` in the worker's own worktree (or -C on the main checkout) writes a branch into the shared repo. Same class as the clone push Q7 closed; also `-c alias.x=push`. And for the continue wording: a continue worker typed `git -C <its own worktree> switch <branch>` and was refused; the guard allows only the bare `git switch <branch>` in its own checkout, so say 'bare, no -C' in story-worker step 3 and the story-start prompt.
 
+- [ ] **Q12 · Ref-change guard for workers** · Deps: Q10 · Type: agent · Lane: Tooling · Size: M · Resource: guard-hooks
+  Context: Q7 and Q10 reviews (2026-10-17): worker-guard decides from command text, and every review round found
+  new git spellings that move shared refs (stuck options, aliases behind wrappers, `--git-dir`, `-C` tricks,
+  fetch refmaps, `sh -c`). User decision (2026-10-17): add a guard that checks the effect, not the text.
+  Input: `foreman/hooks/worker-guard.sh`, `foreman/hooks/hooks.json`, `foreman/hooks/test-guards.sh`, the Q10
+  follow-ups on this story.
+  Output: a hook pair for story workers' Bash calls: before the call, snapshot the shared refs (`git for-each-ref
+  refs/heads refs/tags` and every worktree's HEAD, from the common git dir); after it, compare. Any change other
+  than the worker's own story branch (or its `worktree-agent-*` branch before the rename) is reported to the
+  worker as BLOCKED with the way through and the ref's old and new value, and the ref is put back with
+  `update-ref <ref> <old> <new>` when it still holds the new value. worker-guard keeps only the cheap, clear
+  checks (push, backlog edits, rebase/merge of non-base) and drops the parsing this hook makes redundant. A
+  decision record states what the snapshot covers and what it can't (remote pushes still need worker-guard).
+  DoD: tests move a shared ref through at least five of the bypasses found in Q7/Q10 (alias behind `timeout`,
+  `--git-dir` with a clone, `fetch --refmap`, `sh -c "git branch -f …"`, `branch -M`) and each is reported and
+  restored; the worker's own commits, `branch -m story/<ID>-<slug>` and test-auditor's scratch worktree pass;
+  the global checks pass.
+
 - [ ] **V1 · Release 0.11.0** · Deps: F2, Q1–Q10 · Type: mixed · Lane: Release · Size: S · Resource: version
   Context: Design › Gates; Constraints. Input: `foreman/CHANGELOG.md`, `foreman/README.md`,
   `foreman/.claude-plugin/plugin.json`.
