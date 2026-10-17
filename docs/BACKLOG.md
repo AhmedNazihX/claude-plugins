@@ -244,7 +244,7 @@ flowchart LR
   DoD: `backlog.py` is under 800 lines; every existing test passes with only import setup changed; `lint.py` passes; the global checks pass.
   **Outcome:** backlog.py split to 507 lines; the model (Story, Backlog, parse_deps, repo_root, branches, story_problems) is in scripts/backlog_model.py, imported as a sibling; CLI output unchanged; 115 tests pass. Reviews clean in round 1.
 
-- [ ] **Q7 · Hook block messages name the way through** · Deps: F1 · Type: agent · Lane: Tooling · Size: S · Resource: guard-hooks
+- [x] **Q7 · Hook block messages name the way through** · Deps: F1 · Type: agent · Lane: Tooling · Size: S · Resource: guard-hooks
   Context: Design › D6. Input: `foreman/hooks/gate.sh`, `foreman/hooks/lane-guard.sh`,
   `foreman/hooks/worker-guard.sh`, `foreman/hooks/doc-guard.sh`, `foreman/hooks/test-guards.sh`.
   Output: every BLOCKED message in gate, lane-guard and worker-guard ends with the allowed alternative, as
@@ -253,6 +253,7 @@ flowchart LR
   config key and the story exception). Tests assert each alternative appears.
   DoD: one test per blocked case checks its message contains the alternative; the global checks pass.
   **Orchestrator (2026-10-17):** Branch at d0fc593 after fix round 1 (closed the scratch-worktree bypass: a same-repo `git -C` scratch now goes through every check; ALT_SCRATCH replaced by read-only git show/log/diff advice; python3-missing message reworded). DoD DONE, test audit SOUND, security re-review approve. Left to do: rerun the diff re-review on 438f166..d0fc593 (it stalled), then merge. Deliberate exception kept: a same-repo scratch may detach its own HEAD (test-auditor step 3 needs it).
+  **Outcome:** Every BLOCKED message in gate, lane-guard and worker-guard names the allowed alternative, each with a test. Two fix rounds: git -C on a same-repo scratch worktree now goes through every check; a separate clone may change its own refs but can't push. DoD DONE, test audit SOUND, security approve.
 
 - [ ] **Q8 · ci-watcher rules** · Deps: F1 · Type: agent · Lane: Planning · Size: S
   Context: Design › D7. Input: `foreman/agents/ci-watcher.md`, `foreman/skills/story-finish/SKILL.md` § 6.
@@ -287,6 +288,7 @@ flowchart LR
   From the orchestrator (2026-10-16): the harness creates worker worktrees at origin/<base>, not local HEAD, despite `worktree.baseRef: head`. With an unpushed base every worker in wave 1 stopped at the base check. Workaround used: the worker runs a bare `git merge --ff-only main` (worker-guard allows only the bare form) when HEAD is an ancestor of BASE_SHA. Put that step in story-worker § 1 and story-start § 3.
   **From Q7 security review (2026-10-17):** worker-guard still lets these forms through (LOW, mostly pre-existing): stuck options `checkout -B<name>`, `switch -c<name>`/`-C<name>`, `--orphan=<name>` (has_opt matches only spaced tokens); `checkout --track origin/<x>` and `checkout -` / `@{-N}` in a scratch; `git worktree add` on a branch (never checked); a `-C` path with a backslash-escaped space; `git --namespace foo …` (option value read as the subcommand); `cd <dir> && git -C <relative>`. Fix direction: match option prefixes, treat `-`/`@{-N}` as a branch, check `worktree add` (allow only --detach), and fail closed when GDIR doesn't resolve or SUB isn't a known subcommand. Also from Q6: worker-guard blocks a worker's `backlog.py … --dry-run`; allowing dry runs is optional.
   **From Q11 (merged):** foreman/hooks/test-guards.sh:16 still copies backlog.py alone into $R/.claude/scripts/; that copy now fails to import backlog_model. Nothing runs it (CLAUDE_PLUGIN_ROOT points at the real scripts), so drop the copy or copy backlog_model.py too. Related risk: lane-guard.sh runs backlog.py with 2>/dev/null and lets the write through on failure, so a broken import silently switches lane checks off; consider failing closed.
+  **From Q7 (merged):** Security re-review (LOW, pre-existing): worker-guard never checks `git fetch` with a refspec; `git fetch <clone> HEAD:refs/heads/story/X` in the worker's own worktree (or -C on the main checkout) writes a branch into the shared repo. Same class as the clone push Q7 closed; also `-c alias.x=push`. And for the continue wording: a continue worker typed `git -C <its own worktree> switch <branch>` and was refused; the guard allows only the bare `git switch <branch>` in its own checkout, so say 'bare, no -C' in story-worker step 3 and the story-start prompt.
 
 - [ ] **V1 · Release 0.11.0** · Deps: F2, Q1–Q10 · Type: mixed · Lane: Release · Size: S · Resource: version
   Context: Design › Gates; Constraints. Input: `foreman/CHANGELOG.md`, `foreman/README.md`,
@@ -425,6 +427,7 @@ flowchart LR
   DoD: tests for the notice and stuck thresholds firing once and the counters; story-start holds the refusal and
   the retry table; `foreman.example.json` parses; the global checks pass.
   **From X2 (merged):** One shared stall silenced 4 workers at once for ~146 min (machine asleep): `watch` should report a silence that hits several workers at the same moment as one event, not N stuck workers. Stuck is a question for the user; silence alone is not enough to reap (30-min default has only ~1.4× margin over the longest live wait).
+  **From Q7 (merged):** Review agents stalled three times on the guard-hook branches (Q7 diff re-review twice, Q7 security re-review once; Q8's diff re-review too): each sat 'running' for hours after starting to read worker-guard.sh or build a scratch repo. A bounded rerun (under 10 tool calls, test-guards.sh at most once, no interactive commands) finished in under a minute. The watch should catch a reviewer with no progress and relaunch it bounded.
 
 - [ ] **R8 · WIP checkpoint commits** · Deps: V1 · Type: agent · Lane: Workers · Size: S · Resource: story-worker, story-start
   Context: Design › D10. Input: `foreman/agents/story-worker.md`, `foreman/skills/story-start/SKILL.md` § 5.
