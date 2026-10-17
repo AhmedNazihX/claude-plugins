@@ -91,7 +91,7 @@ relevant passages, and `doc-guard.sh` blocks reading one whole past the config's
 | Part | Items |
 | --- | --- |
 | Skills | `next`, `kickoff`, `work-breakdown`, `setup`, `guardrails`, `status`, `story-start` (with `--continue`), `story-finish`, `decision`, `handover` |
-| Agents | `story-worker`, `dod-verifier`, `diff-reviewer`, `security-reviewer`, `test-auditor`, `lane-auditor`, `backlog-reviewer`, `doc-reader`, `ci-watcher` |
+| Agents | `story-worker`, `dod-verifier`, `diff-reviewer`, `security-reviewer`, `test-auditor`, `lane-auditor`, `backlog-reviewer`, `readiness-auditor`, `doc-reader`, `ci-watcher` |
 | Hooks | `gate.sh` (nothing under a path until a given file is committed), `lane-guard.sh` (a lane never sees its denied folders), `worker-guard.sh` (a worker never pushes, rebases, merges another branch, moves to another branch or edits the backlog; its one allowed move is `git switch` onto a story branch when continuing), `format.sh` (formats edited files with the project's formatter), `doc-guard.sh` (no whole `Read` of a long `.md` file) |
 | Scripts | `backlog.py` (check, plan, status, show, deps, info, tick, note, set-deps, add, graph; `--json` on status, plan and deps; `--dry-run` on writes), `workers.py` (record, set, list, show, forget, context), `lint.py` (frontmatter, references, hooks, links, imports, versions) |
 
