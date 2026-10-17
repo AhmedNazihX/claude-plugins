@@ -128,7 +128,7 @@ An agent id only reaches its worker from the session that launched it: after a `
 session, SendMessage to a recorded id fails ("No transcript found"). The story lives on in its branch and worktree.
 A fresh worker always gets a new worktree, and a branch can be checked out in one worktree only, so free the branch
 first. Do this only for a worker that has stopped: its recorded state is `reported`, `waiting-user` or `fix-round`
-with its report in, never `running`. If you're not sure it stopped, ask the user. From the main checkout:
+with its report in, or `dead`; never `running`. If you're not sure it stopped, ask the user. From the main checkout:
 
 ```bash
 python3 ${CLAUDE_PLUGIN_ROOT}/scripts/workers.py show <ID>     # brief, worktree, base
@@ -137,8 +137,18 @@ git -C <old worktree> log -1 --format=%H                       # HEAD_SHA
 git worktree remove <old worktree>                             # keeps the branch; never --force
 ```
 
-If `status` shows changes, stop: they are the old worker's uncommitted work. Show them to the user and ask whether
-to commit them (as the user, with a `!` line) or drop them. Never remove the worktree while it has changes.
+If `status` shows changes, stop: they are the old worker's uncommitted work. Never remove the worktree while it has
+changes. Show them to the user (`git -C <old worktree> status --short` and `git -C <old worktree> diff --stat`).
+If the worker is dead (its state is `dead`, or it stopped without a report), offer **commit as WIP, then
+continue**: workers commit a `wip(<ID>):` checkpoint after each DoD item, so these changes are usually the one item it
+was working on. The user commits them, as one `!` line:
+
+```
+! git -C <old worktree> add -A && git -C <old worktree> commit -m "wip(<ID>): unfinished work of the stopped worker"
+```
+
+Then run the three `git` commands above again (`status` is now empty) and go on. The other choice is to drop the changes;
+the user does that too. Ask which, and wait for the answer.
 If `workers.py list` says `worktree GONE`, skip these three commands: take `HEAD_SHA` from
 `git rev-parse story/<ID>-<slug>`; there is nothing to remove.
 

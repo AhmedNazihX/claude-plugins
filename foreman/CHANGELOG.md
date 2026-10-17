@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Workers commit a `wip(<ID>):` checkpoint after each DoD item, so a dead worker loses at most one item;
+  `story-start --continue` offers to commit a dead worker's leftover changes as WIP, then continue. (R8)
+
 ## 0.11.0 (2026-10-17)
 
 Reviews that see the story's intent and a stricter triage, a `backlog.py` that is safer to script, guard hooks that
