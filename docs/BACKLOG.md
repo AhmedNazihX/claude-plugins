@@ -22,7 +22,7 @@ evals/                       scripts/publish.py
 | done | S-004 `accio-board` |
 | done | S-005 `accio-score` |
 | done | S-006 `accio-ledger` |
-| todo | S-007 `accio-brief` |
+| done | S-007 `accio-brief` |
 | todo | S-008 `accio-merge` |
 | todo | S-009 `accio-cost` |
 | todo | S-010 `accio-summary` |
@@ -124,13 +124,18 @@ byte of change, whitespace included, or a moved base re-runs the checks; a dirty
 found that `git patch-id` ignores whitespace (two different diffs shared a key); DESIGN § 12.4 updated.
 
 ### S-007 · `accio-brief`
-Deps: S-004 · Files: `bin/accio-brief`, `bin/accio_lib/brief.py`, `bin/accio_lib/templates/brief.md`, `tests/test_brief.py`
+Deps: S-004 · Files: `bin/accio-brief`, `bin/accio_lib/brief.py`, `bin/accio_lib/templates/{brief,fix-brief}.md`, `bin/accio_lib/paths.py` (`worktree_root`), `bin/accio_lib/story.py` (`section`), `tests/test_brief.py`, `tests/test_lib.py`
 Context: DESIGN § 3.4 step 1, § 12.3.
-- [ ] S-007/1 WHEN a story has no branch THE SYSTEM SHALL create `<wt>/<ID>` on `story/<ID>` from base, or from the parent's head when stacked
-- [ ] S-007/2 WHEN the branch exists THE SYSTEM SHALL reuse it and rebase it on base or on the parent's current head
-- [ ] S-007/3 WHEN the rebase conflicts THE SYSTEM SHALL write the conflict into the brief and not fail
-- [ ] S-007/4 WHEN a brief is written THE SYSTEM SHALL include the DoD lines with IDs, the file boundary, the existing code to reuse, the checks to run, the scripts' absolute paths and any Review notes
-- [ ] S-007/5 WHEN `--fix <findings>` runs THE SYSTEM SHALL write a short fix brief that lists only those findings
+- [x] S-007/1 WHEN a story has no branch THE SYSTEM SHALL create `<wt>/<ID>` on `story/<ID>` from base, or from the parent's head when stacked
+- [x] S-007/2 WHEN the branch exists THE SYSTEM SHALL reuse it and rebase it on base or on the parent's current head
+- [x] S-007/3 WHEN the rebase conflicts THE SYSTEM SHALL write the conflict into the brief and not fail
+- [x] S-007/4 WHEN a brief is written THE SYSTEM SHALL include the DoD lines with IDs, the file boundary, the existing code to reuse, the checks to run, the scripts' absolute paths and any Review notes
+- [x] S-007/5 WHEN `--fix <findings>` runs THE SYSTEM SHALL write a short fix brief that lists only those findings
+Outcome: worktrees at `../.<repo>-accio-wt/<ID>`; the commit each was built on is kept in `run/<ID>/base`, so a
+rebase is `--onto <new> <old>` and a rewritten parent is never replayed into its child. It never loses work: a
+rebase in progress, uncommitted work or a conflict goes into the brief and the branch stays as it was. Decision
+while building: "existing code to reuse" = the story's optional `## Reuse` section plus its listed files that
+already exist at the base (DESIGN § 5.1).
 
 ### S-008 · `accio-merge`
 Deps: S-004, S-006 · Files: `bin/accio-merge`, `bin/accio_lib/merge.py`, `tests/test_merge.py`
@@ -202,7 +207,8 @@ Context: DESIGN § 4.4, § 6.
 
 ### S-015 · `curfew`: permission policy and worktree claims
 Deps: S-003, S-013 · Files: `hooks/curfew.py`, `hooks/hooks.json`, `bin/accio-claim`, `bin/accio_lib/policy.py`, `tests/test_curfew.py`
-Context: DESIGN § 4.4, § 6; decision 010; `docs/research/spike-s001.md` findings 10, 14, 15.
+Context: DESIGN § 4.4, § 6; decision 010; `docs/research/spike-s001.md` findings 10, 14, 15. The brief writes the
+worktree path shell-quoted (`shlex.quote`), so the `cd <worktree> &&` check must accept that form.
 - [ ] S-015/1 WHEN the caller's `agent_type` is not `accio:*` THE SYSTEM SHALL give no permission decision
 - [ ] S-015/2 WHEN `accio:house-elf` has not claimed THE SYSTEM SHALL deny its Write/Edit and every Bash command except `accio-claim <ID>`
 - [ ] S-015/3 WHEN it runs `accio-claim <ID>` THE SYSTEM SHALL record its `agent_id` → that story's worktree in `run/claims.json`

@@ -67,6 +67,9 @@ class PathsTest(unittest.TestCase):
         finally:
             locked.chmod(0o755)
 
+    def test_worktree_root_sits_next_to_the_repo(self):
+        self.assertEqual(paths.worktree_root(self.repo), self.base / ".app-accio-wt")
+
     def test_main_root_is_the_main_checkout_from_a_worktree(self):
         worktree = self.base / "wt"
         git(self.repo, "worktree", "add", "-q", str(worktree), "-b", "x")
@@ -176,6 +179,12 @@ class StoryTest(unittest.TestCase):
         self.assertEqual([line.done for line in lines], [False, True, False])
         self.assertTrue(lines[0].text.startswith("WHEN a user requests a reset"))
         self.assertEqual(lines[2].text, "checks pass: `npm test`, `npm run lint`")
+
+    def test_section_returns_the_text_under_a_heading(self):
+        parsed = story.parse(FIXTURES / "stories" / "S-012.md")
+        self.assertEqual(story.section(parsed, "Context"), "Users who forget their password need a way back in.")
+        self.assertEqual(story.section(parsed, "Review notes"), "")
+        self.assertEqual(story.section(parsed, "Missing"), "")
 
     def test_parsed_story_is_immutable(self):
         parsed = story.parse(FIXTURES / "stories" / "S-012.md")

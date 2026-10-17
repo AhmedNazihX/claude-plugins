@@ -356,6 +356,8 @@ budget_tokens: 400000
 ---
 ## Context
 <why, links to design.md section>
+## Reuse
+<optional: existing code the implementer should use; accio-brief adds the listed files that already exist>
 ## Definition of Done
 - [ ] S-012/1 WHEN a user requests a reset THE SYSTEM SHALL email a single-use link valid 30 min
 - [ ] S-012/2 WHEN the link is older than 30 min THE SYSTEM SHALL reject it

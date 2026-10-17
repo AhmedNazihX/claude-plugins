@@ -152,6 +152,18 @@ def _dod(path, story_id, lines, first_number):
     return tuple(found)
 
 
+def section(parsed, heading):
+    """The text under `## <heading>` in the story body, up to the next `#` or `##` heading ("" when absent)."""
+    found, inside = [], False
+    for raw in parsed.body.splitlines():
+        if SECTION_HEADING.match(raw):
+            inside = raw.strip() == f"## {heading}"
+            continue
+        if inside:
+            found.append(raw)
+    return "\n".join(found).strip()
+
+
 def _read(path):
     try:
         return path.read_text(encoding="utf-8").splitlines()

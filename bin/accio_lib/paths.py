@@ -9,6 +9,7 @@ import pathlib
 import subprocess
 
 ACCIO_DIR_NAME = ".accio"
+WORKTREE_ROOT_SUFFIX = "-accio-wt"
 
 
 def _git(start, *args):
@@ -30,6 +31,11 @@ def main_root(start="."):
         return pathlib.Path(top) if top else None
     configured = _git(start, "config", "--file", str(common_dir / "config"), "core.worktree")
     return (common_dir / configured).resolve() if configured else common_dir.parent
+
+
+def worktree_root(main):
+    """Where story worktrees live: outside the repo, so the project's tools never scan them (DESIGN § 5)."""
+    return main.parent / f".{main.name}{WORKTREE_ROOT_SUFFIX}"
 
 
 def accio_dir(start="."):
