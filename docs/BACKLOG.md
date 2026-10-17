@@ -103,7 +103,7 @@ Context: DESIGN § 3.4 step 1, § 12.3.
 - [ ] S-007/1 WHEN a story has no branch THE SYSTEM SHALL create `<wt>/<ID>` on `story/<ID>` from base, or from the parent's head when stacked
 - [ ] S-007/2 WHEN the branch exists THE SYSTEM SHALL reuse it and rebase it on base or on the parent's current head
 - [ ] S-007/3 WHEN the rebase conflicts THE SYSTEM SHALL write the conflict into the brief and not fail
-- [ ] S-007/4 WHEN a brief is written THE SYSTEM SHALL include the DoD lines with IDs, the file boundary, the scripts' absolute paths and any Review notes
+- [ ] S-007/4 WHEN a brief is written THE SYSTEM SHALL include the DoD lines with IDs, the file boundary, the existing code to reuse, the checks to run, the scripts' absolute paths and any Review notes
 - [ ] S-007/5 WHEN `--fix <findings>` runs THE SYSTEM SHALL write a short fix brief that lists only those findings
 
 ### S-008 · `accio-merge`
