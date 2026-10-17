@@ -150,21 +150,27 @@ check_branch() {  # no forcing, copying or force-renaming; -m only renames this 
   if has_short cC || has_prefix --copy; then block "git branch -c (a copy makes a branch)." "$ALT_REPORT"; fi
   if has_short M; then block "git branch -M (it can overwrite another branch)." "$alt"; fi
   has_short m || has_prefix --move || return 0
+  # Only in this checkout: `git -C <other checkout> branch -m` would rename that checkout's branch.
+  # ($rdir and $override are check_git_part's, the caller.)
+  if [ -n "$GDIR" ]; then
+    { [ -n "$rdir" ] && [ -z "$override" ] && [ "$(git -C "$rdir" rev-parse --show-toplevel 2>/dev/null)" = "$TOP" ]; } ||
+      block "git -C $GDIR branch -m (it renames another checkout's branch)." "$alt"
+  fi
   [ "${#TARGETS[@]}" = 1 ] && [[ "${TARGETS[0]}" =~ ^story/[A-Z]{1,3}[0-9]+[a-z]?-[^[:space:]]+$ ]] && return 0
   block "git branch -m ${TARGETS[*]} (only renaming your own branch to its story name is allowed)." "$alt"
 }
 
 check_config() {  # writing an alias, or an include that could bring one in
-  local t key="" n=${#TARGETS[@]}
+  local t n=${#TARGETS[@]}
   case "${TARGETS[0]}" in get | list) return 0 ;; esac
-  for t in "${TARGETS[@]}"; do
-    case "$(printf '%s' "$t" | tr '[:upper:]' '[:lower:]')" in alias.* | include.* | includeif.*) key=$t ;; esac
-  done
-  [ -n "$key" ] || return 0
+  has_prefix --get && return 0
   case "${TARGETS[0]}" in set | unset) n=$((n - 1)) ;; esac
-  if [ "$n" -ge 2 ] || has_prefix --add || has_prefix --replace-all; then
-    block "git config $key (an alias can hide any git command)." "$ALT_ALIAS"
-  fi
+  [ "$n" -ge 2 ] || [ "${TARGETS[0]}" = set ] || has_prefix --add || has_prefix --replace-all || return 0
+  for t in "${TARGETS[@]}"; do                                 # a write: a quoted key could be an alias too
+    case "$(printf '%s' "$t" | tr '[:upper:]' '[:lower:]')" in
+      alias.* | include.* | includeif.* | _q_) block "git config $t (an alias can hide any git command)." "$ALT_ALIAS" ;;
+    esac
+  done
   return 0
 }
 
@@ -239,10 +245,11 @@ collect_targets() {  # TARGETS: the positional arguments in REST; for merge and 
   local a skip=0
   for a in "${REST[@]}"; do
     if [ $skip = 1 ]; then skip=0; continue; fi
+    if [ $skip = 2 ]; then skip=0; [ "$a" = _q_ ] && continue; fi  # the quoted value of `--opt="x y"`
     case "$SUB:$a" in
       merge:-m | merge:-X | merge:-s | merge:-F | merge:--strategy | merge:--strategy-option | merge:--file | \
       merge:--message | merge:--into-name | pull:-X | pull:-s | pull:--strategy | pull:--strategy-option) skip=1 ;;
-      *:-*=) skip=1 ;;                                      # --message="x y" reads as `--message= _q_`
+      *:-*=) skip=2 ;;                                      # --message="x y" reads as `--message= _q_`
       *:-?* | *:--) ;;
       *) TARGETS+=("${a//_s_/ }") ;;
     esac
@@ -297,7 +304,7 @@ case "$TOOL" in
     # Parts: split on && || ; | ( ) ` and a lone & (not the & of 2>&1 or &>).
     while IFS= read -r part; do
       check_git_part "$part"
-    done <<<"$(printf '%s\n' "$CMD" | sed -E 's/(\&\&|\|\||;|\||\(|\)|`)/\n/g; s/([^>])&([^>]|$)/\1\n\2/g')"
+    done <<<"$(printf '%s\n' "$CMD" | sed -E 's/(\&\&|\|\||;|\||\(|\)|`)/\n/g; s/>&/_GA_/g; s/&>/_AG_/g; s/&/\n/g; s/_GA_/>\&/g; s/_AG_/\&>/g')"
     ;;
 esac
 exit 0

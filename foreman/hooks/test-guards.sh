@@ -373,6 +373,23 @@ msg "$WG" "$(bash_in "$W" 'git checkout no\ such')"                       "git c
   "an escaped space prints as a space"
 msg "$WG" "$(bash_in "$W" "git pull --rebase=true origin main")"           "$MERGE_ALT" "pull --rebase=true"
 msg "$WG" "$(bash_in "$W" "git pull origin main other")"                   "$MERGE_ALT" "pull the base and another branch"
+echo "worker guard, Q10 review round 2"
+msg "$WG" "$(bash_in "$W" "git merge --log=5 story/C1-parser")"           "$REPORT" "merge --log=<n> doesn't hide the target"
+msg "$WG" "$(bash_in "$W" "git merge --strategy-option=ours story/C1-parser")" "$REPORT" \
+  "merge --strategy-option=<x> doesn't hide the target"
+msg "$WG" "$(bash_in "$W" "git merge --into-name= story/C1-parser")"      "$REPORT" "an empty --opt= doesn't hide the next word"
+run "$WG" 0 "$(bash_in "$W" 'git merge --message="x y" main')"            "near-miss: merge --message=<quoted> main"
+msg "$WG" "$(bash_in "$W" "git -C $R branch -m story/C9-x")"              "$RENAME_ALT" "branch -m on the main checkout"
+run "$WG" 0 "$(bash_in "$W" "git -C $W branch -m story/B4-cases")"        "near-miss: branch -m with -C on its own worktree"
+run "$WG" 0 "$(bash_in "$W" "git branch -m story/B4-cases")"              "near-miss: bare branch -m story/<ID>-<slug>"
+msg "$WG" "$(bash_in "$W" 'git config "alias.p" push')"                   "$ALIAS_ALT" "config with a quoted key"
+msg "$WG" "$(bash_in "$W" 'git config set "alias.p" push')"               "$ALIAS_ALT" "config set with a quoted key"
+run "$WG" 0 "$(bash_in "$W" 'git config --get "alias.p"')"                "near-miss: config --get with a quoted key"
+run "$WG" 0 "$(bash_in "$W" 'git config get "alias.p"')"                  "near-miss: config get with a quoted key"
+msg "$WG" "$(bash_in "$W" "true&git p")"                                   "$ALIAS_ALT" "an alias after & with no spaces"
+msg "$WG" "$(bash_in "$W" "a&b&git p")"                                    "$ALIAS_ALT" "an alias after two adjacent &"
+run "$WG" 0 "$(bash_in "$W" "git status 2>&1")"                            "near-miss: git status 2>&1"
+run "$WG" 0 "$(bash_in "$W" "git log &>/dev/null")"                        "near-miss: git log &>/dev/null"
 # Found in the 0.3.4 trial: the orchestrator's shell was still in a worktree after `cd <worktree> && uv run pytest`.
 MERGE="git merge --no-ff story/B4-cases -m 'merge: story B4'"
 run "$WG" 0 "$(jq -nc --arg c "cd $R && $MERGE" --arg d "$W" '{tool_name:"Bash",cwd:$d,tool_input:{command:$c}}')" \
