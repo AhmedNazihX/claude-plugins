@@ -381,6 +381,7 @@ flowchart LR
   DoD: the three files hold the flow; story-finish no longer asks for the worker's full report in context; the
   global checks pass.
   **From R1 (merged):** Use `workers.py handoff-path <ID>` for the file path and the header contract in workers.py's docstring (Story, Branch, Head, Agent, Time, then a blank line). story-worker.md § 5 doesn't yet tell the worker to write the file or to return a one-line summary: that is this story's job. `report` exits 2 on a missing file or header line, 1 on a missing section; section labels are the § 5 labels.
+  **From R8 (merged):** story-worker.md now has the checkpoint rule (§ 3: wip(<ID>) commits, staged by path) and § 4 stages by path, not git add -A; build the report-file step on that text. Also, from R12's worker: four workers renaming at once hit 'unable to move logfile .../logs/refs/.tmp-renamed-log' on `git branch -m` (git's shared temp reflog); one retry fixed it. Add 'retry the rename once on that error' to story-worker § 1 while you are in the file.
 
 - [ ] **R3 · Reviewers write their report to disk** · Deps: R2 · Type: mixed · Lane: Review · Size: M · Resource: story-finish, diff-reviewer, security-reviewer, dod-verifier
   Context: Design › D8; Risks and open questions. Input: `foreman/agents/dod-verifier.md`,
@@ -428,6 +429,7 @@ flowchart LR
   DoD: one test per mode in decision 002 plus `unknown`; a test that a live worker is left alone; the global checks
   pass.
   **From X2 (merged):** Implement decision 002's 8 rules in order and copy its fixture verdict table (13 fixtures × last write +1/+31 min) into tests; pass the test's own 'now' (fixture timestamps are fixed). Split transcripts on `\n`, never `splitlines()` (U+2028 inside records; see line-separator.jsonl). workers.py `last_turn` still uses splitlines() (workers.py ~182): fix it here. A 'prompt' is defined by fields in the record's shape table (initial: string, no isMeta; resume/wake-up: isMeta + origin.kind).
+  **From R8 (merged):** story-start § 5 accepts a `dead` state 'set by the reaper (D10), once that exists', and until then treats a gone `running`/`launching` worker as dead only after SendMessage fails or the user says so, and the user confirms. When the reaper sets `dead`, add it to workers.py STATES (today only REPLACEABLE has it) and align that § 5 wording.
 
 - [ ] **R6 · Reconcile** · Deps: R5 · Type: agent · Lane: Workers · Size: M · Resource: workers, status-skill
   Context: Design › D10. Input: `foreman/scripts/workers.py`, `foreman/skills/next/SKILL.md`,
@@ -439,6 +441,7 @@ flowchart LR
   DoD: tests build a temp repo with worktrees and branches for each class, and show reconcile reaping a dead
   worker from a fixture transcript; next and status name the command; the global checks pass.
   **From Q1 (merged):** workers.py now has a `launching` state (no agent id yet). Reconcile should report a `launching` entry whose worktree never appeared as "launching without id", and `dead` is already in REPLACEABLE (record --launching may overwrite merged or dead without --replace).
+  **From R8 (merged):** Reconcile should see wip(<ID>): checkpoint commits on a story branch: a dead worker's last checkpoint is where a continue picks up (story-start § 5).
 
 - [ ] **R7 · Watch and retry budget** · Deps: R6 · Type: agent · Lane: Workers · Size: M · Resource: workers, story-start, config-template
   Context: Design › D10; Architecture. Input: `foreman/scripts/workers.py`, `foreman/skills/story-start/SKILL.md`,
@@ -455,13 +458,14 @@ flowchart LR
   **From X2 (merged):** One shared stall silenced 4 workers at once for ~146 min (machine asleep): `watch` should report a silence that hits several workers at the same moment as one event, not N stuck workers. Stuck is a question for the user; silence alone is not enough to reap (30-min default has only ~1.4× margin over the longest live wait).
   **From Q7 (merged):** Review agents stalled three times on the guard-hook branches (Q7 diff re-review twice, Q7 security re-review once; Q8's diff re-review too): each sat 'running' for hours after starting to read worker-guard.sh or build a scratch repo. A bounded rerun (under 10 tool calls, test-guards.sh at most once, no interactive commands) finished in under a minute. The watch should catch a reviewer with no progress and relaunch it bounded.
 
-- [ ] **R8 · WIP checkpoint commits** · Deps: V1 · Type: agent · Lane: Workers · Size: S · Resource: story-worker, story-start
+- [x] **R8 · WIP checkpoint commits** · Deps: V1 · Type: agent · Lane: Workers · Size: S · Resource: story-worker, story-start
   Context: Design › D10. Input: `foreman/agents/story-worker.md`, `foreman/skills/story-start/SKILL.md` § 5.
   Output: story-worker commits `wip(<ID>): <DoD item>` after each DoD item it completes, so a dead worker loses at
   most one item; its final commits use Conventional Commits as now (story-finish merges with `--no-ff`, so the
   history stays). story-start § 5: a continue on a dirty worktree whose worker is dead offers "commit as WIP (the
   user, with a `!` line), then continue".
   DoD: the two files hold the rule; the global checks pass.
+  **Outcome:** story-worker commits wip(<ID>): <item> after each DoD item that changes files, staging the story's files by path (§ 4 stages by path too, no more git add -A); the last file change and check fixes go into the final Conventional commit. story-start --continue treats a gone running/launching worker as dead once the user confirms, and offers commit-as-WIP (user ! line) then continue. 2 fix rounds.
 
 - [ ] **R9 · Verdict ledger** · Deps: V1, Q1 · Type: agent · Lane: Review · Size: M · Resource: workers
   Context: Design › D11; Architecture. Input: `foreman/scripts/workers.py`, `foreman/tests/test_workers.py`.
@@ -513,6 +517,7 @@ flowchart LR
   launch with its output.
   DoD: tests render a fresh and a continue brief from fixtures and fail on a missing value; story-start uses the
   command; the global checks pass.
+  **From R8 (merged):** Briefs must keep the checkpoint rule's wording from story-worker.md § 3/§ 4 (wip(<ID>) per file-changing DoD item, staged by path; final Conventional commit).
 
 - [ ] **V2 · Release 0.12.0** · Deps: R1–R13, X1, X2, X3 · Type: mixed · Lane: Release · Size: S · Resource: version
   Context: Design › Gates; Constraints. Input: `foreman/CHANGELOG.md`, `foreman/README.md`,
