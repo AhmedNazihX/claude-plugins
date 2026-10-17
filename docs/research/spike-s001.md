@@ -1,6 +1,6 @@
 # Spike S-001: workflow, named agents, worktree
 
-Date: 2026-10-17 · Claude Code 2.1.302 · Status: **done: verdict GO** (two design decisions open, see the end)
+Date: 2026-10-17 · Claude Code 2.1.302 · Status: **done: verdict GO** (decisions in 010)
 
 **Method.**
 - **Probe plugin:** `spike/accio-spike/` (throwaway, not committed). It has:
@@ -58,7 +58,8 @@ matters for users who have workflows switched off (12).
   - (b) `isolation: 'worktree'`, so the cwd is the worktree (3), but it sits inside the repo with its own branch names
   - (c) `house-elf` may write in any accio worktree (weaker)
 
-## Left to do
-1. (Human, optional) Type `/accio-spike:probe` in an interactive session started with
-   `claude --plugin-dir spike/accio-spike` in a scratch repo, and note the permission prompt.
-2. Decide D1 and D2, apply them and the settled points to `DESIGN.md`, then delete `spike/`.
+## Closed
+- D1, D1b and D2 were decided by the user: decision 010. They are applied in `DESIGN.md` and `docs/BACKLOG.md`.
+- The interactive permission prompt (typing the command in a live session) was not tried by hand. That is
+  optional; the documented behaviour is one prompt per run, with "don't ask again" for named plugin workflows.
+- The probe plugin `spike/` was deleted. This report and the run evidence summarised above are what remain.
