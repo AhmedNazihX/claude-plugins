@@ -62,12 +62,14 @@ The verdict ledger. ledger.tsv has one tab-separated row per verdict: ts, story,
 evidence. It is append-only. Tabs, carriage returns and newlines in a cell become a space, and a cell that starts
 with = + - or @ gets a leading ' so a spreadsheet never reads it as a formula. `verdict` resolves the sha to the
 full commit id, so it runs inside the repo. A reviewer's latest row on a matching sha decides: a fail after a
-pass voids it. An earlier sha matches the head when `git patch-id --stable` of its diff from the base branch
+pass voids it. An earlier sha matches the head when `git patch-id --verbatim` of its diff from the base branch
 (--base, default foreman.json's base_branch, else main) equals the head's: a rebase that changes nothing keeps
-its verdicts, a new commit voids them.
+its verdicts, a new commit voids them. --verbatim (git 2.39 or later) keeps whitespace, so a change that only
+moves a line's indentation, which can change what Python does, voids them too. Each `verdict` holds an exclusive
+lock on ledger.tsv.lock, next to the ledger, while it appends its row, and flushes the row to disk (fsync).
 
-Every change (record, set, forget, verdict) holds an exclusive lock on workers.json.lock, next to the registry, for its
-whole load-modify-save, and writes through a temp file and a rename. Parallel calls never lose an entry, and a
+Every registry change (record, set, forget) holds an exclusive lock on workers.json.lock, next to the registry,
+for its whole load-modify-save, and writes through a temp file and a rename. Parallel calls never lose an entry, and a
 reader never sees a half-written file.
 
 An agent id reaches its worker only from the session that launched it. A new session continues the story with
@@ -155,7 +157,7 @@ def load(path: Path) -> dict[str, dict[str, object]]:
 
 @contextmanager
 def locked(path: Path) -> Iterator[None]:
-    """Hold an exclusive lock on the registry's lock file. Closing the file releases it."""
+    """Hold an exclusive lock on <path>.lock, the lock file next to the given path. Closing the file releases it."""
     path.parent.mkdir(parents=True, exist_ok=True)
     with open(path.with_name(path.name + ".lock"), "a", encoding="utf-8") as handle:
         fcntl.flock(handle, fcntl.LOCK_EX)
@@ -470,10 +472,12 @@ def full_sha(sha: str) -> str | None:
 
 
 def patch_id(sha: str, base: str) -> str | None:
-    """`git patch-id --stable` of the change from where sha left base to sha; None for no change or no commit."""
+    """`git patch-id --verbatim` of the change from where sha left base to sha; None for no change or no commit.
+
+    --verbatim, not --stable: --stable ignores whitespace, so a dedent that changes behaviour would keep a pass."""
     fork = git("merge-base", base, sha)
     diff = git("diff", "--no-ext-diff", "--no-color", "--binary", fork.strip(), sha) if fork else None
-    out = git("patch-id", "--stable", stdin=diff) if diff else None
+    out = git("patch-id", "--verbatim", stdin=diff) if diff else None
     return out.split()[0] if out and out.strip() else None
 
 

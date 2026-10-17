@@ -505,6 +505,26 @@ class VerdictTest(unittest.TestCase):
         result = self.verdicts(rebased)
         self.assertEqual(result.returncode, 0, result.stderr)
 
+    def test_a_new_head_that_only_changes_indentation_voids_a_pass(self) -> None:
+        reviewed = self.commit("guard.py", "if bad:\n    raise SystemExit(1)\n")
+        self.verdict("foreman:diff-reviewer", reviewed)
+        self.verdict("foreman:security-reviewer", reviewed)
+        dedented = self.commit("guard.py", "if bad:\nraise SystemExit(1)\n")
+        result = self.verdicts(dedented)
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("foreman:diff-reviewer: no verdict", result.stderr)
+        self.assertIn("foreman:security-reviewer: no verdict", result.stderr)
+
+    def test_a_malformed_row_is_skipped_with_a_warning_and_the_others_count(self) -> None:
+        head = self.git("rev-parse", "HEAD")
+        self.verdict("foreman:diff-reviewer", head)
+        with open(self.ledger, "a", encoding="utf-8") as handle:
+            handle.write("not\ta\trow\n")
+        self.verdict("foreman:security-reviewer", head)
+        result = self.verdicts(head)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn(f"{self.ledger}:3: skipped, not 7 cells", result.stderr)
+
     def test_another_storys_verdicts_dont_count(self) -> None:
         head = self.git("rev-parse", "HEAD")
         for reviewer in REVIEWERS.split(","):
@@ -527,6 +547,7 @@ class VerdictTest(unittest.TestCase):
             (("Z7", "a", head, "maybe", "--level", "static-only"), "one of pass, fail"),
             (("Z7", "a", head, "pass", "--level", "quick"), "one of live-verified"),
             (("Z7", "a", head, "pass", "--level", "blocked"), "a pass can't be blocked"),
+            (("Z7", "a", head, "pass", "--level", "failed"), "a pass can't be failed"),
             (("Z7", "a", "main", "pass", "--level", "static-only"), "isn't a commit"),
             (("Z7", "a", "0" * 40, "pass", "--level", "static-only"), "isn't a commit"),
             (("../Z7", "a", head, "pass", "--level", "static-only"), "an ID has only"),
