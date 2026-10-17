@@ -26,7 +26,12 @@ The project's settings are in `.claude/foreman.json`: its `checks`, `link_files`
 Run each step below as its own tool call, and wait for its result before the next. Never put two of them in one
 parallel batch: if the sparse checkout is refused, the branch must not have been renamed yet.
 
-1. **Check the base.** Run `git merge-base --is-ancestor <BASE_SHA> HEAD`. If it fails, stop and report `BLOCKED: wrong base`.
+1. **Check the base.** Run `git merge-base --is-ancestor <BASE_SHA> HEAD`. If it fails, check whether your HEAD is
+   simply behind: the harness can create the worktree at `origin/<base>` instead of the local base, when the base
+   isn't pushed. If `git merge-base --is-ancestor HEAD <BASE_SHA>` succeeds, run the bare command
+   `git merge --ff-only <base>` (`base_branch` in `.claude/foreman.json`, default `main`), alone: no `-C`, nothing
+   chained. Then run the base check again. If it still fails, stop and report
+   `BLOCKED: wrong base`. With `CONTINUE`, skip this step: step 3 runs the check after the switch.
 2. **Sparse checkout,** only if `DENY` isn't empty. Do this *before* renaming the branch: on a story branch the
    lane guard blocks every `sparse-checkout` command except `list`.
    Write the patterns, one per line (`/*`, then `!/<path>` for each `DENY` path, then `/<path>` for each `ALLOW`
@@ -43,10 +48,14 @@ parallel batch: if the sparse checkout is refused, the branch must not have been
    and the guard's message or what the check found. A worktree you leave unchanged is removed when you stop, so the orchestrator relaunches the story rather
    than resuming you.
 3. **Rename the branch.** `git branch -m story/<STORY>-<SLUG>`
-   With `CONTINUE`, don't rename: note the current branch name, run `git switch <branch>`, and check that
-   `git rev-parse HEAD` is the given head sha (if either fails, stop and report `BLOCKED: continue` with the
-   output). Your worktree is now on the story branch with its commits. Put the old branch name in your report, so
-   the orchestrator can delete it. Then do the task you were given, not the whole story again.
+   With `CONTINUE`, don't rename. Note the current branch name, then run, each as its own call:
+   - `git switch <branch>`, bare, in your own worktree (no `-C`: the guard refuses it; nothing chained);
+   - `git rev-parse HEAD`, which must print the `CONTINUE` head sha;
+   - the base check, against that sha: `git merge-base --is-ancestor <BASE_SHA> <head sha>`.
+
+   If any of them fails, stop and report `BLOCKED: continue` with the output. Your worktree is now on the story
+   branch with its commits. Put the old branch name in your report, so the orchestrator can delete it. Then do the
+   task you were given, not the whole story again.
 4. **Link the local files.** For each path in `link_files`, first check it exists in `MAIN` with a lone
    `test -e "<MAIN>/<path>"`, then link it with a lone `ln -s "<MAIN>/<path>" <path>`. A path in `link_files` may be
    a secrets file, and a command that names one runs **alone**, with nothing chained or piped (no `&&`, `;`, `|`,

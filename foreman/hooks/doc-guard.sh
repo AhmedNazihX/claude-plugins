@@ -119,6 +119,7 @@ range_bytes() {  # range_bytes <file> <offset> <limit> -> bytes the read would l
 OFFSET=$(echo "$INPUT" | jq -r '.tool_input.offset // empty')
 LIMIT=$(echo "$INPUT" | jq -r '.tool_input.limit // empty')
 BYTES=$(range_bytes "$ABS" "$OFFSET" "$LIMIT")
+BYTES=${BYTES//[[:space:]]/}                   # macOS wc pads its count with spaces
 [ -n "$BYTES" ] && [ "$BYTES" -gt "$MAX" ] || exit 0
 excluded "$(relpath "$ABS")" && exit 0
 

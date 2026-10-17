@@ -61,6 +61,11 @@ run 2 "$(read_in "$R" "$R/docs/BIG.MARKDOWN")"                  ".MARKDOWN (any 
 run 2 "$(read_in "$R" "$R/docs/big.mdx")"                       ".mdx blocked whole like .md"
 run 2 "$(read_in "$R" "$R/CaseTest/BIG.md")"                    "exclude is case-exact: 'casetest/big.md' doesn't exempt 'CaseTest/BIG.md'"
 
+echo "block message"
+OUT=$(printf '%s' "$(read_in "$R" "$R/docs/BIG.md")" | "$GUARD" 2>&1 >/dev/null)
+if printf '%s' "$OUT" | grep -qE "is [0-9]+ bytes"; then echo "  ok    the byte count is printed without padding"
+else echo "  FAIL  the byte count is padded or missing: $OUT"; FAILS=$((FAILS + 1)); fi
+
 echo "offset/limit edge cases"
 run 0 "$(read_in "$R" "docs/SMALL.md")"                         "relative path (small file) allowed"
 run 2 "$(read_in "$R" "docs/BIG.md")"                           "relative path (big file) blocked"

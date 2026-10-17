@@ -61,6 +61,8 @@ DENY: <comma-separated, or empty>
 ALLOW: <comma-separated, or empty>
 COST_CAP_USD: <cost_cap_usd from the config, or 0 for "ask before any paid call">
 PARALLEL: <the other stories in this set, and whether any of them may change a shared resource>
+Setup note: if the base check fails and your HEAD is an ancestor of BASE_SHA, run the bare command
+`git merge --ff-only <base branch>` alone (no `-C`, nothing chained), then the base check again.
 
 Story entry:
 <paste the full output of `backlog.py show <ID>`>
@@ -70,6 +72,11 @@ Follow your agent instructions: set up the worktree, load context, implement, ch
 ```
 
 Never paste secret files, or the contents of denied folders, into a prompt.
+
+The setup note is there because the harness can create a worker's worktree at `origin/<base>` instead of the local
+HEAD, despite `worktree.baseRef: head`. With an unpushed base, the worker's HEAD is then behind `BASE_SHA`, and the
+fast-forward brings it up to date (`story-worker` › Set up, step 1). The note stays in the prompt for sessions whose
+cached agent file is older.
 
 **Record each worker as `launching` before the Agent call,** so a cleared or new session can find it again, even
 one that ended mid-launch:
@@ -140,10 +147,16 @@ Then launch one `foreman:story-worker` with the recorded brief (same `STORY`, `S
 
 ```
 CONTINUE: story/<ID>-<slug> <HEAD_SHA>
+Continue steps (instead of the base check and the rename), each as its own call:
+- `git switch story/<ID>-<slug>`, bare, in your own worktree (no `-C`: the guard refuses it; nothing chained)
+- `git rev-parse HEAD`, which must print <HEAD_SHA>
+- `git merge-base --is-ancestor <BASE_SHA> <HEAD_SHA>`, the base check after the switch
+If any of them fails, stop and report `BLOCKED: continue` with the output.
 Story notes: <the story's backlog notes since launch, from `backlog.py show <ID>`>
 Task: <what to do now: the fix round's findings, the user's decisions, or "finish the story">
 ```
 
+The continue steps repeat `story-worker` › Set up, step 3, for sessions whose cached agent file is older.
 Record it in the same two steps as in section 3: `record <ID> --launching --replace --base <BASE_SHA>` with this
 prompt as the brief before the Agent call (`--replace` because it replaces the stopped worker's entry), then
 `record <ID> --agent` with the new agent id and worktree. When it reports, delete the leftover branch it names with `git branch -d <branch>` if it still

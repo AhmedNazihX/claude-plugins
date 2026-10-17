@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+- Hand-over fixes. `story-worker` and story-start's continue prompt show the bare `git switch <branch>` (no `-C`)
+  and run the base check after the switch; a worker whose worktree starts behind the base fast-forwards with
+  `git merge --ff-only <base>`. `worker-guard` now blocks stuck and bundled branch options (`-bname`, `-qb`,
+  `--orphan=`), `--track`, `-`/`@{-N}`, `switch -d`, a name git would turn into a branch, `worktree add` without
+  `--detach`, fetch refspecs with a destination, aliases (`-c alias.…`, unknown subcommands), escaped spaces and
+  `--namespace` before the subcommand, and a relative `-C` after `cd`; it allows `backlog.py … --dry-run`.
+  It also blocks `branch -m/-M/-c` on other branches (renaming its own branch to a story name stays allowed),
+  bundled `branch -qf`, `symbolic-ref` writes, `send-pack`, `http-push`, `git config` alias and include writes,
+  aliases after `timeout`/`stdbuf`/`nice` or a lone `&`, and the clone exemption when `--git-dir`, a second `-C`
+  or `GIT_DIR=` names another repo. `lane-guard` blocks when `backlog.py info` fails and a lane has a deny list.
+  `doc-guard` prints the byte count without padding.
+
 - `backlog.py` is split under the 800-line ceiling: the model (`Story`, `Backlog`, the dep parsing and the
   per-story checks) moves to `scripts/backlog_model.py`, which it imports from its own folder. No behaviour change.
 
