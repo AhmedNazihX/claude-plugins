@@ -311,7 +311,7 @@ flowchart LR
   the global checks pass.
   **From Q10 (merged):** Q10 stopped after its third fix round (story-finish cap): each round's parsing fixes opened new gaps of the same kind. Open text-parsing gaps, none a regression against the pre-Q10 guard, for this story's ref-change check to cover: git config --get (or a --get* word) anywhere counts as a read even as another option's value; config key position ignores options with values (-f/--file, --blob, --type, --default, --comment, --value), and quotes glued to a key ("alias".p); branch -m through GIT_DIR=/--git-dir rather than -C; a standalone quoted word after an empty --opt=; fetch --refmap / -c remote.*.fetch= / preset remote.*.fetch; git branch -d/-D and plain git branch <name>; sh -c / bash -c wrappers. Each should be a test case: the ref moves, is reported and restored.
 
-- [ ] **V1 · Release 0.11.0** · Deps: F2, Q1–Q10 · Type: mixed · Lane: Release · Size: S · Resource: version
+- [x] **V1 · Release 0.11.0** · Deps: F2, Q1–Q10 · Type: mixed · Lane: Release · Size: S · Resource: version
   Context: Design › Gates; Constraints. Input: `foreman/CHANGELOG.md`, `foreman/README.md`,
   `foreman/.claude-plugin/plugin.json`.
   Output: `## Unreleased` becomes `## 0.11.0 (<date>)`, with a new empty `## Unreleased` above it; `plugin.json`
@@ -321,6 +321,7 @@ flowchart LR
   **From F2 (merged):** First Actions run must show the pinned `@anthropic-ai/claude-code@2.1.302` install and `claude plugin validate` passing on the runner: the install is required, so its failure fails the whole job. Pinned actions: checkout v4.4.0, setup-python v5.6.0, setup-node v4.4.0.
   **User decision (2026-10-17):** CI removed. F2's workflow (.github/workflows/test.yml) was deleted after its first Actions run failed on Linux (foreman/hooks/test-guards.sh exits 1 on ubuntu, passes on macOS; run 38974723879). V1's 'first green run in Actions' DoD item no longer applies; the global checks run locally only.
   **From orchestrator (merged):** User decision (2026-10-17, later): CI restored (e0ffe45). The Linux failure was test-guards.sh's plain `git init`: Apple's git defaults to main, Linux git to master, so three worker-guard tests had no main branch to protect. Now `git init -b main`; all checks pass in a python:3.12-slim container, Q10's merged tests too. The 'green Actions run' DoD item applies again: launch ci-watcher after the release push.
+  **Outcome:** Released foreman 0.11.0 (2026-10-17): CHANGELOG grouped with upgrade notes (user approved after one accuracy fix round), plugin.json and README at 0.11.0. Pushed 89a8eb0; Actions run 39025615880 green (first since CI was restored). Release copy pulled to 89a8eb0.
 
 ## Phase 2 — Experiments
 
