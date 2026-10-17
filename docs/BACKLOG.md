@@ -26,7 +26,7 @@ evals/                       scripts/publish.py
 | done | S-008 `accio-merge` |
 | done | S-009 `accio-cost` |
 | todo | S-010 `accio-summary` |
-| todo | S-011 Secret patterns and `pre-commit` |
+| done | S-011 Secret patterns and `pre-commit` |
 | todo | S-012 `accio-hooks`: install, chain, verify, `pre-push` |
 | todo | S-013 `protego` |
 | todo | S-014 `fidelius` |
@@ -174,14 +174,19 @@ Context: DESIGN § 3.5, § 7.2.
 - [ ] S-010/4 WHEN the summary is written THE SYSTEM SHALL keep it within about 150 tokens per story
 
 ### S-011 · Secret patterns and `pre-commit`
-Deps: S-003 · Files: `bin/accio_lib/secrets.py`, `tests/test_secrets.py`
+Deps: S-003 · Files: `bin/accio_lib/secret_scan.py` (not `secrets.py`, which would read like Python's own module), `tests/test_secret_scan.py`
 Context: DESIGN § 6 (pattern list); `~/Workspace/claude-mods/secret-guard/hooks/patterns.ts`.
-- [ ] S-011/1 WHEN text contains a Stripe, Google or AWS key THE SYSTEM SHALL report it
-- [ ] S-011/2 WHEN a JWT's role is not `service_role` THE SYSTEM SHALL not report it
-- [ ] S-011/3 WHEN a database URL's password is for a local host, or a value is a known example THE SYSTEM SHALL not report it
-- [ ] S-011/4 WHEN a secret is reported THE SYSTEM SHALL show only a prefix
-- [ ] S-011/5 WHEN gitleaks is installed THE SYSTEM SHALL use it for the staged scan, and the built-in patterns otherwise
-- [ ] S-011/6 WHEN a test needs a fake key THE TEST SHALL build it at runtime by concatenation
+- [x] S-011/1 WHEN text contains a Stripe, Google or AWS key THE SYSTEM SHALL report it
+- [x] S-011/2 WHEN a JWT's role is not `service_role` THE SYSTEM SHALL not report it
+- [x] S-011/3 WHEN a database URL's password is for a local host, or a value is a known example THE SYSTEM SHALL not report it
+- [x] S-011/4 WHEN a secret is reported THE SYSTEM SHALL show only a prefix
+- [x] S-011/5 WHEN gitleaks is installed THE SYSTEM SHALL use it for the staged scan, and the built-in patterns otherwise
+- [x] S-011/6 WHEN a test needs a fake key THE TEST SHALL build it at runtime by concatenation
+Outcome: staged blobs are read by id (odd names, type changes, UTF-16 with a BOM and NUL-bearing files covered;
+deletions, submodules and symlinks skipped); the built-in patterns and the `.env` refusal always run, gitleaks adds
+its rules (only its exit 99 is a finding). A database URL is judged on its host and its password alone (fails
+closed on `localhost@other`); `.env` files match in any case and spelling. Two review rounds plus an automated
+security review. Left open (notes): BOM-less UTF-16/UTF-32 files and `postgresql+driver://` URLs aren't scanned.
 
 ### S-012 · `accio-hooks`: install, chain, verify, `pre-push`
 Deps: S-011 · Files: `bin/accio-hooks`, `bin/accio_lib/githooks.py`, `tests/test_githooks.py`
