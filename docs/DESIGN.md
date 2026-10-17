@@ -5,8 +5,8 @@ Status: approved · Date: 2026-10-17 · Owner: Ahmed N. Ali
 Sources:
 - `intent.md`
 - `docs/research/analysis.md`, `build-engine.md`, `platform-facts.md`
-- decisions `docs/decisions/001`–`009` (002 and 004 amended after the design review; 001, 004 and 008 amended by
-  the design grilling, decision 009)
+- decisions `docs/decisions/001`–`010` (002 and 004 amended after the design review; 001, 004 and 008 amended by
+  the design grilling, decision 009; decision 010 after spike S-001)
 
 accio is a Claude Code plugin that runs production software work in Lean-Kanban iterations:
 1. design the stack and architecture
@@ -500,7 +500,7 @@ Next: /accio:owl
 - the hooks `protego`, `fidelius`, `curfew`, `doc-size` and `session-start`
 - the native git hooks, with chaining and `verify`
 - the scripts except the `pensieve` metrics
-- `brew-by-hand`, only if spike S-001 needs it
+- `brew-by-hand`: only for users with workflows off (spike S-001: GO)
 
 **In v1.1:**
 - `telescope` (decision 008)
@@ -517,25 +517,14 @@ Next: /accio:owl
 
 **How accio is built (decision 009).** By hand, in plain Claude sessions, from a lean `docs/BACKLOG.md`.
 
-### The first story is a spike (S-001)
-The spike must prove two things:
-1. A plugin workflow can call accio's named agents.
-2. A plugin workflow can run them in a worktree created by a script.
-
-It also checks these points:
-- whether `agent()` reports token usage
-- how the opt-in and permission prompt behave when a user types `/accio:brew`
-- **whether agents inside a workflow prompt for tool permissions.** If they do, the § 12.1 allow rules must cover them.
-- whether `bin/` is on PATH, and `${CLAUDE_PLUGIN_ROOT}` is set, inside workflow agents
-- whether `protego`, `fidelius` and `curfew` fire inside workflow agents
-- whether `CLAUDECODE=1` is set inside workflow agents (the `pre-push` rule needs it)
-- what `/accio:brew` does when workflows are disabled. The fallback message must come from the `session-start` hook
-  or from `map`, not from the workflow.
-
-**Fallbacks**, in order:
-1. The script creates the worktree and the agent prompt is loaded from its file.
-2. As a last resort, a `brew-by-hand` skill runs the same steps as plain subagents, superpowers-style. The
-   `session-start` hook and `map` suggest it when workflows are off.
+### Spike S-001: done, verdict GO
+`docs/research/spike-s001.md` holds the evidence. In short:
+- A plugin workflow runs accio's named agents (`agentType: 'accio:<agent>'`) in worktrees made by accio's script.
+- Plugin hooks fire inside those agents, can block, and see the caller's `agent_id` and `agent_type`.
+- `CLAUDECODE=1` is set inside them, and `bin/` is on their PATH.
+- **No fallback is needed.** `brew-by-hand` is only for users who have workflows switched off.
+- The spike also changed the design: accio's hook answers every permission question for its agents, because an
+  unanswered prompt hangs a run and `stallMs` doesn't catch it, and agents claim their worktree (decision 010).
 
 ---
 
@@ -543,9 +532,10 @@ It also checks these points:
 
 | Risk | Mitigation |
 |---|---|
-| Workflow unknowns (named agents, worktrees, usage) | S-001 spike with defined fallbacks |
-| Workflow disabled (`disableWorkflows`) or a headless run needs an allow rule | `session-start` and `map` detect this and point to `brew-by-hand` |
-| Hooks don't fire inside workflow agents | the spike checks it; the main snapshot backs up `curfew`; the native git hooks don't depend on it |
+| Workflow unknowns (named agents, worktrees, usage) | settled by spike S-001: GO (`docs/research/spike-s001.md`) |
+| Workflows disabled (`disableWorkflows`) | the command vanishes; `prophecy` and `map` notice the missing `Workflow` tool and point to `brew-by-hand`; a headless run needs `--allowedTools Workflow` |
+| An accio agent waits on a permission prompt (the run hangs, and `stallMs` doesn't catch it) | `curfew` answers every tool call for accio's agents; agent tool lists stay short (decision 010) |
+| `curfew`'s allow list is too narrow at first | each denial becomes a question at `owl`; "allow from now on" grows `agent_allow` |
 | A crash leaves `run/brew.lock` behind and blocks the user's pushes | every status move refreshes the lock; it counts as stale after 30 min, and the hook says so |
 | The track score misjudges | risky paths force Story; the user can override in `prophecy` |
 | Parallel stories conflict on merge | file boundaries per story; on conflict, back to Ready and rebase |
@@ -560,16 +550,10 @@ It also checks these points:
 ## 12. Contracts and lifecycle (added after the design review)
 
 ### 12.1 One-time setup
-`accio-hooks install` runs at the first `wand` or `brew` and does two things:
-1. **Installs the native git hooks,** chaining into an existing hook manager where it can (§ 4.5).
-2. **Proposes the project allow rules** in `.claude/settings.json`:
-   - the accio scripts by absolute path
-   - the project's `checks` commands
-   - Edit and Write
-   - `git` add, commit, switch and worktree
-
-The user approves it once. It counts as a touchpoint, and it exists so that agents in an unattended run never stall
-on a permission prompt (spike S-001 confirms whether workflow agents prompt at all).
+`accio-hooks install` runs at the first `wand` or `brew` and installs the native git hooks, chaining into an
+existing hook manager where it can (§ 4.5). **It writes no allow rules** to the project's settings, because
+`curfew` answers permission questions for accio's agents itself (decision 010). The only other approval is the
+workflow launch: the first `/accio:brew` asks once, and "don't ask again" covers later runs.
 
 ### 12.2 Who writes what
 | File | Written by | When committed |
@@ -581,7 +565,8 @@ on a permission prompt (spike S-001 confirms whether workflow agents prompt at a
 | `run/status.json` | `accio-board move` (from `portkey`/`prefect`) | never (runtime); `owl` folds it into the story files |
 | `run/ledger.tsv` | `accio-ledger` (from `prefect`, `headmaster`) | never |
 | `run/main-snapshot` | `prefect` (before and after each story: `git status` and `origin/<base>`) | never |
-| `run/brew.lock` | `brew.js` (start and end), refreshed by `accio-board move` | never |
+| `run/brew.lock` | `accio-board lock` / `unlock` (from `portkey`), refreshed by `accio-board move` | never |
+| `run/claims.json` | `curfew` (when `house-elf` runs `accio-claim`) | never; cleared when a run starts |
 | `run/<ID>/brief.md`, `report.md`, `findings-*.md` | `accio-brief`; `house-elf`; each reviewer | never |
 | `run/questions/<ID>.md` | `headmaster` (needs-user), or an agent's `needs override` | never; answers go into the story at `owl` |
 
@@ -626,5 +611,6 @@ A story whose status in `run/status.json` is *Doing* but which has no live run g
 - at step 3 (check) if its branch has commits after its base (base, or the parent's head)
 - at step 1 (prepare) otherwise
 
-Checkpoint commits make this safe. An `accio/integrate-<N>` branch left by a crash at `owl` is deleted and rebuilt;
+Checkpoint commits make this safe. A new run clears `run/claims.json`, so a resumed story's fresh `house-elf`
+claims again. An `accio/integrate-<N>` branch left by a crash at `owl` is deleted and rebuilt;
 main was never touched.
