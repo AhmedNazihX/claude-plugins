@@ -234,7 +234,7 @@ Each skill keeps its SKILL.md under about 80 lines, with details in `references/
 | `owl` | review, checkpoint 2 | yes | v1 |
 | `map` | board | yes | v1 |
 | `vow` | decision record | yes | v1 |
-| `brew-by-hand` | fallback build controller, plain subagents | yes (one command) | v1, only if spike S-001 needs it |
+| `brew-by-hand` | fallback build controller, plain subagents | yes (one command) | conditional: only for users with workflows off (spike S-001: GO) |
 | `reparo` | quick fix | yes | v1.1 |
 | `lumos` | explain | yes | v1.1 |
 | `telescope` | research for better ways (prophecy, pensieve, on demand) | yes (notes) | v1.1 |
@@ -248,7 +248,7 @@ The build itself is the workflow `/accio:brew` (§ 4.3), not a skill.
 | `seeker` | researcher (live docs and code facts in `wand`; better ways via `telescope` in v1.1) | Sonnet | Read, Grep, Glob, WebSearch, WebFetch | `findings: <path>` |
 | `wandmaker` | architect, 2–3 options | Opus | read-only | `options: <path>` |
 | `portkey` | worktree and brief | Haiku | Bash (scripts only) | `{worktree, brief, base}` |
-| `house-elf` | implementer | Sonnet / Opus | all, inside its worktree (enforced by `curfew`, § 4.4) | `{status, head, report}` |
+| `house-elf` | implementer | Sonnet / Opus | Read, Grep, Glob, Write, Edit, Bash, kept short because `curfew` must answer every tool (§ 4.4) | `{status, head, report}` |
 | `prefect` | checks, ledger, DoD tags, main snapshot | Haiku | Bash | `{pass, failing[], skipped}` |
 | `examiner` | spec reviewer and backlog checker | Sonnet | read-only plus Write to its findings path | `{verdict, counts, path}` |
 | `professor` | quality reviewer | Sonnet | same as examiner | same |
@@ -270,8 +270,8 @@ them.
 |---|---|---|
 | `protego` | PreToolUse Bash | blocks a short list: `reset --hard`, `clean -f`, `rm -rf` outside the repo, `--no-verify`, `core.hooksPath` changes, force branch delete (`-D`; `-d` is allowed because git refuses it on unmerged branches), `unset CLAUDECODE` / `env -u CLAUDECODE`; every block names the safe alternative; defers to dcg if installed |
 | `fidelius` | PreToolUse Write/Edit | blocks key-shaped values; never echoes the secret; test fixtures build fake keys at runtime by concatenation, so they need no exemption |
-| `curfew` | PreToolUse Write/Edit | inside an accio worktree, blocks writes outside that worktree; the one exception is `.accio/run/<ID>/` in the main repo |
-| `session-start` | SessionStart | injects ≤ 10 lines: the board summary, the next step and the plain-words rule (plugins can't ship rules); points to `brew-by-hand` when workflows are off |
+| `curfew` | PreToolUse, every tool (matcher `*`) | **answers every permission question for accio's agents** (`agent_type` `accio:*`), so none ever waits on a prompt; other callers get no answer and go through the normal permission flow (decision 010). **`house-elf`:** its first command, `accio-claim <ID>`, links its `agent_id` to that story's worktree in `run/claims.json`, and until then it may not write. After that, Write/Edit only inside its worktree (plus `.accio/run/<ID>/`), resolving `..` and symlinks. Bash only from an allow list that learns: the checks, git except push, read-only tools, the project's run/build/test commands, plus `agent_allow` in `config.json`; split at `&&`, `;` and `\|`, and a command that touches files starts with `cd <its worktree> &&` or uses `git -C <its worktree>`. Anything unparseable (`$(…)`, backticks, `sh -c`, `eval`) is denied. **Other agents:** an exact list each. Every deny names its reason; in a build it becomes a BLOCKED question at `owl` |
+| `session-start` | SessionStart | injects ≤ 10 lines: the board summary, the next step and the plain-words rule (plugins can't ship rules); points to `brew-by-hand` when `CLAUDE_CODE_DISABLE_WORKFLOWS` is set (it can't see the `disableWorkflows` setting; `prophecy` and `map` catch that case) |
 | `doc-size` | PreToolUse Read | blocks a whole-file read of `.md` files over 40 KB and points to `librarian`, or to reading by section with offset/limit |
 
 ### 4.5 Native git hooks
@@ -279,7 +279,7 @@ them.
 - **`pre-commit`:** a secret scan, with gitleaks if installed and built-in patterns otherwise.
 - **`pre-push`:** blocks force-push for everyone. A push to the base branch without a valid `owl` token is
   blocked by **where and when** it happens (decision 009):
-  1. **During a `brew` run, from anyone.** `brew.js` writes `run/brew.lock` at the start and removes it at the end.
+  1. **During a `brew` run, from anyone.** The run takes `run/brew.lock` at the start (`accio-board lock`) and releases it at the end.
      Every status move refreshes it. A lock with no refresh for 30 minutes counts as stale, and the hook says so.
   2. **From a story worktree, always.** Nothing legitimate pushes from one in v1.
   3. **Outside a run, when `CLAUDECODE=1` is set** (Claude is pushing). `! git push` typed inside Claude Code
@@ -302,19 +302,20 @@ user gets one plain line: re-add, or carry on without it. Uninstall removes only
 
 ### 4.6 Scripts
 All scripts are in `bin/` and use only the Python 3 standard library. **Every script finds the main checkout's
-`.accio/` with `git rev-parse --git-common-dir`, from any worktree**, so worktrees never read stale state. Briefs
-give agents each script's absolute path, because whether `bin/` is on PATH inside a workflow agent is UNKNOWN
-until the spike.
+`.accio/` with `git rev-parse --git-common-dir`, from any worktree**, so worktrees never read stale state. `bin/` is
+on PATH inside workflow agents, but `${CLAUDE_PLUGIN_ROOT}` is not set there (spike S-001), so briefs give each
+script's absolute path.
 
 | Script | Does |
 |---|---|
-| `accio-board` | parse stories → board.md (with a Dropped line), `ready --json` (including stacked children), `status`, `move`, `new` (IDs) |
+| `accio-board` | parse stories → board.md (with a Dropped line), `ready --json` (including stacked children), `status`, `move`, `new` (IDs), `lock` / `unlock` (the run lock) |
 | `accio-brief` | story → brief.md (template), from base or from the parent's head; fix brief from findings |
 | `accio-ledger` | patch-id verdicts, `check`, `record` |
 | `accio-score` | complexity score → track, split flag |
 | `accio-merge` | integration worktree, `--no-ff` merges in dependency order, full checks, find the breaking story, fast-forward main, clean up |
-| `accio-cost` | sums `usage` from agent transcripts per story and iteration |
-| `accio-hooks` | install (with chaining), `verify`, `run <hook>`, uninstall; proposes the project allow rules (§ 12.1) |
+| `accio-cost` | sums `usage` from each `agent-<id>.jsonl` in the run's transcript folder, grouped by the label in `agent-<id>.meta.json`, per story and iteration (spike S-001) |
+| `accio-claim` | run by `house-elf` as its first command; prints its worktree; `curfew` records the claim (decision 010) |
+| `accio-hooks` | install (with chaining), `verify`, `run <hook>`, uninstall |
 | `accio-summary` | reports and cost data → `run/owl.md` for the review |
 
 ### 4.7 Output style (v1.1)
