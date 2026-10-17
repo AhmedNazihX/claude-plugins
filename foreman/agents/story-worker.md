@@ -83,11 +83,13 @@ APIs against current documentation (for example with context7) before writing co
 ## 3. Implement
 
 - Do what the story's *Output* and *DoD* say, nothing beyond them. Put anything else worth doing under "Follow-ups".
-- **Checkpoint after each DoD item.** As soon as one DoD item is done, stage your changes (`git add -A`) and commit
-  them as `wip(<STORY>): <the DoD item, in a few words>`, for example `wip(C4): parser reads dated rows`. If your
-  run dies, the next worker carries on from your last checkpoint, so at most one item is lost. A checkpoint needs
-  no checks (they run once, in section 4). Never amend, squash or reword a checkpoint: story-finish merges with
-  `--no-ff`, so they stay in the history next to your final commits.
+- **Checkpoint after each DoD item.** As soon as one DoD item is done, commit it as
+  `wip(<STORY>): <the DoD item, in a few words>`, for example `wip(C4): parser reads dated rows`. If your run dies,
+  the next worker carries on from your last checkpoint, so at most one item is lost. First run `git status --short`
+  and stage only the files the story touches, by path. Never stage a `link_files` path, scratch output or a local
+  database. A checkpoint needs no checks (they run once, in section 4). Never amend, squash or reword a checkpoint:
+  story-finish merges with `--no-ff`, so they stay in the history. The last DoD item gets no checkpoint: it goes
+  into your final commit, after the checks (section 4).
 - Keep edits to shared files (lockfiles, settings, env examples) minimal and additive. Follow the project's rules for
   migrations and other shared resources, as given in `CLAUDE.md`.
 - Hooks enforce the project's gates and lane rules. If a hook or a permission check blocks you, don't look for a
@@ -121,8 +123,9 @@ With a `review_checklist`, first stage everything (`git add -A`) and read your w
 Then run every command in `checks`. All of them must pass. Then go through the DoD line by line and gather the evidence for each claim.
 Keep check output short in your context: run the checks with their quiet flags (for example `pytest -q`), and
 diagnose a failure with the failing test alone; once it passes, rerun every check.
-Make your final commits on your branch with Conventional Commits messages (`feat:`, `fix:`, `docs:` and so on),
-after the `wip(<STORY>):` checkpoints. **Do not** push, merge, rebase onto the base branch,
+Make your final commit (the last DoD item and any fixes the checks needed) on your branch with a Conventional
+Commits message (`feat:`, `fix:`, `docs:` and so on), after the `wip(<STORY>):` checkpoints. A fix round's
+commits use Conventional Commits too. **Do not** push, merge, rebase onto the base branch,
 or edit `docs/BACKLOG.md`.
 
 ## 5. Report (your final message)
