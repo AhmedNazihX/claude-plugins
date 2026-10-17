@@ -4,6 +4,10 @@
 
 - `workers.py handoff-path` prints where a worker or reviewer writes its report file, and `workers.py report`
   checks the file's header and prints one section (`--field status|evidence|needs-user|checks`). (R1)
+- `workers.py verdict` records a reviewer's pass or fail on a commit in `.claude/worktrees/ledger.tsv`, and
+  `workers.py verdicts <ID> --head <sha> --reviewers a,b` exits 0 only when each reviewer passed that head (or an
+  earlier sha with the same patch-id, so a clean rebase keeps its verdicts). A reviewer report's `Range:` must now
+  be `<sha>..<sha>`. (R9)
 
 ## 0.11.0 (2026-10-17)
 
