@@ -23,7 +23,7 @@ evals/                       scripts/publish.py
 | done | S-005 `accio-score` |
 | done | S-006 `accio-ledger` |
 | done | S-007 `accio-brief` |
-| todo | S-008 `accio-merge` |
+| done | S-008 `accio-merge` |
 | todo | S-009 `accio-cost` |
 | todo | S-010 `accio-summary` |
 | todo | S-011 Secret patterns and `pre-commit` |
@@ -140,12 +140,17 @@ already exist at the base (DESIGN § 5.1).
 ### S-008 · `accio-merge`
 Deps: S-004, S-006 · Files: `bin/accio-merge`, `bin/accio_lib/merge.py`, `tests/test_merge.py`
 Context: DESIGN § 3.5 Merge, § 12.3 steps 3–4, § 12.6; decision 009.
-- [ ] S-008/1 WHEN stories are accepted THE SYSTEM SHALL merge them `--no-ff` in dependency order on `accio/integrate-<N>`, with messages `<type>(<ID>): <title>`
-- [ ] S-008/2 WHEN the full checks pass THE SYSTEM SHALL fast-forward main and never reset it
-- [ ] S-008/3 WHEN the full checks fail THE SYSTEM SHALL leave main unchanged and name the first story whose merge makes the failing checks fail
-- [ ] S-008/4 WHEN main's checkout has uncommitted changes in the same files THE SYSTEM SHALL stop with one plain question
-- [ ] S-008/5 WHEN the merge succeeds THE SYSTEM SHALL remove the worktrees and delete the branches with `git branch -d` only
-- [ ] S-008/6 WHEN an `accio/integrate-<N>` branch is left by a crash THE SYSTEM SHALL delete and rebuild it
+- [x] S-008/1 WHEN stories are accepted THE SYSTEM SHALL merge them `--no-ff` in dependency order on `accio/integrate-<N>`, with messages `<type>(<ID>): <title>`
+- [x] S-008/2 WHEN the full checks pass THE SYSTEM SHALL fast-forward main and never reset it
+- [x] S-008/3 WHEN the full checks fail THE SYSTEM SHALL leave main unchanged and name the first story whose merge makes the failing checks fail
+- [x] S-008/4 WHEN main's checkout has uncommitted changes in the same files THE SYSTEM SHALL stop with one plain question
+- [x] S-008/5 WHEN the merge succeeds THE SYSTEM SHALL remove the worktrees and delete the branches with `git branch -d` only
+- [x] S-008/6 WHEN an `accio/integrate-<N>` branch is left by a crash THE SYSTEM SHALL delete and rebuild it
+Outcome: main moves only by a fast-forward (`--ff-only --no-overwrite-ignore`, or a non-forced fetch when main isn't
+checked out); after it, nothing raises and leftovers are reported. The culprit search skips checks already failing
+on base, resets accio's own worktree between steps and kills timed-out checks' process groups. Uncommitted,
+untracked or ignored files the merge would touch (renames and spaces included) give one plain question. A merge
+refused by a hook or signing is an error, not a "conflict". Two review rounds.
 
 ### S-009 · `accio-cost`
 Deps: S-001, S-003 · Files: `bin/accio-cost`, `bin/accio_lib/cost.py`, `tests/test_cost.py`, `tests/fixtures/transcripts/`
