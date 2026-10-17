@@ -28,3 +28,10 @@ The full comparison is in `docs/research/build-engine.md`.
   run them in a worktree the script created.
 - **Fallback:** the same steps run as plain subagents driven by the `build` skill. Files and scripts stay the same.
 - **Cost:** about the same worker cost as B. Main-chat cost is about 1–2k tokens per build run.
+
+## Note (2026-10-17)
+Decision 007 renamed this record's parts:
+- `plan` → `prophecy`, `review` → `owl`, `quick` → `reparo`
+- `workflows/build.js` / `/<plugin>:build` → `workflows/brew.js` / `/accio:brew`
+
+Decision 009 makes `/accio:brew` the workflow only, with no skill in front. The fallback is `brew-by-hand`.

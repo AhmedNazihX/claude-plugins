@@ -34,3 +34,13 @@ Session evidence: git-guardrails blocked a harmless `grep -r` because it *could*
   confirmed at `owl`. `owl` writes a one-time token, and the hook deletes it after use. Without this, accio's own
   hook would block the push that decision 005 allows.
 - **`protego` allows `git branch -d`.** Git refuses it on unmerged branches. Only `-D` is blocked.
+
+## Amendment (2026-10-17, design grilling, decision 009)
+- **`pre-push` blocks only Claude's pushes to base:** it blocks when `CLAUDECODE=1` is set and there is no valid
+  `owl` token. Pushes from the user's own terminal pass. Force-push stays blocked for everyone.
+- **Hooks chain into existing hook managers.** They append to plain and husky hooks under a `# accio` marker. For
+  lefthook and the pre-commit framework, setup warns with a snippet. `accio-hooks verify` runs at every `brew` and
+  `owl`.
+- **A `boundary` Write/Edit guard keeps agents inside their worktree,** backed by a `git status` snapshot of the
+  main checkout.
+- **All Claude hooks act only in repos that have `.accio/`.**

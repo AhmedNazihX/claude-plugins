@@ -20,3 +20,7 @@ iteration by default, and it shows in the cost report.
 - A, fixed points (chosen): findings arrive when the user can act on them, with no extra prompts.
 - B, a weekly scheduled routine: about 50–100k tokens a week whether or not the user works. It can be added in v2.
 - C, always on: open-ended cost, and findings pile up unread.
+
+## Amendment (2026-10-17, design grilling, decision 009)
+`telescope` moves to **v1.1**, so v1's `prophecy` has no "better way?" notes. `seeker` stays in v1 for `wand`'s
+fact checks. Points 1–3 above apply from v1.1.

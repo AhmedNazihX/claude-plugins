@@ -22,3 +22,10 @@ Story counts are estimates, based on foreman's 45-story backlog (`~/Workspace/cl
 ## Why
 Foreman's big design ran ahead of feedback. A puts a usable loop in front of the user first, and the rest
 follows as later iterations.
+
+## Amendment (2026-10-17, design grilling, decision 009)
+- **Recount:** the design had grown to about 31 v1 stories, close to option B's size.
+- **Moved to v1.1:** `telescope`, `reparo`, `lumos`, `doc-size` with `librarian`, and the plain output style.
+- **Conditional:** `brew-by-hand` is built only if spike S-001 needs it.
+- **v1 is now about 24–25 stories.** It keeps the whole loop: `wand` (with `wandmaker`), `sort`, `prophecy`,
+  `brew`, `owl`, `map`, `vow`, plus the safety layer.
