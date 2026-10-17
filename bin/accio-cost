@@ -1,0 +1,48 @@
+#!/usr/bin/env python3
+"""accio-cost --run <transcript-dir> [--run ...] [--json] <ID> ...: tokens per story and per iteration (DESIGN § 8).
+
+Budgets come from the story's `budget_tokens`, else config `budgets` for its track (a feature uses the story budget).
+"""
+import argparse
+import json
+import pathlib
+import sys
+
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+
+from accio_lib import config, cost, paths, story  # noqa: E402
+
+
+def budgets_for(accio, story_ids):
+    settings = config.load(accio)["budgets"]
+    found = {}
+    for story_id in story_ids:
+        parsed = story.parse(accio / "stories" / f"{story_id}.md")
+        track = "quick" if parsed.meta["track"] == "quick" else "story"
+        found[story_id] = parsed.meta.get("budget_tokens", settings[track])
+    return found
+
+
+def main(argv=None):
+    parser = argparse.ArgumentParser(prog="accio-cost", description=__doc__)
+    parser.add_argument("--run", action="append", type=pathlib.Path, required=True)
+    parser.add_argument("--json", action="store_true")
+    parser.add_argument("ids", nargs="+")
+    args = parser.parse_args(argv)
+    try:
+        accio = paths.accio_dir()
+        if accio is None:
+            raise config.ConfigError("no .accio/ folder in this repo; run accio's setup first")
+        bad = [story_id for story_id in args.ids if not story.STORY_ID.match(story_id)]
+        if bad:
+            raise config.ConfigError(f"story ids look like S-012, got {', '.join(bad)}")
+        result = cost.report(args.run, budgets_for(accio, args.ids))
+    except (config.ConfigError, story.StoryError) as error:
+        print(f"accio-cost: {error}", file=sys.stderr)
+        return 1
+    print(json.dumps(result, indent=2) if args.json else cost.describe(result))
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

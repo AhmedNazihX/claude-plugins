@@ -64,8 +64,8 @@ def _value(path, number, key, raw):
             _fail(path, number, f"{key} must be a list like [S-010], got {raw!r}")
         return tuple(item.strip() for item in raw[1:-1].split(",") if item.strip())
     if key == "budget_tokens":
-        if not WHOLE_NUMBER.match(raw):
-            _fail(path, number, f"budget_tokens must be a whole number, got {raw!r}")
+        if not WHOLE_NUMBER.match(raw) or int(raw) < 1:
+            _fail(path, number, f"budget_tokens must be a whole number above 0, got {raw!r}")
         return int(raw)
     return raw
 

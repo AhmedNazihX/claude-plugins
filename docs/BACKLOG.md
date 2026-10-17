@@ -24,7 +24,7 @@ evals/                       scripts/publish.py
 | done | S-006 `accio-ledger` |
 | done | S-007 `accio-brief` |
 | done | S-008 `accio-merge` |
-| todo | S-009 `accio-cost` |
+| done | S-009 `accio-cost` |
 | todo | S-010 `accio-summary` |
 | todo | S-011 Secret patterns and `pre-commit` |
 | todo | S-012 `accio-hooks`: install, chain, verify, `pre-push` |
@@ -155,10 +155,15 @@ refused by a hook or signing is an error, not a "conflict". Two review rounds.
 ### S-009 · `accio-cost`
 Deps: S-001, S-003 · Files: `bin/accio-cost`, `bin/accio_lib/cost.py`, `tests/test_cost.py`, `tests/fixtures/transcripts/`
 Context: DESIGN § 8; the S-001 report (where usage is found).
-- [ ] S-009/1 WHEN given a run's transcripts THE SYSTEM SHALL sum the tokens per story and per iteration
-- [ ] S-009/2 WHEN a story exceeds its budget THE SYSTEM SHALL flag it, and flag 2× separately
-- [ ] S-009/3 WHEN a transcript is missing or unreadable THE SYSTEM SHALL report "unknown" for that story, not zero
-- [ ] S-009/4 WHEN it reads a run THE SYSTEM SHALL sum `agent-<id>.jsonl` usage grouped by the label in `agent-<id>.meta.json`
+- [x] S-009/1 WHEN given a run's transcripts THE SYSTEM SHALL sum the tokens per story and per iteration
+- [x] S-009/2 WHEN a story exceeds its budget THE SYSTEM SHALL flag it, and flag 2× separately
+- [x] S-009/3 WHEN a transcript is missing or unreadable THE SYSTEM SHALL report "unknown" for that story, not zero
+- [x] S-009/4 WHEN it reads a run THE SYSTEM SHALL sum `agent-<id>.jsonl` usage grouped by the label in `agent-<id>.meta.json`
+Outcome: usage counted once per API response (`message.id` + `requestId`; Claude Code repeats it on every content
+line, so summing lines doubled real totals). Decisions while building: a story's tokens are all four usage fields
+(breakdown kept); agents belong to a story when their label starts with its id (brew must label them so); any
+unreadable agent makes its story unknown, or the total partial. Brew must not trust per-story stop flags while
+the report is partial (S-019 note).
 
 ### S-010 · `accio-summary`
 Deps: S-004, S-009 · Files: `bin/accio-summary`, `bin/accio_lib/summary.py`, `tests/test_summary.py`

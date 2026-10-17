@@ -259,6 +259,9 @@ class StoryTest(unittest.TestCase):
     def test_S_003_5_budget_must_be_a_whole_number(self):
         self.assertIn("S-099.md:6", self.malformed("---\nid: S-099\ntitle: x\ntrack: story\nstatus: ready\nbudget_tokens: lots\n---\n"))
 
+    def test_a_zero_budget_is_rejected(self):
+        self.assertIn("S-099.md:6", self.malformed("---\nid: S-099\ntitle: x\ntrack: story\nstatus: ready\nbudget_tokens: 0\n---\n"))
+
     def test_whole_line_comments_are_skipped_and_titles_keep_hashes_and_digits(self):
         path = self.dir / "S-099.md"
         write(path, "---\n# note: planning\nid: S-099\ntitle: 404 page for C # parser\ntrack: story # t\nstatus: ready\n---\n"
