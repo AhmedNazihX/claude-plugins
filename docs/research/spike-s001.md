@@ -1,13 +1,13 @@
-# Spike S-001: workflow, named agents, worktree (in progress)
+# Spike S-001: workflow, named agents, worktree
 
-Date: 2026-10-17 · Claude Code 2.1.302 · Status: **paused, 2 checks left** (see the end)
+Date: 2026-10-17 · Claude Code 2.1.302 · Status: **done: verdict GO** (two design decisions open, see the end)
 
 **Method.**
 - **Probe plugin:** `spike/accio-spike/` (throwaway, not committed). It has:
   - a named agent `probe` (Haiku, with a codeword in its system prompt)
   - a `bin/spike-wt` script that creates a worktree
   - a PreToolUse hook that logs its payload and blocks writes to `forbidden.txt`
-  - two workflows, `probe` and `stall`
+  - three workflows: `probe`, `stall` and `policy`
 - **Runs:** each run is a nested `claude -p "/accio-spike:<workflow>" --plugin-dir …` in a scratch git repo.
 - **Evidence:** the facts below come from each run's `journal.jsonl`, the agent transcripts, the hook log and
   `git worktree list`, not from the nested model's own summary.
@@ -27,30 +27,38 @@ Date: 2026-10-17 · Claude Code 2.1.302 · Status: **paused, 2 checks left** (se
 | 9 | Is `${CLAUDE_PLUGIN_ROOT}` set? | **Not in the agent's Bash environment; set in the hook's environment.** | run 1: `root=UNSET` in Bash; hook log `env_plugin_root_set: true` |
 | 10 | Do plugin hooks fire inside workflow agents? | **Yes.** PreToolUse fired on Bash and Write, and exit 2 blocked the Write. The agent reported the block word for word and did not work around it. **The payload includes `agent_id` and `agent_type`** (`accio-spike:probe`), plus `cwd`, `permission_mode`, `transcript_path`, `tool_input`, `tool_name`, `tool_use_id`, `prompt_id`, `effort`, `hook_event_name`, `session_id`. | run 1 hook log |
 | 11 | Is `CLAUDECODE=1` set inside workflow agents? | **Yes,** in the agent's Bash environment and in the hook's environment. | run 1 |
-| 12 | What does `/accio:brew` do when workflows are disabled? | **Not tested yet.** | — |
-| 13 | Do allow rules apply inside workflow agents? | **Not tested yet** (run 2d: default mode plus allow rules for Workflow, Bash, Write and Edit). | — |
+| 12 | What does `/accio:brew` do when workflows are disabled? | **The command doesn't exist.** With `disableWorkflows: true` or `CLAUDE_CODE_DISABLE_WORKFLOWS=1`, the `Workflow` tool and every workflow command vanish, while the plugin and its agents stay loaded. The model just says the command "isn't installed". **A SessionStart hook can't see this:** its payload is only `cwd`, `hook_event_name`, `session_id`, `source`, `transcript_path`, and it sees the env variable but not the setting. **A skill's model can see it,** because the `Workflow` tool is missing from its tool list. | run 3 (setting), run 3b (env variable); names found in the 2.1.302 binary |
+| 13 | Do allow rules apply inside workflow agents? | **Yes.** In default mode with `--allowedTools Workflow Bash Write Edit`, the probe completed exactly like run 1. Narrow rules such as `Bash(git commit:*)` were not tested. | run 2d |
+| 14 | Can a PreToolUse hook answer the permission question for an agent? | **Yes.** In default mode with no Bash allow rule, a hook returning `permissionDecision: allow` let `touch` run at once (the same command hung in run 2c2). `deny` failed fast, and the agent got the hook's reason and didn't retry. | run 4 |
+| 15 | Does the hook payload's `transcript_path` point at the agent's transcript? | **No,** it points at the main session's transcript. The agent is identified only by `agent_id` and `agent_type`. | run 4 hook log |
 
-## What this means for the design (not applied; for the user to decide)
-- **No fallback needed so far.** Named agents and script-made worktrees both work (1, 2). The verdict waits for
-  checks 12 and 13.
-- **Allow rules are mandatory, and `brew` needs a preflight** (5, 6, 7). Before starting any agent, `brew` must check
-  the permission mode or the allow rules. A missing rule doesn't fail: the run hangs, and `stallMs` doesn't catch
-  it. This strengthens § 12.1 and adds a step-0 check.
-- **`curfew` can't use the hook's `cwd`** with script-made worktrees (2, 10). The cwd is the main repo. The payload
-  does carry `agent_type`, so the hook knows when the caller is `accio:house-elf`. To know *which* worktree that is,
-  there are two candidates:
-  - (a) a small map from `agent_id` to worktree, written when the agent starts. How to learn the id early is open;
-    `transcript_path` may lead to it.
-  - (b) `isolation: 'worktree'`, so the cwd *is* the worktree. That gives up the design's location (outside the
-    repo) and its branch names, unless the agent switches to `story/<ID>` at its base first.
-- **Token budgets (§ 8.6):** a live per-story stop at 2× isn't possible (4). This confirms decision 006's fallback:
-  the hard stop is `maxTurns`, and `accio-cost` reads `agent-<id>.jsonl` grouped by label.
-- **Briefs use absolute paths or PATH, never `${CLAUDE_PLUGIN_ROOT}`** inside agents (8, 9).
+## Verdict: GO
+A plugin workflow can run accio's named agents (1) in worktrees made by accio's own script (2), and the hooks fire
+and block inside those agents (10). **No fallback is needed.** `brew-by-hand` (S-027) stays conditional: it only
+matters for users who have workflows switched off (12).
 
-## Left to do (resume here)
-1. Run 2d: default mode with `--allowedTools Workflow Bash Write Edit`. Does the probe complete as in run 1?
-2. Workflows disabled: run with `disableWorkflows` set. What does the user see? (Confirm the setting's exact name
-   first.)
-3. (Human, optional) Type `/accio-spike:probe` in an interactive session started with
-   `claude --plugin-dir spike/accio-spike`, in a scratch repo, and note the permission prompt.
-4. Write the verdict, decide the `curfew` mechanism with the user, then delete `spike/`.
+## What this means for the design
+**Settled by facts (to apply):**
+- **Workflows off:** `prophecy` and `map` check for the `Workflow` tool in their own tool list, and point to
+  `brew-by-hand` when it is missing. `session-start` checks only `CLAUDE_CODE_DISABLE_WORKFLOWS` (12). This replaces
+  "the fallback message comes from the `session-start` hook".
+- **Token budgets (§ 8.6):** a live per-story stop at 2× isn't possible (4). The hard stop is `maxTurns`, and
+  `accio-cost` reads `agent-<id>.jsonl` grouped by the label in `agent-<id>.meta.json`.
+- **Briefs use absolute paths or PATH, never `${CLAUDE_PLUGIN_ROOT}`,** inside agents (8, 9).
+- **The workflow launch needs the user's approval once** in default mode ("don't ask again" for a named plugin
+  workflow); a headless run needs `--allowedTools Workflow` (5).
+
+**Open, for the user to decide:**
+- **D1, permissions for accio's agents.** Without a rule, an agent hangs on a prompt and `stallMs` doesn't catch it
+  (6, 7). Allow rules in settings fix it (13). So would accio's own PreToolUse hook answering `allow` or `deny` for
+  `accio:*` agents (14), which means no prompt and no hang, ever.
+- **D2, how `curfew` knows an agent's worktree.** The hook's `cwd` is the main repo for script-made worktrees (2),
+  and `transcript_path` is the main session's (15). Candidates:
+  - (a) the agent's first command is `accio-claim <ID>`, so the hook links its `agent_id` to that worktree
+  - (b) `isolation: 'worktree'`, so the cwd is the worktree (3), but it sits inside the repo with its own branch names
+  - (c) `house-elf` may write in any accio worktree (weaker)
+
+## Left to do
+1. (Human, optional) Type `/accio-spike:probe` in an interactive session started with
+   `claude --plugin-dir spike/accio-spike` in a scratch repo, and note the permission prompt.
+2. Decide D1 and D2, apply them and the settled points to `DESIGN.md`, then delete `spike/`.
