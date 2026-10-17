@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- `workers.py handoff-path` prints where a worker or reviewer writes its report file, and `workers.py report`
+  checks the file's header and prints one section (`--field status|evidence|needs-user|checks`). (R1)
+
 ## 0.11.0 (2026-10-17)
 
 Reviews that see the story's intent and a stricter triage, a `backlog.py` that is safer to script, guard hooks that

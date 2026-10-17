@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -251,6 +252,142 @@ class WorkersTest(unittest.TestCase):
             self.assertNotEqual(result.returncode, 0, bad)
             self.assertIn("an agent id has only", result.stderr)
         self.assertFalse(self.registry.exists())
+
+
+FIXTURES = Path(__file__).resolve().parent / "fixtures" / "handoffs"
+REVIEWER = ("--reviewer", "foreman:diff-reviewer", "--round", "1")
+
+
+class ReportTest(unittest.TestCase):
+    """`report` and `handoff-path`, against the synthetic reports in fixtures/handoffs (story Z7)."""
+
+    def setUp(self) -> None:
+        self.tmp = tempfile.TemporaryDirectory()
+        self.handoffs = Path(self.tmp.name) / "handoffs"
+        shutil.copytree(FIXTURES, self.handoffs)
+
+    def tearDown(self) -> None:
+        self.tmp.cleanup()
+
+    def run_cli(self, *args: str) -> subprocess.CompletedProcess[str]:
+        return subprocess.run(
+            [sys.executable, str(SCRIPT), "--handoffs", str(self.handoffs), *args],
+            capture_output=True, text=True, cwd=self.tmp.name,
+        )
+
+    def field(self, field: str, *extra: str) -> str:
+        result = self.run_cli("report", "Z7", *extra, "--field", field)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        return result.stdout
+
+    def drop_line(self, name: str, prefix: str) -> None:
+        path = self.handoffs / name
+        kept = [line for line in path.read_text(encoding="utf-8").splitlines() if not line.startswith(prefix)]
+        path.write_text("\n".join(kept) + "\n", encoding="utf-8")
+
+    def test_handoff_path_names_the_worker_and_reviewer_files(self) -> None:
+        self.assertEqual(self.run_cli("handoff-path", "Z7").stdout.strip(), str(self.handoffs / "Z7.md"))
+        self.assertEqual(self.run_cli("handoff-path", "Z7", *REVIEWER).stdout.strip(),
+                         str(self.handoffs / "Z7-foreman-diff-reviewer-r1.md"))
+
+    def test_handoff_path_refuses_names_that_leave_the_folder(self) -> None:
+        for args in (("../Z7",), ("Z7.x",), ("Z7", "--reviewer", "../x", "--round", "1"),
+                     ("Z7", "--reviewer", "a", "--round", "0"), ("Z7", "--reviewer", "a")):
+            result = self.run_cli("handoff-path", *args)
+            self.assertEqual(result.returncode, 1, args)
+            self.assertEqual(result.stdout, "", args)
+
+    def test_status_is_the_workers_outcome(self) -> None:
+        self.assertEqual(self.field("status"), "NEEDS USER\n")
+
+    def test_status_of_a_reviewer_report_is_its_verdict(self) -> None:
+        self.assertEqual(self.field("status", *REVIEWER), "CHANGES\n")
+
+    def test_evidence_is_the_dod_evidence_section(self) -> None:
+        self.assertEqual(self.field("evidence"), (
+            "DoD evidence\n"
+            "- parser reads every sample row: test_parser_reads_rows passes\n"
+            "- bad rows are reported: test_bad_row_is_reported passes\n"))
+
+    def test_needs_user_keeps_its_continuation_lines_and_stops_at_the_next_label(self) -> None:
+        self.assertEqual(self.field("needs-user"), (
+            "Needs user (if any): choose the default date format; I recommend ISO 8601.\n"
+            "                      ! python3 scripts/sample.py --dry-run\n"))
+
+    def test_checks_stops_at_the_next_label(self) -> None:
+        self.assertEqual(self.field("checks"), "Checks: python3 -m unittest -q: pass, 12 tests\n  lint: pass\n")
+
+    def test_no_field_prints_the_whole_report(self) -> None:
+        result = self.run_cli("report", "Z7")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout, (self.handoffs / "Z7.md").read_text(encoding="utf-8"))
+
+    def test_markdown_headings_are_section_labels(self) -> None:
+        path = self.handoffs / "Z7.md"
+        path.write_text(path.read_text(encoding="utf-8").replace("DoD evidence", "## DoD evidence"),
+                        encoding="utf-8")
+        self.assertTrue(self.field("evidence").startswith("## DoD evidence\n- parser reads"))
+
+    def test_a_missing_section_exits_1(self) -> None:
+        self.drop_line("Z7.md", "Checks:")
+        self.drop_line("Z7.md", "  lint:")
+        result = self.run_cli("report", "Z7", "--field", "checks")
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("no checks section", result.stderr)
+
+    def test_each_missing_worker_header_line_exits_2(self) -> None:
+        for key in ("Story:", "Branch:", "Head:", "Agent:", "Time:"):
+            with self.subTest(key=key):
+                self.tearDown(), self.setUp()
+                # The body repeats `Branch:`; only the header counts, so drop the first one alone.
+                path = self.handoffs / "Z7.md"
+                lines = path.read_text(encoding="utf-8").splitlines()
+                lines.remove(next(line for line in lines if line.startswith(key)))
+                path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+                result = self.run_cli("report", "Z7", "--field", "status")
+                self.assertEqual(result.returncode, 2, key)
+                self.assertIn(f"header line missing or empty: {key[:-1]}", result.stderr)
+                self.assertEqual(result.stdout, "")
+
+    def test_each_missing_reviewer_header_line_exits_2(self) -> None:
+        for key in ("Reviewer:", "Range:", "Verdict:"):
+            with self.subTest(key=key):
+                self.tearDown(), self.setUp()
+                self.drop_line("Z7-foreman-diff-reviewer-r1.md", key)
+                result = self.run_cli("report", "Z7", *REVIEWER, "--field", "status")
+                self.assertEqual(result.returncode, 2, key)
+                self.assertIn(f"header line missing or empty: {key[:-1]}", result.stderr)
+
+    def test_an_empty_header_value_or_a_wrong_story_or_head_exits_2(self) -> None:
+        path = self.handoffs / "Z7.md"
+        original = path.read_text(encoding="utf-8")
+        for old, new, message in (("Agent: a0f1e2d3c4b5", "Agent:", "missing or empty: Agent"),
+                                  ("Story: Z7", "Story: Z8", "expected Z7"),
+                                  ("Head: 3f9c2ab71d04", "Head: main", "isn't a commit sha")):
+            with self.subTest(old=old):
+                path.write_text(original.replace(old, new, 1), encoding="utf-8")
+                result = self.run_cli("report", "Z7")
+                self.assertEqual(result.returncode, 2, old)
+                self.assertIn(message, result.stderr)
+
+    def test_a_reviewer_report_for_another_reviewer_exits_2(self) -> None:
+        source = self.handoffs / "Z7-foreman-diff-reviewer-r1.md"
+        target = self.handoffs / "Z7-foreman-security-reviewer-r1.md"
+        target.write_text(source.read_text(encoding="utf-8"), encoding="utf-8")
+        result = self.run_cli("report", "Z7", "--reviewer", "foreman:security-reviewer", "--round", "1")
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("expected foreman:security-reviewer", result.stderr)
+
+    def test_a_missing_file_exits_2(self) -> None:
+        for args in (("Z9",), ("Z7", "--reviewer", "foreman:diff-reviewer", "--round", "2")):
+            result = self.run_cli("report", *args, "--field", "status")
+            self.assertEqual(result.returncode, 2, args)
+            self.assertIn("no report file", result.stderr)
+
+    def test_an_unknown_field_is_refused(self) -> None:
+        result = self.run_cli("report", "Z7", "--field", "cost")
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("one of status, evidence, needs-user, checks", result.stderr)
 
 
 if __name__ == "__main__":
