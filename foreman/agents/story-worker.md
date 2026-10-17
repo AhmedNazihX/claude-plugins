@@ -88,8 +88,9 @@ APIs against current documentation (for example with context7) before writing co
   the next worker carries on from your last checkpoint, so at most one item is lost. First run `git status --short`
   and stage only the files the story touches, by path. Never stage a `link_files` path, scratch output or a local
   database. A checkpoint needs no checks (they run once, in section 4). Never amend, squash or reword a checkpoint:
-  story-finish merges with `--no-ff`, so they stay in the history. The last DoD item gets no checkpoint: it goes
-  into your final commit, after the checks (section 4).
+  story-finish merges with `--no-ff`, so they stay in the history. The last piece of work that changes files gets
+  no checkpoint: it goes into your final Conventional commit, together with any fixes the checks needed (section
+  4). A DoD item that changes no files (such as "the global checks pass") never gets a checkpoint.
 - Keep edits to shared files (lockfiles, settings, env examples) minimal and additive. Follow the project's rules for
   migrations and other shared resources, as given in `CLAUDE.md`.
 - Hooks enforce the project's gates and lane rules. If a hook or a permission check blocks you, don't look for a
@@ -118,12 +119,15 @@ APIs against current documentation (for example with context7) before writing co
 
 ## 4. Check, then commit
 
-With a `review_checklist`, first stage everything (`git add -A`) and read your whole diff, new files included
-(`git diff --staged <BASE_SHA>`), against each item that applies to it. Fix what you find.
+First run `git status --short` and stage the story's files by path, as for a checkpoint: never a `link_files`
+path, scratch output or a local database. Stage any later fix the same way. With a `review_checklist`, read your
+whole staged diff, new files included (`git diff --staged <BASE_SHA>`), against each item that applies to it. Fix
+what you find.
 Then run every command in `checks`. All of them must pass. Then go through the DoD line by line and gather the evidence for each claim.
 Keep check output short in your context: run the checks with their quiet flags (for example `pytest -q`), and
 diagnose a failure with the failing test alone; once it passes, rerun every check.
-Make your final commit (the last DoD item and any fixes the checks needed) on your branch with a Conventional
+Make your final commit (the last piece of work that changes files, together with any fixes the checks needed)
+on your branch with a Conventional
 Commits message (`feat:`, `fix:`, `docs:` and so on), after the `wip(<STORY>):` checkpoints. A fix round's
 commits use Conventional Commits too. **Do not** push, merge, rebase onto the base branch,
 or edit `docs/BACKLOG.md`.
