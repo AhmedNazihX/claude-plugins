@@ -21,7 +21,7 @@ evals/                       scripts/publish.py
 | done | S-003 Shared library |
 | done | S-004 `accio-board` |
 | done | S-005 `accio-score` |
-| todo | S-006 `accio-ledger` |
+| done | S-006 `accio-ledger` |
 | todo | S-007 `accio-brief` |
 | todo | S-008 `accio-merge` |
 | todo | S-009 `accio-cost` |
@@ -114,11 +114,14 @@ normalises `./` and refuses absolute paths. Every rule test was checked by break
 ### S-006 · `accio-ledger`
 Deps: S-003 · Files: `bin/accio-ledger`, `bin/accio_lib/ledger.py`, `tests/test_ledger.py`
 Context: DESIGN § 12.4.
-- [ ] S-006/1 WHEN the diff, the checks, the panel or the DoD changes THE SYSTEM SHALL produce a different key
-- [ ] S-006/2 WHEN only the commit layout changes (same patch) THE SYSTEM SHALL produce the same key
-- [ ] S-006/3 WHEN the story is a stacked child THE SYSTEM SHALL diff from the parent's head
-- [ ] S-006/4 WHEN `check` finds a recorded pass for the key THE SYSTEM SHALL report a skip
-- [ ] S-006/5 WHEN `clear <ID>` runs THE SYSTEM SHALL delete that story's entries
+- [x] S-006/1 WHEN the diff, the checks, the panel or the DoD changes THE SYSTEM SHALL produce a different key
+- [x] S-006/2 WHEN only the commit layout changes (same patch) THE SYSTEM SHALL produce the same key
+- [x] S-006/3 WHEN the story is a stacked child THE SYSTEM SHALL diff from the parent's head
+- [x] S-006/4 WHEN `check` finds a recorded pass for the key THE SYSTEM SHALL report a skip
+- [x] S-006/5 WHEN `clear <ID>` runs THE SYSTEM SHALL delete that story's entries
+Outcome: the key hashes the raw plumbing diff (bytes, display settings off) plus the tree it starts from, so any
+byte of change, whitespace included, or a moved base re-runs the checks; a dirty worktree can't be keyed. Review
+found that `git patch-id` ignores whitespace (two different diffs shared a key); DESIGN § 12.4 updated.
 
 ### S-007 · `accio-brief`
 Deps: S-004 · Files: `bin/accio-brief`, `bin/accio_lib/brief.py`, `bin/accio_lib/templates/brief.md`, `tests/test_brief.py`

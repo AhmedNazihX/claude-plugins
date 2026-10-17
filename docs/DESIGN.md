@@ -589,10 +589,13 @@ workflow launch: the first `/accio:brew` asks once, and "don't ask again" covers
 
 ### 12.4 Ledger key
 ```
-key = sha256(patch-id(diff from..head) + sha(config.checks) + panel-id + sha(story DoD section))
+key = sha256(work digest + sha(config.checks) + panel-id + sha(story DoD section))
+work digest = sha256(tree at `from` + the exact diff from..head, from plumbing with display settings off)
 from = merge-base with base, or the parent's head for a stacked child
 ```
-- **Invalidation:** the key changes automatically when the diff, the checks, the reviewer panel or the DoD changes.
+- **Invalidation:** the key changes automatically when the diff (any byte, whitespace included), the base it starts
+  from, the checks, the reviewer panel or the DoD changes. A rebase onto a moved base therefore re-runs the checks.
+  A worktree with uncommitted work can't be keyed (S-006 review).
   A rejection at `owl` also deletes the entry.
 - **`reparo` (v1.1):** it has no story file, so it gets an ID of the form `Q-<n>`, used only in the ledger.
 

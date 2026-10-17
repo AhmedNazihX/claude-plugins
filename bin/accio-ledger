@@ -1,0 +1,81 @@
+#!/usr/bin/env python3
+"""accio-ledger: verdicts keyed to the exact diff (DESIGN § 12.4).
+
+  key <story-file> --worktree <path> --panel <id> [--parent <rev>]   print the story's current key
+  check <ID> <key>                 print "skip" when this exact key already passed, else "run"
+  record <ID> <key> pass|fail      record a verdict
+  clear <ID>                       delete a story's entries (a rejection at owl)
+"""
+import argparse
+import pathlib
+import sys
+
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+
+from accio_lib import config, ledger, paths, runlock, story  # noqa: E402
+
+
+def _run_dir(start="."):
+    accio = paths.accio_dir(start)
+    if accio is None:
+        raise ledger.LedgerError("no .accio/ folder in this repo; run accio's setup first")
+    return accio, accio / "run"
+
+
+def cmd_key(args):
+    parsed = story.parse(args.story)
+    accio, _ = _run_dir(args.story.resolve().parent)
+    settings = config.load(accio)
+    start = ledger.diff_base(args.worktree, settings["base_branch"], args.parent)
+    work = ledger.work_digest(args.worktree, start)
+    print(ledger.key(work, settings["checks"], args.panel, parsed))
+
+
+def cmd_check(args):
+    print("skip" if ledger.has_pass(_run_dir()[1], args.id, args.key) else "run")
+
+
+def cmd_record(args):
+    ledger.record(_run_dir()[1], args.id, args.key, args.verdict)
+
+
+def cmd_clear(args):
+    ledger.clear(_run_dir()[1], args.id)
+
+
+def parser():
+    top = argparse.ArgumentParser(prog="accio-ledger", description="accio's verdict ledger")
+    commands = top.add_subparsers(dest="command", required=True)
+    key = commands.add_parser("key")
+    key.add_argument("story", type=pathlib.Path)
+    key.add_argument("--worktree", type=pathlib.Path, required=True)
+    key.add_argument("--panel", required=True)
+    key.add_argument("--parent")
+    key.set_defaults(run=cmd_key)
+    check = commands.add_parser("check")
+    check.add_argument("id")
+    check.add_argument("key")
+    check.set_defaults(run=cmd_check)
+    record = commands.add_parser("record")
+    record.add_argument("id")
+    record.add_argument("key")
+    record.add_argument("verdict")
+    record.set_defaults(run=cmd_record)
+    clear = commands.add_parser("clear")
+    clear.add_argument("id")
+    clear.set_defaults(run=cmd_clear)
+    return top
+
+
+def main(argv=None):
+    args = parser().parse_args(argv)
+    try:
+        args.run(args)
+    except (ledger.LedgerError, story.StoryError, config.ConfigError, runlock.LockError) as error:
+        print(f"accio-ledger: {error}", file=sys.stderr)
+        return 1
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
