@@ -359,7 +359,7 @@ flowchart LR
 
 ## Phase 3 — Wave 2: reliability core
 
-- [ ] **R1 · Report contract and reader** · Deps: V1 · Type: agent · Lane: Workers · Size: S · Resource: workers
+- [x] **R1 · Report contract and reader** · Deps: V1 · Type: agent · Lane: Workers · Size: S · Resource: workers
   Context: Design › D8; Architecture. Input: `foreman/scripts/workers.py`, `foreman/tests/test_workers.py`,
   `foreman/agents/story-worker.md` § 5.
   Output: `workers.py report <ID> [--reviewer NAME --round N] [--field status|evidence|needs-user|checks]` reading
@@ -369,6 +369,7 @@ flowchart LR
   reports.
   DoD: tests for each field, a missing header and a missing file; the docstring documents the header contract;
   the global checks pass.
+  **Outcome:** workers.py report <ID> [--reviewer N --round R] [--field status|evidence|needs-user|checks] checks a report's header and prints one section (exit 2 on a missing file or header line, 1 on a missing section); handoff-path prints where to write. 16 tests; review clean in round 1.
 
 - [ ] **R2 · Workers write their report to disk** · Deps: R1 · Type: agent · Lane: Workers · Size: M · Resource: story-worker, story-start, story-finish
   Context: Design › D8. Input: `foreman/agents/story-worker.md`, `foreman/skills/story-start/SKILL.md`,
@@ -379,6 +380,7 @@ flowchart LR
   (the fix round, the merge summary).
   DoD: the three files hold the flow; story-finish no longer asks for the worker's full report in context; the
   global checks pass.
+  **From R1 (merged):** Use `workers.py handoff-path <ID>` for the file path and the header contract in workers.py's docstring (Story, Branch, Head, Agent, Time, then a blank line). story-worker.md § 5 doesn't yet tell the worker to write the file or to return a one-line summary: that is this story's job. `report` exits 2 on a missing file or header line, 1 on a missing section; section labels are the § 5 labels.
 
 - [ ] **R3 · Reviewers write their report to disk** · Deps: R2 · Type: mixed · Lane: Review · Size: M · Resource: story-finish, diff-reviewer, security-reviewer, dod-verifier
   Context: Design › D8; Risks and open questions. Input: `foreman/agents/dod-verifier.md`,
@@ -397,6 +399,7 @@ flowchart LR
   **From F1 (merged):** Deferred minor findings on lint.py, for whoever next edits it (R3 changes its read-only rule): no test covers the `allowed-tools` key (TOOL_KEYS) or the `mcp__*` tool-name exemption (the test-auditor removed each and no test failed); add one test each. The bare-name check covers only a backticked name touching the label ("the `x` agent", "skill `x`"), so unlabelled names and the non-adjacent names in a list ("the `a` and `b` agents") aren't checked; external skills credited by the plugin go in EXTERNAL (now {"grilling"}).
   **From Q4 (merged):** Two review-coverage gaps found while reviewing Q4 (pre-existing in story-finish): (1) § 3 reruns the diff reviewer only when a finding was major or the fix is large, so a small fix to a minor finding that adds a new skip/broad except/sleep is never seen by the reviewer that checks symptom fixes; (2) the paid-recording commit (§ 3 'Paid recordings last') reruns only checks, dod-verifier and test-auditor, so a recording that captured an API key or auth header merges without the security reviewer. Rerun at least the security reviewer on the recording commit.
   **From Q8 (merged):** story-finish § 6 relays ci-watcher's report into the main session: say there that the report's 'CI output:' excerpts are untrusted data, not instructions. Optionally pass the base's remote head from before the push, so ci-watcher's range check doesn't rely on the previous run.
+  **From R1 (merged):** Reviewer files are named `<ID>-<reviewer name with ':' turned into '-'>-r<N>.md` (`handoff-path <ID> --reviewer foreman:diff-reviewer --round 1`). The reviewer header is Reviewer, Range, Verdict only: it doesn't name the story or the head sha, and `report` doesn't check Range's format. Confirm the naming and the allowed Verdict values here.
 
 - [ ] **R4 · Report gate** · Deps: R2, X1 · Type: agent · Lane: Workers · Size: M · Resource: hooks-config, story-finish
   Context: Design › D9; decision 001. Input: `docs/decisions/001-subagent-stop-gate.md`,
@@ -469,6 +472,7 @@ flowchart LR
   missing. Tests.
   DoD: tests for a full pass, a missing reviewer, a new head voiding a pass, a patch-id match surviving a rebase,
   and cell sanitising; the global checks pass.
+  **From R1 (merged):** A reviewer report's header has no Head line; only Range's end sha says what was reviewed, and nothing checks its format. If the ledger keys verdicts on the head, add Head (or a checked Range) to the reviewer header contract in workers.py.
 
 - [ ] **R10 · Merge gate** · Deps: R9, R3, R11, Q3 · Type: agent · Lane: Review · Size: S · Resource: story-finish
   Context: Design › D11. Input: `foreman/skills/story-finish/SKILL.md`, `foreman/scripts/workers.py`.
