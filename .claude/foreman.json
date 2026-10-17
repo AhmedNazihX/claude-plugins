@@ -2,7 +2,7 @@
   "base_branch": "main",
   "checks": [
     "python3 -m unittest discover -q -s foreman/tests",
-    "for t in foreman/hooks/test-*.sh git-guardrails/tests/test-guards.sh; do bash \"$t\" >/dev/null || { echo \"FAIL $t\"; exit 1; }; done",
+    "for t in foreman/hooks/test-*.sh git-guardrails/tests/test-guards.sh; do out=$(bash \"$t\" 2>&1) || { printf '%s\\n' \"$out\"; echo \"FAIL $t\"; exit 1; }; done",
     "python3 foreman/scripts/lint.py",
     "claude plugin validate . && claude plugin validate foreman && claude plugin validate git-guardrails"
   ],
