@@ -21,8 +21,34 @@ Usage (from anywhere inside the repo, the main checkout or a story worktree):
   workers.py context <ID>
                          the worker's context size and idle time, from its transcript, and whether a fix round
                          should resume it or start a fresh worker (story-start --continue)
+  workers.py handoff-path <ID> [--reviewer NAME --round N]
+                         print where the worker (or reviewer NAME, in round N) writes its report file
+  workers.py report <ID> [--reviewer NAME --round N] [--field status|evidence|needs-user|checks]
+                         check a report file's header, then print one section (or, with no --field, the whole
+                         report); exit 2 when the file or a header line is missing
 Options: --registry PATH (default: <main checkout>/.claude/worktrees/workers.json)
          --transcripts DIR (default: ~/.claude/projects; where `context` looks for agent-<id>.jsonl)
+         --handoffs DIR (default: <main checkout>/.claude/worktrees/handoffs; where the report files live)
+
+Report files. A worker writes its full report to handoffs/<ID>.md; a reviewer to handoffs/<ID>-<NAME>-r<N>.md,
+where a ':' in NAME becomes '-' (foreman:diff-reviewer, round 1 -> R1-foreman-diff-reviewer-r1.md). The file
+starts with a header: one `Key: value` line per key, in any order, before the first blank line.
+  worker:   Story: <ID>        the story ID, as given to `report`
+            Branch: <branch>   the story branch
+            Head: <sha>        the branch head the report describes (7 to 40 hex digits)
+            Agent: <agent-id>  the worker's agent id
+            Time: <ISO time>   when the report was written
+  reviewer: Reviewer: <NAME>   the reviewer's name, as given to --reviewer (or its file-name form)
+            Range: <a>..<b>    the commit range reviewed
+            Verdict: <verdict> the reviewer's verdict
+A missing key or an empty value exits 2. After the header comes the report itself, as story-worker § 5 lays it
+out. --field picks one part of it:
+  status      the worker's DONE, BLOCKED or NEEDS USER (from the `Story <ID> — ...` line), or the Verdict
+  evidence    the `DoD evidence` section
+  needs-user  the `Needs user (if any):` section
+  checks      the `Checks:` section
+A section runs from its label line to the next blank line or the next label line. A report without the section
+exits 1.
 
 Every change (record, set, forget) holds an exclusive lock on workers.json.lock, next to the registry, for its
 whole load-modify-save, and writes through a temp file and a rename. Parallel calls never lose an entry, and a
@@ -59,6 +85,23 @@ REGISTRY_NAME = Path(".claude") / "worktrees" / "workers.json"
 CACHE_TTL_MINUTES = 5
 FRESH_WORKER_TOKENS = 150_000
 AGENT_ID = re.compile(r"[A-Za-z0-9_-]+")
+HANDOFFS_NAME = Path(".claude") / "worktrees" / "handoffs"
+# Story IDs and reviewer names become file names: no '/', no '.', so no path can leave the handoffs folder.
+STORY_ID = re.compile(r"[A-Za-z0-9_-]+")
+REVIEWER_NAME = re.compile(r"[A-Za-z0-9_:-]+")
+WORKER_HEADER = ("Story", "Branch", "Head", "Agent", "Time")
+REVIEWER_HEADER = ("Reviewer", "Range", "Verdict")
+HEADER_LINE = re.compile(r"([A-Za-z]+):\s*(.*)")
+HEAD_SHA = re.compile(r"[0-9a-f]{7,40}")
+STATUS_LINE = re.compile(r"Story\s+\S+\s+[—-]+\s+(DONE|BLOCKED|NEEDS USER)\b")
+# The report's section labels (story-worker § 5). A field prints the section that starts with its label.
+SECTION_LABELS = (
+    "Outputs", "DoD evidence", "Checks:", "Root causes:", "Cost:", "Checklist:", "Needs user", "Choices I made",
+    "Follow-ups", "Outcome note",
+)
+FIELDS = {"evidence": "DoD evidence", "needs-user": "Needs user", "checks": "Checks:"}
+# Exit code for a report that breaks the contract (no file, or a header line missing).
+CONTRACT_BROKEN = 2
 
 
 def main_checkout() -> Path:
@@ -273,14 +316,138 @@ def cmd_context(data: dict[str, dict[str, object]], sid: str, root: Path) -> Non
     print(f"{sid}: context {tokens // 1000}K tokens, idle {idle:.0f} min -> {advice}")
 
 
+def broken(message: str) -> SystemExit:
+    """A report that breaks the contract: the message on stderr, exit 2."""
+    print(message, file=sys.stderr)
+    return SystemExit(CONTRACT_BROKEN)
+
+
+def reviewer_args(args: list[str]) -> tuple[str, int] | None:
+    """Pop `--reviewer NAME --round N` from args: both or neither."""
+    name, round_ = option(args, "--reviewer"), option(args, "--round")
+    if name is None and round_ is None:
+        return None
+    if name is None or round_ is None:
+        raise SystemExit("--reviewer and --round go together")
+    if not REVIEWER_NAME.fullmatch(name):
+        raise SystemExit(f"--reviewer {name!r}: a reviewer name has only letters, digits, '-', '_' and ':'")
+    if not round_.isdigit() or int(round_) < 1:
+        raise SystemExit(f"--round {round_!r}: a round is a whole number from 1")
+    return name, int(round_)
+
+
+def handoff_path(handoffs: Path, sid: str, reviewer: tuple[str, int] | None) -> Path:
+    if not STORY_ID.fullmatch(sid):
+        raise SystemExit(f"story ID {sid!r}: an ID has only letters, digits, '-' and '_'")
+    if reviewer is None:
+        return handoffs / f"{sid}.md"
+    name, round_ = reviewer
+    return handoffs / f"{sid}-{name.replace(':', '-')}-r{round_}.md"
+
+
+def read_header(lines: list[str]) -> dict[str, str]:
+    """The `Key: value` lines before the first blank line."""
+    header: dict[str, str] = {}
+    for line in lines:
+        if not line.strip():
+            break
+        match = HEADER_LINE.fullmatch(line.strip())
+        if match:
+            header.setdefault(match.group(1), match.group(2).strip())
+    return header
+
+
+def check_header(header: dict[str, str], path: Path, sid: str, reviewer: tuple[str, int] | None) -> None:
+    keys = WORKER_HEADER if reviewer is None else REVIEWER_HEADER
+    missing = [key for key in keys if not header.get(key)]
+    if missing:
+        raise broken(f"{path}: header line missing or empty: {', '.join(missing)} (needs {', '.join(keys)})")
+    if reviewer is None:
+        if header["Story"] != sid:
+            raise broken(f"{path}: header says Story: {header['Story']}, expected {sid}")
+        if not HEAD_SHA.fullmatch(header["Head"]):
+            raise broken(f"{path}: Head: {header['Head']!r} isn't a commit sha")
+        return
+    name = reviewer[0]
+    if header["Reviewer"] not in (name, name.replace(":", "-")):
+        raise broken(f"{path}: header says Reviewer: {header['Reviewer']}, expected {name}")
+
+
+def is_label(line: str) -> bool:
+    """A section's first line: not indented, and starting with a known label (Markdown '#' and '*' allowed)."""
+    if line[:1].isspace():
+        return False
+    return line.lstrip("#* ").startswith(SECTION_LABELS)
+
+
+def section(lines: list[str], label: str) -> str | None:
+    """The lines from the label's line to the next blank line or label line, or None without the label."""
+    starts = [i for i, line in enumerate(lines) if is_label(line) and line.lstrip("#* ").startswith(label)]
+    if not starts:
+        return None
+    found = [lines[starts[0]]]
+    for line in lines[starts[0] + 1 :]:
+        if not line.strip() or is_label(line):
+            break
+        found.append(line)
+    return "\n".join(found)
+
+
+def status(lines: list[str], header: dict[str, str], reviewer: tuple[str, int] | None) -> str | None:
+    if reviewer is not None:
+        return header["Verdict"]
+    for line in lines:
+        match = STATUS_LINE.search(line)
+        if match:
+            return match.group(1)
+    return None
+
+
+def cmd_report(handoffs: Path, sid: str, args: list[str]) -> None:
+    field = option(args, "--field")
+    reviewer = reviewer_args(args)
+    if args:
+        raise SystemExit(f"report: unexpected {' '.join(args)}")
+    if field is not None and field != "status" and field not in FIELDS:
+        raise SystemExit(f"--field {field!r}: one of status, {', '.join(FIELDS)}")
+    path = handoff_path(handoffs, sid, reviewer)
+    if not path.is_file():
+        raise broken(f"{path}: no report file")
+    text = path.read_text(encoding="utf-8", errors="replace")
+    lines = text.splitlines()
+    header = read_header(lines)
+    check_header(header, path, sid, reviewer)
+    if field is None:
+        print(text, end="" if text.endswith("\n") else "\n")
+        return
+    found = status(lines, header, reviewer) if field == "status" else section(lines, FIELDS[field])
+    if found is None:
+        raise SystemExit(f"{path}: no {field} section")
+    print(found)
+
+
 def main(argv: list[str]) -> None:
     args = list(argv)
     registry = option(args, "--registry")
     transcripts = Path(option(args, "--transcripts") or Path.home() / ".claude" / "projects")
-    path = Path(registry) if registry else main_checkout() / REGISTRY_NAME
+    handoffs_dir = option(args, "--handoffs")
     if not args:
         raise SystemExit(__doc__)
     command, rest = args[0], args[1:]
+    if command in ("report", "handoff-path"):
+        if not rest:
+            raise SystemExit(f"{command} needs a story ID")
+        handoffs = Path(handoffs_dir) if handoffs_dir else main_checkout() / HANDOFFS_NAME
+        if command == "report":
+            cmd_report(handoffs, rest[0], rest[1:])
+            return
+        sid, rest = rest[0], rest[1:]
+        reviewer = reviewer_args(rest)
+        if rest:
+            raise SystemExit(f"handoff-path: unexpected {' '.join(rest)}")
+        print(handoff_path(handoffs, sid, reviewer))
+        return
+    path = Path(registry) if registry else main_checkout() / REGISTRY_NAME
     if command == "list":
         cmd_list(load(path), "--json" in rest)
         return

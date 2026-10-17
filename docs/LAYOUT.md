@@ -53,7 +53,7 @@ Story IDs in brackets create or first change the path. Unmarked paths exist alre
 │   │   └── page.css                   shared style for pages.py output, inlined at render (B9)
 │   └── tests/
 │       ├── test_<script>.py           one file per script: test_backlog, test_workers, test_lint (F1), test_retro (B7), test_pages (B9)
-│       └── fixtures/                  sample backlogs, transcripts (synthetic only, never copied from real ones), configs
+│       └── fixtures/                  sample backlogs, transcripts, handoffs (R1) (synthetic only, never copied from real ones), configs
 │
 ├── git-guardrails/                    the dependency plugin; not changed by this backlog
 └── docs/
