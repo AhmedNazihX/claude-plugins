@@ -16,7 +16,7 @@ evals/                       scripts/publish.sh
 
 | Status | Story |
 |---|---|
-| doing | S-001 Spike: workflow, named agents, worktree (paused; see `docs/research/spike-s001.md`) |
+| done | S-001 Spike: workflow, named agents, worktree (verdict GO; decision 010) |
 | todo | S-002 Scaffold, CI and publish |
 | todo | S-003 Shared library |
 | todo | S-004 `accio-board` |
@@ -30,7 +30,7 @@ evals/                       scripts/publish.sh
 | todo | S-012 `accio-hooks`: install, chain, verify, `pre-push` |
 | todo | S-013 `protego` |
 | todo | S-014 `fidelius` |
-| todo | S-015 `curfew` |
+| todo | S-015 `curfew`: permission policy and worktree claims |
 | todo | S-016 `session-start` |
 | todo | S-028 `doc-size` and `librarian` |
 | todo | S-017 Build agents: `portkey`, `house-elf`, `prefect` |
@@ -49,11 +49,13 @@ evals/                       scripts/publish.sh
 
 ### S-001 · Spike: workflow, named agents, worktree
 Deps: — · Files: `spike/` (throwaway, deleted at the end), `docs/research/spike-s001.md`
-Context: DESIGN § 10 "The first story is a spike"; decision 003.
-- [ ] S-001/1 (no test) WHEN a plugin workflow calls accio's named agents THE SPIKE SHALL record whether it works, with the evidence
-- [ ] S-001/2 (no test) WHEN a script creates a worktree THE SPIKE SHALL record whether a workflow agent can run inside it
-- [ ] S-001/3 (no test) THE REPORT SHALL answer each check in DESIGN § 10: token usage from `agent()`, the opt-in and permission prompt, tool-permission prompts inside agents, `bin/` on PATH, `${CLAUDE_PLUGIN_ROOT}`, whether hooks fire inside agents, `CLAUDECODE=1` inside agents, behaviour with workflows disabled
-- [ ] S-001/4 (no test) THE REPORT SHALL end with one verdict: go, fallback 1, or fallback 2 (`brew-by-hand`, S-027), and any DESIGN changes it implies
+Context: DESIGN § 10 "Spike S-001"; decision 003.
+Outcome: verdict GO, no fallback. Evidence in `docs/research/spike-s001.md`; it led to decision 010 (accio's hook
+answers permissions; worktree claims). The interactive permission prompt was not tried by hand (optional).
+- [x] S-001/1 (no test) WHEN a plugin workflow calls accio's named agents THE SPIKE SHALL record whether it works, with the evidence
+- [x] S-001/2 (no test) WHEN a script creates a worktree THE SPIKE SHALL record whether a workflow agent can run inside it
+- [x] S-001/3 (no test) THE REPORT SHALL answer each check in DESIGN § 10: token usage from `agent()`, the opt-in and permission prompt, tool-permission prompts inside agents, `bin/` on PATH, `${CLAUDE_PLUGIN_ROOT}`, whether hooks fire inside agents, `CLAUDECODE=1` inside agents, behaviour with workflows disabled
+- [x] S-001/4 (no test) THE REPORT SHALL end with one verdict: go, fallback 1, or fallback 2 (`brew-by-hand`, S-027), and any DESIGN changes it implies
 
 ### S-002 · Scaffold, CI and publish
 Deps: S-001 · Files: `.claude-plugin/plugin.json`, the layout folders, `.github/workflows/ci.yml`, `scripts/publish.sh`, `tests/test_scaffold.py`, `.gitignore`
@@ -81,6 +83,7 @@ Context: DESIGN § 3.3, § 3.4 (stacking), § 4.6, § 5, § 12.2.
 - [ ] S-004/4 WHEN a story's parent is BLOCKED in the current run THE SYSTEM SHALL leave the child out of `ready`
 - [ ] S-004/5 WHEN `board` runs THE SYSTEM SHALL regenerate `board.md` with the six columns and a Dropped line
 - [ ] S-004/6 WHEN a story is `dropped` THE SYSTEM SHALL never list it as ready
+- [ ] S-004/7 WHEN `lock`, `move` or `unlock` runs THE SYSTEM SHALL create, refresh or remove `run/brew.lock`
 
 ### S-005 · `accio-score`
 Deps: S-003 · Files: `bin/accio-score`, `bin/accio_lib/score.py`, `tests/test_score.py`
@@ -123,6 +126,7 @@ Context: DESIGN § 8; the S-001 report (where usage is found).
 - [ ] S-009/1 WHEN given a run's transcripts THE SYSTEM SHALL sum the tokens per story and per iteration
 - [ ] S-009/2 WHEN a story exceeds its budget THE SYSTEM SHALL flag it, and flag 2× separately
 - [ ] S-009/3 WHEN a transcript is missing or unreadable THE SYSTEM SHALL report "unknown" for that story, not zero
+- [ ] S-009/4 WHEN it reads a run THE SYSTEM SHALL sum `agent-<id>.jsonl` usage grouped by the label in `agent-<id>.meta.json`
 
 ### S-010 · `accio-summary`
 Deps: S-004, S-009 · Files: `bin/accio-summary`, `bin/accio_lib/summary.py`, `tests/test_summary.py`
@@ -156,7 +160,7 @@ Context: DESIGN § 4.5, § 12.1; decisions 004 and 009.
 - [ ] S-012/9 WHEN the token matches the pushed sha THE SYSTEM SHALL allow one fast-forward push and delete the token
 - [ ] S-012/10 WHEN anyone force-pushes THE SYSTEM SHALL block it
 - [ ] S-012/11 WHEN `uninstall` runs THE SYSTEM SHALL remove only the marked lines
-- [ ] S-012/12 WHEN `install` runs THE SYSTEM SHALL propose the § 12.1 allow rules and write them only after approval
+- [ ] S-012/12 WHEN `install` runs THE SYSTEM SHALL write no allow rules to the project's settings (decision 010)
 
 ### S-013 · `protego`
 Deps: S-003 · Files: `hooks/protego.py`, `hooks/hooks.json`, `tests/test_protego.py`
@@ -173,19 +177,24 @@ Context: DESIGN § 4.4, § 6.
 - [ ] S-014/1 WHEN Write/Edit content holds a reported secret THE SYSTEM SHALL exit 2 without echoing the value
 - [ ] S-014/2 WHEN the repo has no `.accio/` THE SYSTEM SHALL exit 0 silently
 
-### S-015 · `curfew`
-Deps: S-013 · Files: `hooks/curfew.py`, `hooks/hooks.json`, `tests/test_curfew.py`
-Context: DESIGN § 4.4, § 6; decision 009.
-- [ ] S-015/1 WHEN the session runs in an accio worktree and Write/Edit targets a path outside it THE SYSTEM SHALL exit 2 naming the allowed folder
-- [ ] S-015/2 WHEN the target is `.accio/run/<ID>/` of that story THE SYSTEM SHALL allow it
-- [ ] S-015/3 WHEN the session is not in an accio worktree THE SYSTEM SHALL exit 0 silently
-- [ ] S-015/4 WHEN a path uses `..` or a symlink to leave the worktree THE SYSTEM SHALL resolve it and block
+### S-015 · `curfew`: permission policy and worktree claims
+Deps: S-003, S-013 · Files: `hooks/curfew.py`, `hooks/hooks.json`, `bin/accio-claim`, `bin/accio_lib/policy.py`, `tests/test_curfew.py`
+Context: DESIGN § 4.4, § 6; decision 010; `docs/research/spike-s001.md` findings 10, 14, 15.
+- [ ] S-015/1 WHEN the caller's `agent_type` is not `accio:*` THE SYSTEM SHALL give no permission decision
+- [ ] S-015/2 WHEN `accio:house-elf` has not claimed THE SYSTEM SHALL deny its Write/Edit and every Bash command except `accio-claim <ID>`
+- [ ] S-015/3 WHEN it runs `accio-claim <ID>` THE SYSTEM SHALL record its `agent_id` → that story's worktree in `run/claims.json`
+- [ ] S-015/4 WHEN a claimed agent writes outside its worktree (after resolving `..` and symlinks) THE SYSTEM SHALL deny it and name the allowed folder; `.accio/run/<ID>/` is allowed
+- [ ] S-015/5 WHEN every part of a Bash command (split at `&&`, `;`, `|`) is on the allow list or in `agent_allow`, and it starts with `cd <its worktree> &&` or uses `git -C <its worktree>` THE SYSTEM SHALL answer allow
+- [ ] S-015/6 WHEN a command holds `$(`, backticks, `sh -c` or `eval`, or a part off the list THE SYSTEM SHALL deny it with the reason
+- [ ] S-015/7 WHEN another accio agent calls a tool THE SYSTEM SHALL answer from that agent's exact list
+- [ ] S-015/8 WHEN the hook answers allow for Write or Edit inside a workflow agent THE SYSTEM SHALL let it run with no prompt (proves spike finding 14 beyond Bash)
+- [ ] S-015/9 WHEN the repo has no `.accio/` THE SYSTEM SHALL exit 0 silently
 
 ### S-016 · `session-start`
-Deps: S-001 (how to detect workflows off), S-004 · Files: `hooks/session_start.py`, `hooks/hooks.json`, `tests/test_session_start.py`
+Deps: S-004 · Files: `hooks/session_start.py`, `hooks/hooks.json`, `tests/test_session_start.py`
 Context: DESIGN § 4.4, § 10 (workflows off).
 - [ ] S-016/1 WHEN the repo has `.accio/` THE SYSTEM SHALL inject at most 10 lines: board summary, next step, plain-words rule
-- [ ] S-016/2 WHEN workflows are disabled THE SYSTEM SHALL say so and point to `/accio:brew-by-hand`
+- [ ] S-016/2 WHEN `CLAUDE_CODE_DISABLE_WORKFLOWS` is set THE SYSTEM SHALL say so and point to `/accio:brew-by-hand`
 - [ ] S-016/3 WHEN the repo has no `.accio/` THE SYSTEM SHALL print nothing
 
 ### S-028 · `doc-size` and `librarian`
@@ -206,6 +215,7 @@ Context: DESIGN § 3.4 steps 0–3 and 7, § 4.2, § 12.5.
 - [ ] S-017/4 WHEN the main checkout's `git status` differs from the snapshot THE SYSTEM SHALL list the paths in `main_changed`
 - [ ] S-017/5 (no test) each agent file sets the model from § 4.2, the tools from § 4.2 and the reply schema from § 12.5
 - [ ] S-017/6 WHEN `origin/<base>` moved during the story THE SYSTEM SHALL set `remote_moved` and the story goes to Blocked
+- [ ] S-017/7 (no test) `house-elf`'s prompt makes `accio-claim <ID>` its first command and states the `cd <worktree> &&` rule
 
 ### S-018 · Review agents and findings template
 Deps: S-017 · Files: `agents/{examiner,professor,auror,headmaster}.md`, `agents/references/findings-template.md`, `tests/test_agents.py`
@@ -225,7 +235,7 @@ Context: DESIGN § 3.4, § 12.6; `docs/research/build-engine.md` "Option C in de
 - [ ] S-019/5 WHEN the ledger reports a skip THE SYSTEM SHALL not re-run that step
 - [ ] S-019/6 WHEN a story was left in *Doing* by a crash THE SYSTEM SHALL resume it at check or prepare as in § 12.6
 - [ ] S-019/7 WHEN the run ends THE SYSTEM SHALL return the § 7.2 table only
-- [ ] S-019/8 WHEN a run starts THE SYSTEM SHALL write `run/brew.lock`, refresh it on every status move, and remove it when the run ends, also on failure
+- [ ] S-019/8 WHEN a run starts THE SYSTEM SHALL have `portkey` take the lock (`accio-board lock`), and WHEN it ends, also when the script throws, release it from a `finally` block
 
 ### S-020 · `brew.js`: review, judge, fix rounds, budgets
 Deps: S-018, S-019 · Files: `workflows/brew.js`, `tests/workflow/brew-review.test.mjs`
@@ -245,6 +255,7 @@ Context: DESIGN § 3.3, § 7.3.
 - [ ] S-021/3 (no test) asks about stories whose dependency was dropped
 - [ ] S-021/4 (no test) on "go", moves the stories to Ready, writes `iterations/<N>.md`, commits, and tells the user to type `/accio:brew`
 - [ ] S-021/5 (no test) SKILL.md is at most about 80 lines
+- [ ] S-021/6 (no test) when the `Workflow` tool is missing from its tool list, points to `/accio:brew-by-hand` instead of `/accio:brew`
 
 ### S-022 · `owl` skill
 Deps: S-008, S-010, S-012 · Files: `skills/owl/SKILL.md`, `skills/owl/references/`, `evals/owl/`
@@ -255,6 +266,7 @@ Context: DESIGN § 3.5, § 7.2, § 7.3.
 - [ ] S-022/4 (no test) on drop, sets `dropped` with the reason and removes the worktree
 - [ ] S-022/5 (no test) runs `accio-merge`, writes the push token only after the user confirms, and makes one `chore(accio): iteration <N> review` commit
 - [ ] S-022/6 (no test) runs `accio-hooks verify` and raises a missing marker as a question
+- [ ] S-022/7 (no test) offers allow once / allow from now on / no for each command `curfew` denied; "from now on" adds it to `agent_allow`
 
 ### S-023 · `sort` skill and `quill`
 Deps: S-005, S-018 · Files: `skills/sort/SKILL.md`, `agents/quill.md`, `evals/sort/`
@@ -275,7 +287,7 @@ Context: DESIGN § 3.1, § 12.1.
 ### S-025 · `map` and `vow` skills
 Deps: S-004, S-016 · Files: `skills/{map,vow}/SKILL.md`, `evals/{map,vow}/`
 Context: DESIGN § 3.7.
-- [ ] S-025/1 (no test) `map` shows the board from `accio-board` and points to `brew-by-hand` when workflows are off
+- [ ] S-025/1 (no test) `map` shows the board from `accio-board` and points to `brew-by-hand` when the `Workflow` tool is missing from its tool list
 - [ ] S-025/2 (no test) `vow` writes `.accio/decisions/NNN-<slug>.md` in the `decisions.md` format
 
 ### S-026 · Skill evals and baseline cost
@@ -286,7 +298,7 @@ Context: DESIGN § 8.5, § 9.
 - [ ] S-026/3 (no test) `claude plugin details accio` shows about 2k tokens or less for all descriptions
 
 ### S-027 · `brew-by-hand` (conditional)
-Deps: S-001 (verdict: fallback 2, or workflows are off for the user), S-020 · Files: `skills/brew-by-hand/SKILL.md`
+Deps: S-020 · only for users with workflows off (spike verdict was GO) · Files: `skills/brew-by-hand/SKILL.md`
 Context: DESIGN § 10 Fallbacks.
 - [ ] S-027/1 (no test) runs the § 3.4 steps as plain subagents with the same scripts, files and caps
 - [ ] S-027/2 (no test) is suggested by `session-start` and `map` when workflows are off
