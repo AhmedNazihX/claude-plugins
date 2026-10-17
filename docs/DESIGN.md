@@ -5,7 +5,7 @@ Status: draft for approval · Date: 2026-10-17 · Owner: Ahmed N. Ali
 Sources:
 - `intent.md`
 - `docs/research/analysis.md`, `build-engine.md`, `platform-facts.md`
-- decisions `docs/decisions/001`–`008`
+- decisions `docs/decisions/001`–`008` (002 and 004 amended after the design review)
 
 accio is a Claude Code plugin that runs production software work in Lean-Kanban iterations:
 1. design the stack and architecture
@@ -22,8 +22,10 @@ It guides the user, explains things simply, grills decisions, and guards the rep
 ## 1. Goals and non-goals
 
 ### Goals (each traced to intent.md, I1–I8)
-- **I1:** Cover the lifecycle: design → planning → iteration planning → build → review/QA → retro.
-- **I2:** Work in agile iterations inspired by Lean Kanban: pull, WIP limits, and an explicit "done".
+- **I1:** Cover the lifecycle: design → planning → iteration planning → build → review/QA → retro. *The retro
+  (`pensieve`) and the deep QA audit are v2.*
+- **I2:** Work in agile iterations inspired by Lean Kanban: pull, WIP limits, and an explicit "done". *Flow
+  metrics (cycle time, throughput) are v2.*
 - **I3:** Plan every step and iteration with the user, and block the user only when that is really needed.
 - **I4:** Explain steps and options simply.
 - **I5:** Grill decisions while planning, until the user and the plugin agree on the design and the DoD.
@@ -88,7 +90,8 @@ any time: map (board) · reparo (quick fix) · lumos (explain) · vow (record a 
 **Size by track:** a Feature that arrives later gets a design *note* (one section) from the same skill.
 
 ### 3.2 Planning: `sort`
-The design is split into story files (§ 5). Each story gets:
+The `quill` agent (Sonnet) splits the design into story files (§ 5), and the main chat shows only the summary.
+IDs come from `accio-board new` (S-001, S-002, …), and an auto-split child gets the next free ID. Each story gets:
 - deps
 - a file boundary (the files it may touch)
 - a risk flag
@@ -108,27 +111,30 @@ Unless something is truly ambiguous, the user sees only the summary.
    `decisions.md` format. Low-stakes defaults are bundled into one confirmation.
 3. **Wait for "go".** The user can override any track or drop any story.
 
-Once the user says go, the stories move to *Ready*, and the plugin tells the user to type `/accio:brew`.
+Once the user says go, the stories move to *Ready*, and the plugin tells the user to type `/accio:brew`. That
+name belongs to the **workflow itself** (`workflows/brew.js`). The user types it, which is the documented opt-in.
+No skill relays the call. The iteration is written to `.accio/iterations/<N>.md`.
 
-### 3.4 Build: `brew` → `workflows/build.js`
+### 3.4 Build: `/accio:brew` → `workflows/brew.js`
 This is the unattended part. The full spec is in `docs/research/build-engine.md`, section "Option C in detail".
 
 | Step | Agent | Model | Rule |
 |---|---|---|---|
-| 0 load | (script via a Haiku agent) | Haiku | `board ready --json`, in dependency order |
-| 1 prepare | `portkey` | Haiku | the script creates the worktree and branch `story/<ID>` and writes `brief.md` |
+| 0 load | `portkey` | Haiku | `accio-board ready --json`, in dependency order; also recovers stories a crash left in *Doing* (§ 12.6) |
+| 1 prepare | `portkey` | Haiku | `accio-brief` creates or reuses the worktree and branch `story/<ID>` (§ 12.3), rebases it on base, and writes `brief.md`, including review notes from a rejection |
 | 2 implement | `house-elf` | Sonnet; Opus if complex or risky | reads only the brief; test-first; checkpoint commits; `report.md`; returns a status |
-| 3 check | `prefect` | Haiku | the ledger skips a patch-id that already passed; checks are scoped to the change |
+| 3 check | `prefect` | Haiku | the ledger skips an exact key that already passed (§ 12.4); checks scoped to the change; **boundary check:** a diff outside the story's `files` (plus tests) becomes a finding |
 | 4 review | `examiner` + `professor` (+ `auror` on risky paths); Quick track: 1 combined reviewer | Sonnet | read-only; review package as a file; confidence ≥ 80 |
 | 5 judge | `headmaster` | Sonnet | only when a finding conflicts with the story, or on NEEDS_CONTEXT; rules it, or marks the story needs-user |
 | 6 fix | a fresh `house-elf` | one tier up in round 2 | **≤ 2 rounds**; the re-review covers only the fix diff, and only the reviewers that raised findings run |
-| 7 outcome | (script) | — | READY → *Review*; otherwise *Blocked*, with one plain question |
+| 7 outcome | `prefect` | Haiku | `accio-board move` + `accio-ledger record`: READY → *Review*; otherwise *Blocked*, with one plain question in `run/questions/<ID>.md` |
 
 At most 3 stories are in progress at once. A `stallMs` timeout turns a silent agent into a failure. The run returns
 one table (§ 7.2) of about 1–2k tokens.
 
 ### 3.5 Review and QA: `owl` (checkpoint 2)
-For each READY story, the plugin shows:
+`accio-summary` builds `run/owl.md` from the reports and the cost data. The main chat reads only that file,
+about 150 tokens per story. For each READY story, the plugin shows:
 - what changed
 - how to try it
 - its risks
@@ -139,8 +145,21 @@ The user answers everything in one batch:
 - answer the collected questions (needs-user stories, overrides, paid calls)
 - confirm the push
 
-Accepted stories merge into local main in dependency order. The merge script re-runs the checks only if main moved
-since the verdict. Rejected and answered stories return to *Ready*.
+Accepted stories merge into local main in dependency order. The merge script re-runs the checks only if main
+moved since the verdict. Then:
+- `accio-merge` removes each merged story's worktree and deletes its branch with `git branch -d`, which works only
+  on merged branches (§ 12.3).
+- A rejected story gets the reason written into its **Review notes**, its ledger entry is cleared, and it goes
+  back to *Ready*.
+- An answered story goes back to *Ready*.
+- One commit records every status change for the iteration: `chore(accio): iteration <N> review`.
+
+**The iteration closes at `owl`.** Leftover stories carry over to the next `prophecy`. The same batch answer can
+also say "brew the answered stories now". That runs a second pass, which costs one more `/accio:brew` and one
+more `owl`.
+
+**Push.** After the user confirms, `owl` writes a one-time push token (`run/push-ok`, holding the HEAD sha). The
+`pre-push` hook allows a fast-forward push of exactly that sha to base, then deletes the token.
 
 ### 3.6 Retro: `pensieve` (v2)
 Reports the tokens per story and per iteration, the cycle time and the throughput, and lists findings that came
@@ -191,17 +210,18 @@ Each skill keeps its SKILL.md under about 80 lines, with details in `references/
 | `auror` | security reviewer (risky paths) | Sonnet | same as examiner | same |
 | `headmaster` | judge | Sonnet | read-only plus Write to the ledger | `{ruling | question}` |
 | `librarian` | doc lookups, quotes only | Haiku | Read, Grep | quotes with `file:line` |
+| `quill` | writes story files from the design (in `sort`) | Sonnet | Read, Write to `.accio/stories/` | `stories: N · summary: <path>` |
 
 ### 4.3 Workflow
-- `workflows/build.js`: the § 3.4 pipeline.
+- `workflows/brew.js`: the § 3.4 pipeline, invoked as `/accio:brew`.
 - Tested with a stubbed `agent()`.
 
 ### 4.4 Hooks
 | Hook | Event | Does |
 |---|---|---|
-| `protego` | PreToolUse Bash | blocks a short list: `reset --hard`, `clean -f`, `rm -rf` outside the repo, `--no-verify`, `core.hooksPath` changes, branch delete; each block names the safe alternative; defers to dcg if installed |
-| `fidelius` | PreToolUse Write/Edit | blocks key-shaped values; never echoes the secret |
-| `doc-size` | PreToolUse Read | blocks a whole-file read of `.md` files over a size limit and points to `librarian` |
+| `protego` | PreToolUse Bash | blocks a short list: `reset --hard`, `clean -f`, `rm -rf` outside the repo, `--no-verify`, `core.hooksPath` changes, force branch delete (`-D`; `-d` is allowed because git refuses it on unmerged branches); every block names the safe alternative; defers to dcg if installed |
+| `fidelius` | PreToolUse Write/Edit | blocks key-shaped values; never echoes the secret; test fixtures build fake keys at runtime by concatenation, so they need no exemption |
+| `doc-size` | PreToolUse Read | blocks a whole-file read of `.md` files over 40 KB and points to `librarian`, or to reading by section with offset/limit |
 | `session-start` | SessionStart | injects ≤ 10 lines: the board summary, the next step and the plain-words rule (plugins can't ship rules) |
 
 ### 4.5 Native git hooks
@@ -210,17 +230,21 @@ Each skill keeps its SKILL.md under about 80 lines, with details in `references/
 - **`pre-push`:** blocks force-push and a direct push to the base branch.
 
 ### 4.6 Scripts
-All scripts are in `bin/`, use only the Python 3 standard library, and end up on the Bash PATH.
+All scripts are in `bin/` and use only the Python 3 standard library. **Every script finds the main checkout's
+`.accio/` with `git rev-parse --git-common-dir`, from any worktree**, so worktrees never read stale state. Briefs
+give agents each script's absolute path, because whether `bin/` is on PATH inside a workflow agent is UNKNOWN
+until the spike.
 
 | Script | Does |
 |---|---|
-| `accio-board` | parse stories → board.md, `ready --json`, `status`, `move` |
+| `accio-board` | parse stories → board.md, `ready --json`, `status`, `move`, `new` (IDs) |
 | `accio-brief` | story → brief.md (template); fix brief from findings |
 | `accio-ledger` | patch-id verdicts, `check`, `record` |
 | `accio-score` | complexity score → track, split hint |
 | `accio-merge` | merge accepted stories in dependency order, re-check if main moved |
 | `accio-cost` | sums `usage` from agent transcripts per story and iteration |
-| `accio-hooks` | install or verify the native git hooks |
+| `accio-hooks` | install or verify the native git hooks and the project allow rules (§ 12.1) |
+| `accio-summary` | reports and cost data → `run/owl.md` for the review |
 
 ### 4.7 Output style (optional)
 `output-styles/plain.md` holds the plain-words rule for users who want it always on.
@@ -238,7 +262,8 @@ All scripts are in `bin/`, use only the Python 3 standard library, and end up on
   board.md                  # GENERATED by accio-board — never hand-edit
   iterations/<N>.md         # plan + outcome per iteration
   config.json               # checks, risky paths, budgets, base branch
-  run/                      # gitignored: ledger.tsv, briefs, reports, findings, worktrees
+  run/                      # gitignored: ledger.tsv, status.json, briefs, reports, findings, questions/, overrides.json, owl.md, push-ok
+# worktrees live OUTSIDE the project, in <repo>/../.<repo>-accio-wt/<ID>/, so the project's tools never scan them
 ```
 
 ### 5.1 Story file
@@ -282,10 +307,10 @@ A missing key falls back to its default.
 | Layer | Stops | Bypass |
 |---|---|---|
 | `pre-commit` (native) | secrets in staged files | `--no-verify` (blocked by protego) |
-| `pre-push` (native) | force-push, a direct push to base | `--no-verify` (blocked) |
+| `pre-push` (native) | force-push, and any push to base without the one-time `owl` token (§ 3.5) | `--no-verify` (blocked) |
 | `protego` (Claude) | a short destructive list, early with an alternative | wrapping the command (accepted: the git hooks are the wall) |
 | `fidelius` (Claude) | secret values in Write/Edit | — |
-| One-time override | — | the user grants it for one exact command in one folder; it is logged |
+| One-time override | — | a block during a build makes the agent return BLOCKED with `needs override: <command>`; the question comes up at `owl`; a grant writes `run/overrides.json` (command, folder, 24 h expiry, 1 use) |
 
 Secret patterns are ported from `~/Workspace/claude-mods/secret-guard/hooks/patterns.ts`:
 - a JWT role decode, so only `service_role` keys are blocked
@@ -305,8 +330,9 @@ Messages show only a prefix of the secret.
 - **The spec reviewer comes first.** `examiner` checks the DoD one line at a time: met or not, nothing extra.
 - **Fix rounds:** at most 2. A third is never run; the story goes to Blocked with a plain question.
 - **Re-reviews never repeat a round.** They judge only the fix.
-- **QA in v1:** the project's checks plus a test written from each EARS line. A UI or e2e check is a project
-  `checks` entry. A dedicated QA agent is a v2 candidate.
+- **QA in v1:** the project's checks plus a test written from each EARS line. `examiner` fails a DoD line that has
+  no test naming it. A break-the-code test audit (mutate the code and expect a test to fail) is a **v2**
+  candidate; foreman's `test-auditor` showed it pays off.
 
 ### 7.2 Report template (every user-facing message)
 ```
@@ -328,6 +354,9 @@ Next: /accio:owl
   - `prophecy` (go)
   - `owl` (accept, answers, push)
 - **Never mid-build.**
+- **An honest count per iteration:** k grilling questions plus "go" at `prophecy`, typing `/accio:brew`, the run
+  permission (once, if "don't ask again" is chosen), and one `owl` batch: about 4 + k. Each second pass adds 2.
+  First use also needs a one-time setup: allow rules and git hooks (§ 12.1).
 - **Always ask** (at `owl`): push, paid calls above $0, needs-user, safety overrides.
 
 ---
@@ -343,7 +372,9 @@ Next: /accio:owl
 5. **Small baseline.** Descriptions are short, and skill bodies use progressive disclosure. The target is about 2k
    tokens for all accio descriptions, checked with `claude plugin details accio`.
 6. **Budgets.** Quick has 80k tokens and Story has 400k. Above budget, the build table shows a warning. At 2× the
-   budget, the story stops and goes to Blocked.
+   budget, the story stops and goes to Blocked. *This assumes `agent()` reports token usage, which is UNKNOWN. If
+   it doesn't, `accio-cost` reports usage from transcripts after the run, and the hard stop becomes the agent's
+   `maxTurns` (decision 006).*
 7. **Measure.** `accio-cost` reports per story in `owl`, and per iteration in `pensieve`.
 
 ---
@@ -384,13 +415,19 @@ The spike must prove two things:
 1. A plugin workflow can call accio's named agents.
 2. A plugin workflow can run them in a worktree created by a script.
 
-It also checks two more points:
+It also checks these points:
 - whether `agent()` reports token usage
 - how the opt-in and permission prompt behave when a user types `/accio:brew`
+- **whether agents inside a workflow prompt for tool permissions.** If they do, the § 12.1 allow rules must cover them.
+- whether `bin/` is on PATH, and `${CLAUDE_PLUGIN_ROOT}` is set, inside workflow agents
+- whether `protego`, `fidelius` and `doc-size` fire inside workflow agents
+- what `/accio:brew` does when workflows are disabled. The fallback message must come from the `session-start` hook
+  or from `map`, not from the workflow.
 
 **Fallbacks**, in order:
 1. The script creates the worktree and the agent prompt is loaded from its file.
-2. As a last resort, the `brew` skill runs the same steps as plain subagents, superpowers-style.
+2. As a last resort, a `brew-by-hand` skill runs the same steps as plain subagents, superpowers-style. The
+   `session-start` hook suggests it when workflows are off.
 
 ---
 
@@ -405,3 +442,67 @@ It also checks two more points:
 | The budgets are guesses | tune them from `accio-cost` after the first two iterations |
 | Lore names hurt clarity | every description and report in plain words; a README mapping table |
 | Skills cached per session slow dogfooding | test with `claude --plugin-dir`; one source tree published by a script (foreman's drift lesson) |
+
+---
+
+## 12. Contracts and lifecycle (added after the design review)
+
+### 12.1 One-time setup
+`accio-hooks install` runs at the first `wand` or `brew` and does two things:
+1. **Installs the native git hooks.**
+2. **Proposes the project allow rules** in `.claude/settings.json`:
+   - the accio scripts by absolute path
+   - the project's `checks` commands
+   - Edit and Write
+   - `git` add, commit, switch and worktree
+
+The user approves it once. It counts as a touchpoint, and it exists so that agents in an unattended run never stall
+on a permission prompt (spike S-001 confirms whether workflow agents prompt at all).
+
+### 12.2 Who writes what
+| File | Written by | When committed |
+|---|---|---|
+| `design.md`, `decisions/` | `wand`, `vow` (main chat) | at once |
+| `stories/<ID>.md` | `quill` (in `sort`); `owl` (status, review notes, answers) | in `sort`; once per iteration at `owl` |
+| `iterations/<N>.md` | `prophecy` (plan), `owl` (outcome) | at `prophecy` and at `owl` |
+| `board.md` | `accio-board` only | together with the stories |
+| `run/status.json` | `accio-board move` (from `portkey`/`prefect`) | never (runtime); `owl` folds it into the story files |
+| `run/ledger.tsv` | `accio-ledger` (from `prefect`, `headmaster`) | never |
+| `run/<ID>/brief.md`, `report.md`, `findings-*.md` | `accio-brief`; `house-elf`; each reviewer | never |
+| `run/questions/<ID>.md` | `headmaster` (needs-user), or an agent's `needs override` | never; answers go into the story at `owl` |
+
+**During a build, status lives only in `run/status.json`.** Nothing commits to main while a build runs.
+
+### 12.3 Worktree and branch lifecycle
+1. **Create.** `accio-brief` runs `git worktree add <wt>/<ID> -b story/<ID>`. If the branch already exists (a
+   re-run), it reuses the branch and rebases it on base.
+2. **Rebase conflict.** If the rebase conflicts, the conflict goes into the brief and `house-elf` resolves it as
+   part of the story. If it still fails, the story goes to *Blocked*.
+3. **Remove.** After a merge at `owl`, `accio-merge` runs `git worktree remove` and `git branch -d`.
+4. **Rejected or blocked stories keep their branch** for the next pass.
+
+### 12.4 Ledger key
+```
+key = sha256(patch-id(diff merge-base..head) + sha(config.checks) + panel-id + sha(story DoD section))
+```
+- **Invalidation:** the key changes automatically when the diff, the checks, the reviewer panel or the DoD changes.
+  A rejection at `owl` also deletes the entry.
+- **`reparo`:** it has no story file, so it gets an ID of the form `Q-<n>`, used only in the ledger.
+
+### 12.5 Agent reply schemas (enums)
+| Agent | Reply |
+|---|---|
+| `house-elf` | `status ∈ {DONE, DONE_WITH_CONCERNS, NEEDS_CONTEXT, BLOCKED}` |
+| `prefect` | `{pass: bool, failing: [check], skipped: bool, out_of_bounds: [path]}` |
+| reviewers | `{verdict ∈ {pass, fail}, counts: {critical, major, minor}, path}` |
+| `headmaster` | `{kind ∈ {ruling, question}, text, path}` |
+
+**Findings file:** a Markdown list. Each item holds a severity, a confidence (0–100), `file:line`, the claim, the
+failure scenario, and the DoD line it concerns (if any). The exact template is defined in the first review story.
+
+### 12.6 Crash recovery
+A story whose status in `run/status.json` is *Doing* but which has no live run gets resumed by the next `brew`:
+- at step 3 (check) if its branch has commits after base
+- at step 1 (prepare) otherwise
+
+Checkpoint commits make this safe.

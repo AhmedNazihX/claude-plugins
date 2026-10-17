@@ -28,3 +28,9 @@ Session evidence: git-guardrails blocked a harmless `grep -r` because it *could*
 ## Known limits
 - `git commit --no-verify` bypasses the git hooks. The Claude guard blocks that flag.
 - A human can still bypass everything. That is intended.
+
+## Amendment (2026-10-17, design review)
+- **`pre-push` allows one push to base without a block:** a fast-forward push of the exact HEAD sha that the user
+  confirmed at `owl`. `owl` writes a one-time token, and the hook deletes it after use. Without this, accio's own
+  hook would block the push that decision 005 allows.
+- **`protego` allows `git branch -d`.** Git refuses it on unmerged branches. Only `-D` is blocked.

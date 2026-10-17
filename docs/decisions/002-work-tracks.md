@@ -23,3 +23,8 @@ override any of them.
 - C, two tracks only: simplest, but big features get no design step.
 
 Rough cost per item, guessed from foreman's runs (not measured): Quick ~20–50k tokens, Story ~150–400k.
+
+## Amendment (2026-10-17, design review)
+- **A Quick item inside an iteration gets a minimal story file:** frontmatter plus 1–3 DoD lines. The board, the
+  budgets and the ledger need one.
+- **`reparo` stays file-free.** It runs outside iterations and uses a `Q-<n>` ID only in the ledger.
