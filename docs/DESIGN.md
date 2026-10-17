@@ -123,24 +123,29 @@ only the summary.
 
 Once the user says go, the stories move to *Ready*, and the plugin tells the user to type `/accio:brew`. That
 name belongs to the **workflow itself** (`workflows/brew.js`); there is no `brew` skill (decision 009). The user
-types it, which is the documented opt-in. The iteration is written to `.accio/iterations/<N>.md`.
+types it, which is the documented opt-in. The iteration is written to `.accio/iterations/<N>.md`. If the
+`Workflow` tool is missing from `prophecy`'s own tool list, workflows are off: it says so in plain words and points
+to `/accio:brew-by-hand` instead (decision 010).
 
 ### 3.4 Build: `/accio:brew` → `workflows/brew.js`
 This is the unattended part. The full spec is in `docs/research/build-engine.md`, section "Option C in detail".
 
 | Step | Agent | Model | Rule |
 |---|---|---|---|
-| 0 load | `portkey` | Haiku | `accio-board ready --json`, in dependency order; also recovers stories a crash left in *Doing* (§ 12.6); `accio-hooks verify`; writes `run/brew.lock` (§ 4.5) |
+| 0 load | `portkey` | Haiku | `accio-board ready --json`, in dependency order; also recovers stories a crash left in *Doing* (§ 12.6); `accio-hooks verify`; takes the run lock with `accio-board lock` (§ 4.5) |
 | 1 prepare | `portkey` | Haiku | `accio-brief` creates or reuses the worktree and branch `story/<ID>` (§ 12.3), from base or from the parent's head when stacked, and writes `brief.md`, including review notes from a rejection |
-| 2 implement | `house-elf` | Sonnet; Opus if complex or risky | reads only the brief; test-first; tags each test with its DoD line; checkpoint commits; `report.md`; returns a status |
+| 2 implement | `house-elf` | Sonnet; Opus if complex or risky | first runs `accio-claim <ID>` (§ 4.4); reads only the brief; starts each Bash command that touches files with `cd <worktree> &&` or uses `git -C <worktree>`; test-first; tags each test with its DoD line; checkpoint commits; `report.md`; returns a status |
 | 3 check | `prefect` | Haiku | the ledger skips an exact key that already passed (§ 12.4); checks scoped to the change; **boundary check:** a diff outside the story's `files` (plus tests) becomes a finding; **DoD tags:** every numbered line not marked `(no test)` has a tagged test; **main snapshot:** the main checkout's `git status` is unchanged; **remote check:** `origin/<base>` has not moved |
 | 4 review | `examiner` + `professor` (+ `auror` on risky paths); Quick track: 1 combined reviewer | Sonnet | read-only; review package as a file; confidence ≥ 80 |
 | 5 judge | `headmaster` | Sonnet | only when a finding conflicts with the story, or on NEEDS_CONTEXT; rules it, or marks the story needs-user |
 | 6 fix | a fresh `house-elf` | one tier up in round 2 | **≤ 2 rounds**; the re-review covers only the fix diff, and only the reviewers that raised findings run |
 | 7 outcome | `prefect` | Haiku | `accio-board move` + `accio-ledger record`: READY → *Review*; otherwise *Blocked*, with one plain question in `run/questions/<ID>.md` |
 
-At most 3 stories are in progress at once. A `stallMs` timeout turns a silent agent into a failure. The run returns
-one table (§ 7.2) of about 1–2k tokens. When it ends, also on failure, it removes `run/brew.lock`.
+At most 3 stories are in progress at once. A `stallMs` timeout turns a silent agent into a failure. It does **not**
+end an agent waiting on a permission prompt (spike S-001), so no accio agent may ever reach one: `curfew` answers
+every tool call for accio's agents (§ 4.4, decision 010). The run returns one table (§ 7.2) of about 1–2k tokens.
+Workflow scripts have no file access, so a final `portkey` call in a `finally` block releases the lock
+(`accio-board unlock`).
 
 **Stacking (decision 009).** A child is held back until its parent reaches READY in the same run, and its slot goes
 to another story. The child then branches from the parent's verified head. If the parent ends BLOCKED, the child
@@ -157,7 +162,8 @@ about 150 tokens per story. For each READY story, the plugin shows:
 
 The user answers everything in one batch:
 - for each story: **accept**, **reject** (with a reason) or **drop** (with a reason)
-- answer the collected questions (needs-user stories, overrides, paid calls, a hook warning from setup)
+- answer the collected questions (needs-user stories, overrides, paid calls, a hook warning from setup, and each
+  command `curfew` denied: allow once, allow from now on, or no)
 - confirm the push
 
 **What the answers do:**
@@ -167,7 +173,8 @@ The user answers everything in one batch:
   rebuilt on the fixed parent. Anything the build stopped on its own is BLOCKED, never "rejected".
 - **Drop.** The story gets status `dropped`, final but reversible on request. Its worktree is removed and its branch
   kept. Its stacked children go back to *Ready*, and the next `prophecy` asks about them.
-- **Answer** a BLOCKED story's question. It goes back to *Ready*.
+- **Answer** a BLOCKED story's question. It goes back to *Ready*. "Allow from now on" for a denied command adds it
+  to `agent_allow` in `config.json` (decision 010).
 
 **Merge (decision 009).** `accio-merge` merges the accepted stories, in dependency order, on a temporary branch
 `accio/integrate-<N>` in its own worktree. Each story gets one `--no-ff` merge commit, `<type>(S-012): <title>`.
@@ -199,7 +206,8 @@ itself and writes proposals to `.accio/research/`. It never changes accio on its
 style of hookify) and records accepted ones with `vow`.
 
 ### 3.7 Any time
-- `map`: the board, generated by a script. When workflows are off, it points to `brew-by-hand`.
+- `map`: the board, generated by a script. When the `Workflow` tool is missing from its tool list, it points to
+  `brew-by-hand`.
 - `vow`: writes `.accio/decisions/NNN-<slug>.md`.
 
 **v1.1 (decision 009):**
