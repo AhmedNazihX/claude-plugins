@@ -19,7 +19,7 @@ evals/                       scripts/publish.py
 | done | S-001 Spike: workflow, named agents, worktree (verdict GO; decision 010) |
 | done | S-002 Scaffold, CI and publish (first real CI run waits for a GitHub remote) |
 | done | S-003 Shared library |
-| todo | S-004 `accio-board` |
+| done | S-004 `accio-board` |
 | todo | S-005 `accio-score` |
 | todo | S-006 `accio-ledger` |
 | todo | S-007 `accio-brief` |
@@ -86,13 +86,20 @@ supported (pinned by a test; S-012/13 warns). 54 tests pass.
 ### S-004 · `accio-board`
 Deps: S-003 · Files: `bin/accio-board`, `bin/accio_lib/board.py`, `tests/test_board.py`
 Context: DESIGN § 3.3, § 3.4 (stacking), § 4.6, § 5, § 12.2.
-- [ ] S-004/1 WHEN `new` runs THE SYSTEM SHALL return the next free `S-NNN` ID
-- [ ] S-004/2 WHEN `move <ID> <status>` runs during a build THE SYSTEM SHALL write only `run/status.json`
-- [ ] S-004/3 WHEN `ready --json` runs THE SYSTEM SHALL list Ready stories in dependency order, including a child whose parent is in the batch, up to `stack_depth`
-- [ ] S-004/4 WHEN a story's parent is BLOCKED in the current run THE SYSTEM SHALL leave the child out of `ready`
-- [ ] S-004/5 WHEN `board` runs THE SYSTEM SHALL regenerate `board.md` with the six columns and a Dropped line
-- [ ] S-004/6 WHEN a story is `dropped` THE SYSTEM SHALL never list it as ready
-- [ ] S-004/7 WHEN `lock`, `move` or `unlock` runs THE SYSTEM SHALL create, refresh or remove `run/brew.lock`
+- [x] S-004/1 WHEN `new` runs THE SYSTEM SHALL return the next free `S-NNN` ID
+- [x] S-004/2 WHEN `move <ID> <status>` runs during a build THE SYSTEM SHALL write only `run/status.json`
+- [x] S-004/3 WHEN `ready --json` runs THE SYSTEM SHALL list Ready stories in dependency order, including a child whose parent is in the batch, up to `stack_depth`
+- [x] S-004/4 WHEN a story's parent is BLOCKED in the current run THE SYSTEM SHALL leave the child out of `ready`
+- [x] S-004/5 WHEN `board` runs THE SYSTEM SHALL regenerate `board.md` with the six columns and a Dropped line
+- [x] S-004/6 WHEN a story is `dropped` THE SYSTEM SHALL never list it as ready
+- [x] S-004/7 WHEN `lock`, `move` or `unlock` runs THE SYSTEM SHALL create, refresh or remove `run/brew.lock`
+Outcome: `accio-board` new/move/ready/board/status/lock/unlock/refresh; run-state writes serialised by an OS lock
+on `run/.guard` (parallel moves and locks tested). Decisions taken while building (user said not to block):
+- a parent that is ready, doing or in review in this run counts as in the batch; `ready` keeps its child listed
+  with the parent named, and `brew` holds the child until the parent is READY (§ 3.4)
+- `move` works only while a run lock exists (it revives a stale one); outside a build the story file holds the
+  status, written by `prophecy` and `owl`
+- every brew step refreshes the lock (S-019/9), so a long story can't switch off the push guard mid-run
 
 ### S-005 · `accio-score`
 Deps: S-003 · Files: `bin/accio-score`, `bin/accio_lib/score.py`, `tests/test_score.py`
@@ -246,6 +253,7 @@ Context: DESIGN § 3.4, § 12.6; `docs/research/build-engine.md` "Option C in de
 - [ ] S-019/6 WHEN a story was left in *Doing* by a crash THE SYSTEM SHALL resume it at check or prepare as in § 12.6
 - [ ] S-019/7 WHEN the run ends THE SYSTEM SHALL return the § 7.2 table only
 - [ ] S-019/8 WHEN a run starts THE SYSTEM SHALL have `portkey` take the lock (`accio-board lock`), and WHEN it ends, also when the script throws, release it from a `finally` block
+- [ ] S-019/9 WHEN any step of a story finishes THE SYSTEM SHALL refresh the run lock (`accio-board refresh` or a `move`), so a long story never lets it go stale and switch off the push guard mid-run
 
 ### S-020 · `brew.js`: review, judge, fix rounds, budgets
 Deps: S-018, S-019 · Files: `workflows/brew.js`, `tests/workflow/brew-review.test.mjs`

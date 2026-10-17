@@ -1,0 +1,108 @@
+#!/usr/bin/env python3
+"""accio-board: the story board (DESIGN § 4.6).
+
+  new                   print the next free story id
+  move <ID> <status>    record a status in run/status.json and refresh the run lock
+  ready [--json]        the ready stories in dependency order, with stacked children
+  board                 regenerate .accio/board.md
+  status                one-line summary of the columns
+  lock / unlock         take or release the build's run lock
+  refresh               mark the running build as alive (every brew step calls it)
+"""
+import argparse
+import json
+import pathlib
+import sys
+
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+
+from accio_lib import board, config, paths, runlock  # noqa: E402
+
+
+def _accio():
+    accio = paths.accio_dir()
+    if accio is None:
+        raise board.BoardError("no .accio/ folder in this repo; run accio's setup first")
+    return accio
+
+
+def _loaded(accio):
+    stories = board.load_stories(accio)
+    return stories, board.statuses(stories, board.read_overrides(accio))
+
+
+def cmd_new(_args, accio):
+    print(board.next_id(accio))
+
+
+def cmd_move(args, accio):
+    board.move(accio, board.load_stories(accio), args.id, args.status)
+
+
+def cmd_ready(args, accio):
+    stories, status = _loaded(accio)
+    batch = board.ready_batch(stories, status, config.load(accio)["stack_depth"])
+    if args.json:
+        print(json.dumps(list(batch), indent=2))
+    else:
+        for item in batch:
+            print(f"{item['id']}  level {item['level']}  {item['title']}")
+
+
+def cmd_board(_args, accio):
+    stories, status = _loaded(accio)
+    path = accio / board.BOARD_NAME
+    try:
+        path.write_text(board.render(stories, status), encoding="utf-8")
+    except OSError as error:
+        raise board.BoardError(f"cannot write {path}: {error}") from error
+
+
+def cmd_status(_args, accio):
+    _, status = _loaded(accio)
+    print(board.summary(status))
+
+
+def cmd_lock(_args, accio):
+    note = runlock.take(board.run_dir(accio))
+    if note:
+        print(note)
+
+
+def cmd_unlock(_args, accio):
+    runlock.release(board.run_dir(accio))
+
+
+def cmd_refresh(_args, accio):
+    runlock.refresh(board.run_dir(accio))
+
+
+def parser():
+    top = argparse.ArgumentParser(prog="accio-board", description="accio's story board")
+    commands = top.add_subparsers(dest="command", required=True)
+    commands.add_parser("new").set_defaults(run=cmd_new)
+    move = commands.add_parser("move")
+    move.add_argument("id")
+    move.add_argument("status")
+    move.set_defaults(run=cmd_move)
+    ready = commands.add_parser("ready")
+    ready.add_argument("--json", action="store_true")
+    ready.set_defaults(run=cmd_ready)
+    for name, run in (("board", cmd_board), ("status", cmd_status), ("lock", cmd_lock), ("unlock", cmd_unlock),
+                      ("refresh", cmd_refresh)):
+        commands.add_parser(name).set_defaults(run=run)
+    return top
+
+
+def main(argv=None):
+    args = parser().parse_args(argv)
+    try:
+        args.run(args, _accio())
+    except (board.BoardError, config.ConfigError, runlock.LockError) as error:
+        print(f"accio-board: {error}", file=sys.stderr)
+        return 1
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
