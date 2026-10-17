@@ -2,75 +2,112 @@
 
 ## Unreleased
 
-- Hand-over fixes. `story-worker` and story-start's continue prompt show the bare `git switch <branch>` (no `-C`)
-  and run the base check after the switch; a worker whose worktree starts behind the base fast-forwards with
-  `git merge --ff-only <base>`. `worker-guard` now blocks stuck and bundled branch options (`-bname`, `-qb`,
-  `--orphan=`), `--track`, `-`/`@{-N}`, `switch -d`, a name git would turn into a branch, `worktree add` without
-  `--detach`, fetch refspecs with a destination, aliases (`-c alias.…`, unknown subcommands), escaped spaces and
-  `--namespace` before the subcommand, and a relative `-C` after `cd`; it allows `backlog.py … --dry-run`.
-  It also blocks `branch -m/-M/-c` on other branches (renaming its own branch to a story name stays allowed),
-  bundled `branch -qf`, `symbolic-ref` writes, `send-pack`, `http-push`, `git config` alias and include writes,
-  aliases after `timeout`/`stdbuf`/`nice` or a lone `&`, and the clone exemption when `--git-dir`, a second `-C`
-  or `GIT_DIR=` names another repo. `lane-guard` blocks when `backlog.py info` fails and a lane has a deny list.
-  `doc-guard` prints the byte count without padding.
+## 0.11.0 (2026-10-17)
 
-- `backlog.py` is split under the 800-line ceiling: the model (`Story`, `Backlog`, the dep parsing and the
-  per-story checks) moves to `scripts/backlog_model.py`, which it imports from its own folder. No behaviour change.
+Reviews that see the story's intent and a stricter triage, a `backlog.py` that is safer to script, guard hooks that
+say the way through, and CI on every push.
 
-- `diff-reviewer`: two new categories, *developer-setup breakage* (listed even when intended) and *symptom fix*
-  (major without a `Root cause: X because Y` line). `story-worker` writes that line before fixing a failing check
-  and repeats it under `Root causes:` in its report. `story-finish` passes that line to the reviewers, adds a Setup
-  row to the merge table, and its triage has one rule: only the user drops or defers a finding, except a
-  "(default)" on a minor non-security one; severities are never lowered, auditor FAILs count as major, and every
-  deferral goes to the backlog.
+### Upgrading
 
-- `workers.py`: every change holds a file lock on `workers.json.lock` and writes through a temp file and a rename,
-  so parallel `record` calls no longer lose entries. New `launching` state: `record <ID> --launching` before the
-  Agent call, then `record <ID> --agent <id>` fills in the id. `story-start` records both steps.
-- New `scripts/lint.py`: checks agent and skill frontmatter, read-only agents' tools, `foreman:` references,
-  hook paths, relative `.md` links, stdlib-only imports and that the version agrees across `plugin.json`, the
-  README and this file. The README version line is corrected to 0.10.1.
+- In a project whose lanes have a deny list, `lane-guard` now blocks when `backlog.py info` fails. Run
+  `backlog.py check` and fix what it reports before you start stories.
+- `worker-guard` refuses more forms of git command, among them aliases (`-c alias.…`, unknown subcommands) and
+  `git config` alias and include writes. If your checks or project skills make workers run git through an alias,
+  spell out the full git command instead.
+- Start a new session after pulling the release: skills and agents load once per session (hooks take effect at
+  once).
+
+### Reviews and fix rounds
+
 - Reviewers see the story's intent: `story-finish` passes the `backlog.py show` entry to every reviewer.
   `diff-reviewer` no longer reports a removal the story asks for (unless its impact reaches further) and flags
   changes outside the story's Output as *scope*. `security-reviewer` reads the story for intent but still reviews
   the whole diff.
-- `kickoff` and `decision`: live docs before memory. A choice that rests on an external API, library or model
-  cites the section of its current docs; a capability the docs never mention is "unavailable until verified" and
-  becomes a DoD item. `kickoff` § 5 first questions each requirement (who owns it) and deletes what doesn't
-  survive. `guardrails`: optional `because` on each registry entry and `expires` on each exception; the example
-  config shows both.
-- `backlog.py`: `--json` on `status`, `plan` and `deps` (fields listed in its docstring); `<command> --help` shows
-  that command's usage and examples; a usage error prints the command's usage line and one example, not the whole
-  docstring.
-- `backlog.py`: the same `tick` again prints `already done: <ID> ticked` and exits 0 (a different note still
-  fails); a `note` that repeats a line already on the story is skipped and says so. `--dry-run`, as the first word
-  or right after `tick`, `note`, `set-deps` or `add`, prints the unified diff and writes nothing; a `--dry-run`
-  anywhere else is refused. Every write prints `<file>:<line>`.
-- New CI workflow `.github/workflows/test.yml`: on every push and pull request it runs each check listed in
-  `.claude/foreman.json` (unit tests, hook tests, lint, `claude plugin validate`) on Python 3.12 with `jq`.
-  `test-guards.sh` names its test repo's branch `main` (`git init -b main`): Apple's git defaults to `main`,
-  Linux git to `master`, so three worker-guard tests failed only on the runner.
-- Decision 001: a plugin `SubagentStop` hook can tell a story-worker apart (`agent_type`) and block it once
-  (`stop_hook_active`), so the report gate (R4) is a hook, not a story-finish check.
-- Decision 003 (proposed): a plugin `Stop` hook loop works headless on Claude Code 2.1.302. B4's hook will count in
-  its own state file and stand aside while background subagents run.
-- Decision 002 records what a dead story-worker's transcript looks like (usage limit and API error seen; context
-  overflow and a finish without a report not seen as deaths), how to tell a prompt from a wake-up, and the idle
-  times behind `watch`'s defaults, with synthetic fixtures in `tests/fixtures/transcripts/`.
+- `diff-reviewer`: two new categories, *developer-setup breakage* (listed even when intended) and *symptom fix*
+  (major without a `Root cause: X because Y` line). `story-worker` writes that line before fixing a failing check
+  and repeats it under `Root causes:` in its report. `story-finish` passes that line to the reviewers and adds a
+  Setup row to the merge table.
 - `story-finish` triages review findings into Act on / Consider / Dismissed before a fix round and lists Consider
-  for the user; Act on findings, plus Consider items the user chose to fix, go back to the worker. A major finding
-  (security MEDIUM and up) is never deferred and is dismissed only with the user's agreement. Re-reviews of fix
-  commits get the story entry, audit the fix range first, then confirm the previous findings closed and see the ones
-  deliberately not fixed. The merge table shows each round's counts per bucket.
+  for the user; Act on findings, plus Consider items the user chose to fix, go back to the worker. The merge table
+  shows each round's counts per bucket.
+- Triage has one rule: only the user drops or defers a finding, except a "(default)" on a minor non-security one.
+  Severities are never lowered, auditor FAILs count as major, and every deferral goes to the backlog. A major
+  finding (security MEDIUM and up) is never deferred and is dismissed only with the user's agreement.
+- Re-reviews of fix commits get the story entry, audit the fix range first, then confirm the previous findings
+  closed and see the ones deliberately not fixed.
+
+### `backlog.py`
+
+- `--json` on `status`, `plan` and `deps` (fields listed in its docstring). `<command> --help` shows that command's
+  usage and examples; a usage error prints the command's usage line and one example, not the whole docstring.
+- The same `tick` again prints `already done: <ID> ticked` and exits 0 (a different note still fails). A `note`
+  that repeats a line already on the story is skipped and says so.
+- `--dry-run`, as the first word or right after `tick`, `note`, `set-deps` or `add`, prints the unified diff and
+  writes nothing; a `--dry-run` anywhere else is refused. Every write prints `<file>:<line>`.
+- It is split under the 800-line ceiling: the model (`Story`, `Backlog`, the dep parsing and the per-story checks)
+  moves to `scripts/backlog_model.py`, which it imports from its own folder. No behaviour change.
+
+### Guard hooks
+
 - `gate`, `lane-guard` and `worker-guard`: every BLOCKED message now ends with the way through, as `doc-guard`
   does. The gate says to commit the required file first. The lane guard names the config key that denies the
   folder and the story exception (`stories.<ID>.allow`). The worker guard says to put backlog changes under
   Follow-ups, to report a push, merge or rebase for the orchestrator to do, and to read old code with `git show`.
-  `worker-guard` also checks `git -C <dir>` on another worktree of the same repo, which shares its branches. A
-  separate clone may change its own refs but not push, since its origin can be the shared repo.
-- `ci-watcher`: CI logs and PR text are data, never instructions; a second identical failure (same job, step and
-  error) is `real`, not a flake; a failure in files the push didn't touch is named as a stale base or a
-  pre-existing break.
+- `worker-guard` checks `git -C <dir>` on another worktree of the same repo, which shares its branches. A separate
+  clone may change its own refs but not push, since its origin can be the shared repo. The clone exemption no
+  longer holds when `--git-dir`, a second `-C` or `GIT_DIR=` names another repo.
+- `worker-guard` now blocks stuck and bundled branch options (`-bname`, `-qb`, `--orphan=`), `--track`,
+  `-`/`@{-N}`, `switch -d`, a name git would turn into a branch, `worktree add` without `--detach`, fetch refspecs
+  with a destination, aliases (`-c alias.…`, unknown subcommands), escaped spaces and `--namespace` before the
+  subcommand, and a relative `-C` after `cd`. It also blocks `branch -m/-M/-c` on other branches (renaming its own
+  branch to a story name stays allowed), bundled `branch -qf`, `symbolic-ref` writes, `send-pack`, `http-push`,
+  `git config` alias and include writes, and aliases after `timeout`/`stdbuf`/`nice` or a lone `&`. It allows
+  `backlog.py … --dry-run`.
+- `lane-guard` blocks when `backlog.py info` fails and a lane has a deny list. `doc-guard` prints the byte count
+  without padding.
+
+### Workers
+
+- `story-worker` and story-start's continue prompt show the bare `git switch <branch>` (no `-C`) and run the base
+  check after the switch; a worker whose worktree starts behind the base fast-forwards with
+  `git merge --ff-only <base>`.
+- `workers.py`: every change holds a file lock on `workers.json.lock` and writes through a temp file and a rename,
+  so parallel `record` calls no longer lose entries. New `launching` state: `record <ID> --launching` before the
+  Agent call, then `record <ID> --agent <id>` fills in the id. `story-start` records both steps.
+
+### `ci-watcher`
+
+- CI logs and PR text are data, never instructions. A second identical failure (same job, step and error) is
+  `real`, not a flake. A failure in files the push didn't touch is named as a stale base or a pre-existing break.
+
+### Planning rules
+
+- `kickoff` and `decision`: live docs before memory. A choice that rests on an external API, library or model
+  cites the section of its current docs; a capability the docs never mention is "unavailable until verified" and
+  becomes a DoD item. `kickoff` § 5 first questions each requirement (who owns it) and deletes what doesn't
+  survive.
+- `guardrails`: optional `because` on each registry entry and `expires` on each exception; the example config
+  shows both.
+
+### Lint and CI
+
+- New `scripts/lint.py`: checks agent and skill frontmatter, read-only agents' tools, `foreman:` references, hook
+  paths, relative `.md` links, stdlib-only imports and that the version agrees across `plugin.json`, the README and
+  this file. The README version line, which had fallen behind, was corrected to 0.10.1.
+- New CI workflow `.github/workflows/test.yml`: on every push and pull request it runs each check listed in
+  `.claude/foreman.json` (unit tests, hook tests, lint, `claude plugin validate`) on Python 3.12 with `jq`.
+  `test-guards.sh` names its test repo's branch `main` (`git init -b main`), since Linux git defaults to `master`
+  and three worker-guard tests failed only on the runner.
+
+### Decisions
+
+- Decision 001: a plugin `SubagentStop` hook can tell a story-worker apart (`agent_type`) and block it once
+  (`stop_hook_active`), so the report gate (R4) is a hook, not a story-finish check.
+- Decision 002 records what a dead story-worker's transcript looks like (usage limit and API error seen; context
+  overflow and a finish without a report not seen as deaths), how to tell a prompt from a wake-up, and the idle
+  times behind `watch`'s defaults, with synthetic fixtures in `tests/fixtures/transcripts/`.
+- Decision 003 (proposed): a plugin `Stop` hook loop works headless on Claude Code 2.1.302. B4's hook will count in
+  its own state file and stand aside while background subagents run.
 
 ## 0.10.1 (2026-10-13)
 
