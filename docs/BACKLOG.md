@@ -497,7 +497,7 @@ flowchart LR
   DoD: dod-verifier.md holds the levels, the skip rule with its ledger condition, and the baseline procedure;
   `checks_skip_paths` is in the example config and setup's table; the global checks pass.
 
-- [ ] **R12 · Readiness check** · Deps: V1 · Type: agent · Lane: Planning · Size: M · Resource: config-template
+- [x] **R12 · Readiness check** · Deps: V1 · Type: agent · Lane: Planning · Size: M · Resource: config-template
   Context: Design › D12. Input: `foreman/skills/setup/SKILL.md`, `foreman/agents/story-worker.md` § 1 (worktree
   setup), `foreman/agents/test-auditor.md` (scratch worktree recipe).
   Output: `foreman/agents/readiness-auditor.md` (Bash, Read, Grep, Glob; read-only apart from a scratch worktree it
@@ -507,6 +507,7 @@ flowchart LR
   pointers resolve; returns PASS / FRICTION / FAIL with Problems. setup runs it as a new step before verifying the
   guards.
   DoD: the agent file and the setup step exist; the lint passes on the new agent; the global checks pass.
+  **Outcome:** New foreman:readiness-auditor: a scratch worker-like worktree with timed checks, a single-test command, link_files, env, install, docs and Context pointers; copies setup's uncommitted files (git status -uall), reports scaffold checks as pending with a rerun, stops as NEEDS USER when linked secrets meet live tests, PASS/FRICTION/FAIL/NEEDS USER. setup § 4 runs it before Verify. 3 fix rounds; merged as is by user decision with 2 LOW gaps deferred (see V2).
 
 - [ ] **R13 · Script-built briefs** · Deps: R1, R2, R8, Q1 · Type: agent · Lane: Workers · Size: M · Resource: workers, story-start
   Context: Design › D13. Input: `foreman/skills/story-start/SKILL.md` §§ 3 and 5, `foreman/scripts/workers.py`,
@@ -526,6 +527,7 @@ flowchart LR
   README describes reports on disk, the reaper, reconcile, the ledger and the readiness check.
   DoD: the lint passes; the user approved the CHANGELOG entry; after the merge and push the user pulled the release
   copy and a new session lists foreman 0.12.0.
+  **From R12 (merged):** Known limits of readiness-auditor steps 0/6, deferred by the user (2026-10-17) after 3 fix rounds: (1) a link_files entry is checked with plain `git status --porcelain --ignored` (no -u flag), so a user with `status.showUntrackedFiles=all` gets the names inside a linked folder listed (fix: pass -unormal, or one -uall count-and-hash command for every path); (2) new files written into a linked *folder* go unseen, and step 6 / the report still claim new files are detected. Also left: step 4 reports FRICTION when only the test check is pending. List these in the release notes or fix them before the release.
 
 - [ ] **H2 · Trial on a real story (gate)** · Deps: V2 · Type: human · Lane: Release · Size: M
   Context: Design › Gate G1; Evaluation. Input: the capstone backlog, foreman 0.12.0 from the release copy.
