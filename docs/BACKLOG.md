@@ -204,8 +204,8 @@ Context: DESIGN § 3.4 steps 0–3 and 7, § 4.2, § 12.5.
 - [ ] S-017/2 WHEN the diff touches a file outside the story's `files` (plus tests) THE SYSTEM SHALL list it in `out_of_bounds`
 - [ ] S-017/3 WHEN a numbered DoD line not marked `(no test)` has no tagged test THE SYSTEM SHALL list it in `untagged`
 - [ ] S-017/4 WHEN the main checkout's `git status` differs from the snapshot THE SYSTEM SHALL list the paths in `main_changed`
-- [ ] S-017/6 WHEN `origin/<base>` moved during the story THE SYSTEM SHALL set `remote_moved` and the story goes to Blocked
 - [ ] S-017/5 (no test) each agent file sets the model from § 4.2, the tools from § 4.2 and the reply schema from § 12.5
+- [ ] S-017/6 WHEN `origin/<base>` moved during the story THE SYSTEM SHALL set `remote_moved` and the story goes to Blocked
 
 ### S-018 · Review agents and findings template
 Deps: S-017 · Files: `agents/{examiner,professor,auror,headmaster}.md`, `agents/references/findings-template.md`, `tests/test_agents.py`
