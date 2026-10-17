@@ -1,0 +1,9 @@
+{
+  "name": "accio",
+  "version": "0.1.0",
+  "description": "Plans, builds, reviews and safely merges your project's work in small iterations, asking you only at two checkpoints.",
+  "author": {
+    "name": "Ahmed Nazih"
+  },
+  "keywords": ["workflow", "kanban", "iterations", "agents", "review", "git-safety"]
+}

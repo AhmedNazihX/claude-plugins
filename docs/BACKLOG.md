@@ -11,13 +11,13 @@ Each DoD line has an ID (`S-004/2`). The test that proves it carries that tag in
 workflows/brew.js            hooks/hooks.json        hooks/<name>.py
 bin/accio-<name>             bin/accio_lib/          (shared Python, stdlib only)
 tests/test_<name>.py         tests/workflow/*.test.mjs (node --test)   tests/fixtures/
-evals/                       scripts/publish.sh
+evals/                       scripts/publish.py
 ```
 
 | Status | Story |
 |---|---|
 | done | S-001 Spike: workflow, named agents, worktree (verdict GO; decision 010) |
-| todo | S-002 Scaffold, CI and publish |
+| done | S-002 Scaffold, CI and publish (first real CI run waits for a GitHub remote) |
 | todo | S-003 Shared library |
 | todo | S-004 `accio-board` |
 | todo | S-005 `accio-score` |
@@ -58,12 +58,18 @@ answers permissions; worktree claims). The interactive permission prompt was not
 - [x] S-001/4 (no test) THE REPORT SHALL end with one verdict: go, fallback 1, or fallback 2 (`brew-by-hand`, S-027), and any DESIGN changes it implies
 
 ### S-002 · Scaffold, CI and publish
-Deps: S-001 · Files: `.claude-plugin/plugin.json`, the layout folders, `.github/workflows/ci.yml`, `scripts/publish.sh`, `tests/test_scaffold.py`, `.gitignore`
+Deps: S-001 · Files: `.claude-plugin/plugin.json`, `.github/workflows/ci.yml`, `scripts/publish.py`, `tests/test_scaffold.py`, `tests/test_publish.py`, `tests/workflow/meta.test.mjs`, `.gitignore` (layout folders appear with the stories that fill them)
 Context: DESIGN § 4, § 9 (CI), § 11 (one source tree); decision 007 (marketplace).
-- [ ] S-002/1 WHEN `claude plugin validate` runs on the repo THE SYSTEM SHALL pass
-- [ ] S-002/2 WHEN CI runs THE SYSTEM SHALL run `python3 -m unittest` and `node --test tests/workflow` on macOS and Linux
-- [ ] S-002/3 WHEN `scripts/publish.sh` runs THE SYSTEM SHALL copy the plugin into `~/Workspace/claude-plugins-release/accio` and refuse when the working tree is dirty
-- [ ] S-002/4 (no test) `claude --plugin-dir .` loads the plugin with no errors
+- [x] S-002/1 WHEN `claude plugin validate` runs on the repo THE SYSTEM SHALL pass
+- [ ] S-002/2 WHEN CI runs THE SYSTEM SHALL run `python3 -m unittest` and `node --test 'tests/workflow/**/*.test.mjs'` on macOS and Linux
+- [x] S-002/3 WHEN `scripts/publish.py` runs THE SYSTEM SHALL copy the plugin's committed files into `~/Workspace/claude-plugins-release/accio` and refuse when the working tree is dirty
+- [x] S-002/4 (no test) `claude --plugin-dir .` loads the plugin with no errors
+
+Note: S-002/1 and S-002/4 need the `claude` CLI, so they are checked on the developer's machine, not in CI.
+Outcome: plugin 0.1.0 loads (`claude --plugin-dir .`, no errors); 15 Python tests and the workflow test pass on macOS.
+`publish.py` ships only committed regular files and checks everything before changing anything (after a review
+found 6 warnings, all fixed and re-reviewed). **S-002/2 is open:** the CI config is tested, but CI has never run,
+because the repo has no GitHub remote yet.
 
 ### S-003 · Shared library
 Deps: S-002 · Files: `bin/accio_lib/{paths,config,story}.py`, `tests/test_lib.py`, `tests/fixtures/`
