@@ -34,7 +34,15 @@ if [ -z "$RULE" ]; then
     "Stop and ask the user to install python3, or to add a rule under .claude/foreman.json › stories.$ID" \
     "(with the deny list next to it)." >&2; exit 2; }
   ROOT_FOR_BACKLOG=$(git -C "${CWD:-.}" rev-parse --show-toplevel 2>/dev/null)
-  LANE=$(cd "$ROOT_FOR_BACKLOG" 2>/dev/null && python3 "$BACKLOG_PY" info "$ID" 2>/dev/null | jq -r '.lane // empty')
+  # A lookup that fails (a broken backlog.py, a story missing from the backlog) must not switch the lanes off.
+  if ! INFO=$(cd "$ROOT_FOR_BACKLOG" 2>/dev/null && python3 "$BACKLOG_PY" info "$ID" 2>&1); then
+    jq -e '[.lanes // {} | .[] | .deny // [] | length] | add // 0 > 0' "$CONFIG" >/dev/null 2>&1 || exit 0
+    echo "BLOCKED: foreman's lane guard couldn't find story $ID's lane: $(printf '%s' "$INFO" | tail -n 1)." \
+      "Stop and ask the user to fix 'backlog.py info $ID', or to add a rule under .claude/foreman.json › stories.$ID" \
+      "(with the deny list next to it)." >&2
+    exit 2
+  fi
+  LANE=$(printf '%s' "$INFO" | jq -r '.lane // empty' 2>/dev/null)
   [ -n "$LANE" ] && RULE=$(jq -c --arg l "$LANE" '.lanes[$l] // empty' "$CONFIG") && RULE_KEY="lanes.$LANE"
 fi
 [ -n "$RULE" ] || exit 0

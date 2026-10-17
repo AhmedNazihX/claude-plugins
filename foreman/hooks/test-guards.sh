@@ -4,16 +4,14 @@
 # Builds a throwaway repo with its own config, backlog and a real agent-style worktree; never touches your repo.
 
 SRC="$(cd "$(dirname "$0")" && pwd)"
-BACKLOG_PY="$SRC/../scripts/backlog.py"
 TMP=$(mktemp -d)
 trap 'rm -rf "$TMP"' EXIT
 FAILS=0
 
 R="$TMP/repo"
-mkdir -p "$R/.claude/hooks/lib" "$R/.claude/scripts" "$R/docs" "$R/src/app/eval" "$R/eval"
+mkdir -p "$R/.claude/hooks/lib" "$R/docs" "$R/src/app/eval" "$R/eval"
 cp "$SRC/gate.sh" "$SRC/lane-guard.sh" "$R/.claude/hooks/"
 cp "$SRC/lib/strip-heredocs.awk" "$R/.claude/hooks/lib/"
-cp "$BACKLOG_PY" "$R/.claude/scripts/backlog.py"
 cat > "$R/.claude/foreman.json" <<'JSON'
 {
   "lanes":   {"Corpus": {"deny": ["eval"], "allow": []}},
@@ -139,6 +137,17 @@ msg "$GUARD" "$(bash_in "$W" "git sparse-checkout set --no-cone '/*'")"  "$EXC" 
 PATH="$NOJQ" msg "$GUARD" "$(file_in Read "$W" "$W/eval/cases.json")"    "brew install jq" "without jq: install it"
 PATH="$(path_without python3)" msg "$GUARD" "$(file_in Read "$W" "$W/eval/cases.json")" \
   "stories.C1 (with the deny list next to it)" "without python3: ask the user for python3 or a full story rule"
+# Found in Q11 (fixed in Q10): a backlog.py that fails to run used to switch the lane checks off.
+BROKEN="$TMP/broken-plugin"
+mkdir -p "$BROKEN/scripts" "$TMP/no-lanes/.claude"
+echo 'import backlog_model_missing' > "$BROKEN/scripts/backlog.py"
+echo '{"lanes": {}}' > "$TMP/no-lanes/.claude/foreman.json"
+CLAUDE_PLUGIN_ROOT="$BROKEN" msg "$GUARD" "$(file_in Read "$W" "$W/eval/cases.json")" \
+  "stories.C1 (with the deny list next to it)" "a failing backlog.py blocks: ask the user"
+CLAUDE_PLUGIN_ROOT="$BROKEN" run "$GUARD" 2 "$(file_in Read "$W" "$W/src/app/models.py")" \
+  "a failing backlog.py blocks even outside the denied folder"
+CLAUDE_PLUGIN_ROOT="$BROKEN" CLAUDE_PROJECT_DIR="$TMP/no-lanes" run "$GUARD" 0 \
+  "$(file_in Read "$W" "$W/eval/cases.json")" "near-miss: a failing backlog.py with no lane deny lists passes"
 git -C "$R" worktree remove "$S" 2>/dev/null
 
 git -C "$W" checkout -q -b story/C2-guidelines
@@ -246,6 +255,64 @@ run "$WG" 2 "$(bash_in "$FRESH" "git -C $W switch story/C2-guidelines")"  "a fre
 run "$WG" 2 "$(bash_in "$FRESH" "git switch story/C2-guidelines && git switch story/C1-parser")" \
   "a fresh worker can't chain two switches"
 git -C "$R" worktree remove "$FRESH" 2>/dev/null
+# Found in the Q7 security review (fixed in Q10): forms that got past the guard. Each blocked form names the way
+# through; each has a legitimate near-miss that stays allowed.
+echo "worker guard, Q7 review: stuck options, previous branch, worktree add, aliases, fetch refspecs"
+SCR="$TMP/auditor-scratch-2"
+git -C "$R" worktree add -q --detach "$SCR" 2>/dev/null
+SCRATCH_ALT="git worktree add --detach <path> <commit>"
+FETCH_ALT="Fetch without a destination"
+ALIAS_ALT="Run the git command itself"
+RESTORE_ALT="git checkout -- <path>"
+READ_ALT="git show <commit>:<path>"
+msg "$WG" "$(bash_in "$W" "git checkout -Bother")"                         "$REPORT" "checkout -B<name> (stuck)"
+msg "$WG" "$(bash_in "$W" "git switch -cother")"                           "$REPORT" "switch -c<name> (stuck)"
+msg "$WG" "$(bash_in "$W" "git switch -Cother")"                           "$REPORT" "switch -C<name> (stuck)"
+msg "$WG" "$(bash_in "$W" "git checkout -qb other")"                       "$REPORT" "checkout -qb (bundled)"
+msg "$WG" "$(bash_in "$W" "git checkout --orphan=other")"                  "$REPORT" "checkout --orphan=<name>"
+msg "$WG" "$(bash_in "$W" "git -C $SCR checkout --track origin/other")"    "$REPORT" "scratch: checkout --track"
+msg "$WG" "$(bash_in "$W" "git checkout -t origin/other")"                 "$REPORT" "checkout -t"
+run "$WG" 0 "$(bash_in "$W" "git checkout -q -- src/app/models.py")"       "near-miss: checkout -q -- <path>"
+msg "$WG" "$(bash_in "$W" "git -C $SCR checkout -")"                       "$READ_ALT" "scratch: checkout - (previous branch)"
+msg "$WG" "$(bash_in "$W" "git -C $SCR checkout @{-1}")"                   "$READ_ALT" "scratch: checkout @{-1}"
+run "$WG" 0 "$(bash_in "$W" "git -C $SCR checkout --detach HEAD")"         "near-miss: scratch detaches at HEAD"
+msg "$WG" "$(bash_in "$W" "git switch -d")"                                "$READ_ALT" "switch -d (detach) in its own worktree"
+msg "$WG" "$(bash_in "$W" "git checkout -m story/C1-parser")"              "$READ_ALT" "checkout -m <branch> (-m takes no value)"
+msg "$WG" "$(bash_in "$W" 'git merge "story/C1-parser"')"                  "$REPORT" "merge a quoted branch"
+msg "$WG" "$(bash_in "$W" "git checkout other-remote-branch")"             "$RESTORE_ALT" "checkout <name> git would guess"
+rm "$W/eval/cases.json"
+run "$WG" 0 "$(bash_in "$W" "git checkout eval/cases.json")"               "near-miss: checkout a deleted tracked file"
+git -C "$W" checkout -q -- eval/cases.json
+msg "$WG" "$(bash_in "$W" "git worktree add $TMP/wt-a story/C1-parser")"   "$SCRATCH_ALT" "worktree add on a branch"
+msg "$WG" "$(bash_in "$W" "git worktree add -b x $TMP/wt-b")"              "$SCRATCH_ALT" "worktree add -b"
+msg "$WG" "$(bash_in "$W" "git worktree add --detach --orphan $TMP/wt-c")" "$SCRATCH_ALT" "worktree add --orphan"
+run "$WG" 0 "$(bash_in "$W" "git worktree add --no-checkout --detach \"$TMP/wt-d\" story/C1-parser")" \
+  "near-miss: the test auditor's worktree add --no-checkout --detach"
+run "$WG" 0 "$(bash_in "$W" "git worktree list")"                          "near-miss: worktree list"
+SPACED="$TMP/sp ace clone"
+git clone -q "$R" "$SPACED" 2>/dev/null
+ESC=${SPACED// /\\ }
+msg "$WG" "$(bash_in "$W" "git -C $ESC push origin HEAD:main")"            "$REPORT" "-C <path with escaped spaces> push"
+run "$WG" 0 "$(bash_in "$W" "git -C $ESC update-ref refs/heads/main HEAD")" "near-miss: escaped-space clone update-ref"
+msg "$WG" "$(bash_in "$W" "git --namespace foo push origin HEAD:main")"    "$REPORT" "--namespace <value> push"
+REL=../../../../rel-clone                     # from the worktree $W, a clone at $TMP/rel-clone
+git clone -q "$R" "$TMP/rel-clone" 2>/dev/null
+msg "$WG" "$(bash_in "$W" "cd $R && git -C $REL merge story/C1-parser")"   "$REPORT" "cd, then a relative -C"
+run "$WG" 0 "$(bash_in "$W" "git -C $REL merge story/C1-parser")"          "near-miss: relative -C on a clone, no cd"
+msg "$WG" "$(bash_in "$W" "git fetch . HEAD:refs/heads/story/X9-x")"      "$FETCH_ALT" "fetch a refspec into a branch"
+msg "$WG" "$(bash_in "$W" "git -C $R fetch $W HEAD:story/X9-x")"          "$FETCH_ALT" "-C <main> fetch a refspec"
+run "$WG" 0 "$(bash_in "$W" "git fetch origin main")"                      "near-miss: fetch <remote> <branch>"
+msg "$WG" "$(bash_in "$W" "git -c alias.x=push x origin HEAD")"            "$ALIAS_ALT" "-c alias.x=push"
+msg "$WG" "$(bash_in "$W" "git x origin HEAD")"                            "$ALIAS_ALT" "an alias (unknown subcommand)"
+msg "$WG" "$(bash_in "$W" "env A=1 git x")"                                "$ALIAS_ALT" "an alias after env"
+run "$WG" 0 "$(bash_in "$W" "git -c core.pager=cat status")"               "near-miss: -c with another key"
+run "$WG" 0 "$(bash_in "$W" "rg -n git src")"                              "near-miss: git as a search word"
+run "$WG" 0 "$(bash_in "$W" "git merge --ff-only main")"                   "near-miss: the setup fast-forward to the base"
+run "$WG" 0 "$(bash_in "$W" "python3 backlog.py tick --dry-run B4 done")"  "backlog.py tick --dry-run is allowed"
+msg "$WG" "$(bash_in "$W" "python3 backlog.py show B4 --dry-run; python3 backlog.py tick B4 done")" "$FOLLOW" \
+  "a dry run in another call doesn't cover a tick"
+git -C "$R" worktree remove --force "$TMP/wt-d" 2>/dev/null
+git -C "$R" worktree remove "$SCR" 2>/dev/null
 # Found in the 0.3.4 trial: the orchestrator's shell was still in a worktree after `cd <worktree> && uv run pytest`.
 MERGE="git merge --no-ff story/B4-cases -m 'merge: story B4'"
 run "$WG" 0 "$(jq -nc --arg c "cd $R && $MERGE" --arg d "$W" '{tool_name:"Bash",cwd:$d,tool_input:{command:$c}}')" \
