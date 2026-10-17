@@ -66,7 +66,22 @@ Then run the **guardrails** skill: it turns the design's *Rules and enforcement*
 built-in hook config, project hooks with tests, scoped `.claude/rules/*.md`, reviewer checks and CLAUDE.md lines,
 and records each in the config's `guardrails` registry.
 
-## 4. Verify
+## 4. Readiness check
+
+Start the `foreman:readiness-auditor` agent with the main checkout's path. In a throwaway worktree set up like a
+worker's, it runs every `checks` command (timed), finds a command that runs one test alone, and checks that
+`CLAUDE.md`, `docs/LAYOUT.md` and the backlog's Context pointers resolve. It removes the worktree when done.
+
+- **PASS:** go on.
+- **FRICTION:** show the user the problems and the fixes it suggests (a quiet flag, a missing layout file, a
+  Context pointer to correct). Fix the ones they accept, then go on.
+- **FAIL:** fix the setup problems (a missing `link_files` entry, a wrong `env` path, a check that doesn't run)
+  and run it again. A check that already fails at the base is a story of its own: tell the user, and don't start
+  stories until it passes.
+
+Show the single-test command it found, so the user can add it to `CLAUDE.md` for the workers.
+
+## 5. Verify
 
 ```bash
 python3 ${CLAUDE_PLUGIN_ROOT}/scripts/backlog.py check
@@ -79,7 +94,7 @@ jq empty .claude/settings.json .claude/foreman.json
 Also run one live check per gate: send a sample Write to the gated path through `gate.sh`; it must exit 2 before
 the required file is committed. New settings may need a Claude Code restart; tell the user.
 
-## 5. Hand over
+## 6. Hand over
 
 List what was written, then go back to `next` (without asking), which merges the planning branch with the user's
 go-ahead. The loop: `/foreman:status` shows what can run, `/foreman:story-start <IDs>`

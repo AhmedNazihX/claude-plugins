@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- New `readiness-auditor` agent, run by `setup` as a new step before verifying the guards: proves the checks pass
+  at the base in a worker-like throwaway worktree (timed, with output size), finds a single-test command, and
+  checks that `CLAUDE.md`, `docs/LAYOUT.md` and the backlog's Context pointers resolve. (R12)
+
 ## 0.11.0 (2026-10-17)
 
 Reviews that see the story's intent and a stricter triage, a `backlog.py` that is safer to script, guard hooks that
