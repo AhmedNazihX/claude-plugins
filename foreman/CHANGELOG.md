@@ -4,6 +4,8 @@
 
 - `workers.py handoff-path` prints where a worker or reviewer writes its report file, and `workers.py report`
   checks the file's header and prints one section (`--field status|evidence|needs-user|checks`). (R1)
+- Workers commit a `wip(<ID>):` checkpoint after each DoD item, so a dead worker loses at most one item;
+  `story-start --continue` offers to commit a dead worker's leftover changes as WIP, then continue. (R8)
 
 ## 0.11.0 (2026-10-17)
 
