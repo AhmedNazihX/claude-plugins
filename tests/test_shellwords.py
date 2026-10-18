@@ -33,6 +33,16 @@ class ShellwordsTest(unittest.TestCase):
     def test_subshell_parentheses_are_operators(self):
         self.assertEqual([s.operator for s in shellwords.segments("(cd /x && ls)>out; y")], ["(", "&&", ")", ";", ""])
 
+    def test_ansi_c_quotes_are_decoded_the_way_bash_decodes_them(self):
+        # a guard must judge the word bash runs: $'\x72\x6d' is rm (security review, 2026-10-18)
+        cases = {r"$'\x72\x6d' -rf $'\x2e\x2e'": ["rm", "-rf", ".."], r"$'\162\155'": ["rm"],
+                 r"$'rm'": ["rm"], r"$'\U00000072m'": ["rm"], r"$'a\nb\tc'": ["a\nb\tc"],
+                 r"$'\cA'": ["\x01"], r"$'\e[0m'": ["\x1b[0m"], r"$'\q'": ["\\q"], r"$'a\x00b' c": ["a", "c"],
+                 r"$'\x7' $'\x4g'": ["\x07", "\x04g"], r"$'\'\"\\\?'": ["'\"\\?"]}
+        for command, expected in cases.items():
+            with self.subTest(command):
+                self.assertEqual(words(command), [expected])
+
     def test_ansi_c_quotes_end_at_an_unescaped_quote(self):
         self.assertEqual(words("echo $'it\\'s' ; ls"), [["echo", "it's"], ["ls"]])
 

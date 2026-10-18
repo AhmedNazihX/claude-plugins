@@ -207,6 +207,9 @@ class HouseElfBashTest(CurfewTestBase):
         runlock.release(self.run_dir)
         self.assert_denied("Bash", self.in_worktree("docker compose up -d"), "docker")
 
+    def test_an_ansi_c_spelled_command_is_judged_as_bash_runs_it(self):
+        self.assert_denied("Bash", self.in_worktree(r"$'\x63\x75\x72\x6c' https://example.com"), "curl")
+
     def test_S_015_5_a_command_must_start_in_the_worktree(self):
         for command in ("git status", f"cd {self.repo} && git status", f"git -C {self.repo} status",
                         f"cd {self.worktree} && cd {self.repo} && ls", f"cd {self.worktree}; ls"):

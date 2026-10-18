@@ -70,6 +70,11 @@ class ProtegoTest(unittest.TestCase):
             with self.subTest(command):
                 self.assert_blocked(command, "rm -rf")
 
+    def test_ansi_c_spelled_words_are_judged_as_bash_reads_them(self):
+        for command in (r"rm -rf $'\x2e\x2e'", r"$'\x72\x6d' -rf ..", r"rm -rf $'\056\056'"):
+            with self.subTest(command):
+                self.assert_blocked(command, "rm -rf")
+
     def test_S_013_1_hook_bypasses_are_blocked(self):
         for command in ("git commit --no-verify -m x", "git commit -n -m x", "git commit -anm x",
                         "git push --no-verify origin feature", "git merge --no-verify feature",

@@ -39,15 +39,49 @@ def _single_quoted(command, index):
     return (len(command), command[index + 1:]) if end == -1 else (end + 1, command[index + 1:end])
 
 
+ANSI_SIMPLE = {"a": "\a", "b": "\b", "e": "\x1b", "E": "\x1b", "f": "\f", "n": "\n", "r": "\r", "t": "\t",
+               "v": "\v", "\\": "\\", "'": "'", '"': '"', "?": "?"}
+ANSI_NUMERIC = (("x", "0123456789abcdefABCDEF", 2, 16), ("u", "0123456789abcdefABCDEF", 4, 16),
+                ("U", "0123456789abcdefABCDEF", 8, 16))
+OCTAL = "01234567"
+
+
+def _ansi_escape(command, index):
+    """One escape inside `$'…'` at `command[index]` (the character after the backslash), decoded as bash does:
+    (text, index after it)."""
+    char = command[index]
+    if char in ANSI_SIMPLE:
+        return ANSI_SIMPLE[char], index + 1
+    if char == "c" and index + 1 < len(command):
+        return chr(ord(command[index + 1]) & 0x1F), index + 2
+    if char in OCTAL:
+        end = index
+        while end < len(command) and end < index + 3 and command[end] in OCTAL:
+            end += 1
+        return chr(int(command[index:end], 8) & 0xFF), end
+    for letter, digits, width, base in ANSI_NUMERIC:
+        if char == letter:
+            end = index + 1
+            while end < len(command) and end < index + 1 + width and command[end] in digits:
+                end += 1
+            if end == index + 1:
+                return "\\" + char, index + 1
+            return chr(int(command[index + 1:end], base)), end
+    return "\\" + char, index + 1
+
+
 def _ansi_quoted(command, index):
-    """`$'…'`: a backslash escapes the next character, so only an unescaped `'` ends it."""
+    """`$'…'`, decoded the way bash decodes it, so a guard judges the word bash will run: `$'\x72\x6d'` is `rm`.
+    An escape is never the end; only an unescaped `'` ends it, and a NUL ends the text (bash drops the rest)."""
     text, index = [], index + 2
     while index < len(command) and command[index] != "'":
         if command[index] == "\\" and index + 1 < len(command):
-            index += 1
-        text.append(command[index])
-        index += 1
-    return index + 1, "".join(text)
+            piece, index = _ansi_escape(command, index + 1)
+        else:
+            piece, index = command[index], index + 1
+        text.append(piece)
+    decoded = "".join(text)
+    return min(index + 1, len(command)), decoded.split("\x00", 1)[0]
 
 
 def _backtick_end(command, index):
