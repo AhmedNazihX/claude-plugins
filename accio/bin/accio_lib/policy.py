@@ -1,7 +1,8 @@
 """curfew's policy: what each accio agent may do (DESIGN § 4.4, § 6; decision 010; spike S-015).
 
-Every call by an accio agent gets an answer, so none waits on a permission question. Read tools are allowed for
-every agent. Beyond that each agent has an exact list (AGENTS), and anything off it is denied with the reason, which
+Every call by an accio agent gets an answer, so none waits on a permission question. Read tools and the reply tools
+are allowed for every agent (house-elf before its claim too): a reply only goes back to the agent's caller, and
+denying it loses the agent's result. Beyond that each agent has an exact list (AGENTS), and anything off it is denied with the reason, which
 in a build becomes a BLOCKED question at `owl`. No list lets an agent write `run/push-ok` or `run/brew.lock`.
 
 `house-elf` first runs `accio-claim <ID>` on its own (accio's own script, nothing else in the command) for a story
@@ -24,6 +25,7 @@ from accio_lib import bashpolicy, paths, shellwords, story, summary
 READ_TOOLS = frozenset({"Read", "Grep", "Glob", "LS"})
 WRITE_TOOLS = frozenset({"Write", "Edit", "MultiEdit", "NotebookEdit"})
 WEB_TOOLS = frozenset({"WebSearch", "WebFetch"})
+REPLY_TOOLS = frozenset({"SubagentHandback", "StructuredOutput"})  # a background reply; a workflow's schema reply
 CLAIM_SCRIPT = "accio-claim"
 REPORT_NAME = summary.REPORT_NAME
 BOARD_RUN = frozenset({"ready", "status", "lock", "unlock", "move", "refresh"})
@@ -87,6 +89,8 @@ def deny(reason):
 
 def decide(agent, agent_id, tool, tool_input, ctx):
     """The answer for one call by `accio:<agent>`."""
+    if tool in REPLY_TOOLS and (agent == "house-elf" or agent in AGENTS):
+        return allow()
     if agent == "house-elf":
         return _house_elf(agent_id, tool, tool_input, ctx)
     lists = AGENTS.get(agent)

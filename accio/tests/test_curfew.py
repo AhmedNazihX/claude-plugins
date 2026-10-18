@@ -14,7 +14,7 @@ import unittest
 
 from support import ROOT, commit_all, git, init_repo, write
 
-from accio_lib import paths, runlock
+from accio_lib import paths, policy, runlock
 
 CURFEW = ROOT / "hooks" / "curfew.py"
 CLAIM = ROOT / "bin" / "accio-claim"
@@ -323,6 +323,16 @@ class OtherAgentsTest(CurfewTestBase):
                                    agent=agent)
                 self.assert_denied("Bash", self.bash("ls"), agent, agent=agent)
                 self.assert_denied("WebFetch", {"url": "https://example.com"}, agent=agent)
+
+    def test_every_agent_may_hand_back_its_reply_even_before_a_claim(self):
+        # A background agent's reply reaches its caller only through SubagentHandback, and a workflow agent's
+        # schema reply only through StructuredOutput (spike finding 16); denying them loses every reply.
+        for agent in (*policy.AGENTS, "house-elf"):
+            for tool in sorted(policy.REPLY_TOOLS):
+                with self.subTest(agent=agent, tool=tool):
+                    self.assert_allowed(tool, {"message": "done"}, agent=f"accio:{agent}")
+        self.assert_denied("SubagentHandback", {"message": "done"}, "accio:nobody", agent="accio:nobody")
+        self.assert_denied("TaskStop", {"task_id": "x"}, "TaskStop", agent="accio:quill")
 
     def test_S_015_7_each_agent_gets_its_own_exact_list(self):
         board = shlex.quote(str(ROOT / "bin" / "accio-board"))
