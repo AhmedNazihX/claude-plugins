@@ -8,7 +8,8 @@ allowed-tools: Read, Edit, Bash(${CLAUDE_PLUGIN_ROOT}/bin/accio-board *)
 # prophecy: plan the next iteration
 
 You plan one iteration with the user: propose the batch, settle its open questions, wait for "go", then record it.
-Talk in plain words; the user may not know accio's terms. Explain a term the first time: a *track* is how much
+Run each script as its own Bash command by its full path, with no variables or `&&` chains. Talk in plain words;
+the user may not know accio's terms. Explain a term the first time: a *track* is how much
 review a story gets (quick, story, feature); a story *stacked on* another is built on top of it in this batch.
 
 ## 1. Check how the build will run

@@ -17,8 +17,8 @@ Scripts, not a model, decide these, so an agent's claim never does:
   its size and change time (ignored or bigger files), a listing of the files inside (an ignored folder, up to
   MAX_LISTED_FILES) or its target (a symlink). After the story, any difference is `main_changed` (`HEAD` for a
   commit; `git refs`, `git config` or `git hooks` when those change), and a moved `origin/<base>` is
-  `remote_moved`. `.accio/run/` is left out, since the run writes there, except `push-ok` and each story's `base`,
-  which nothing writes during a story. Times are recorded with `ctime`, which can't be set back.
+  `remote_moved`. `.accio/run/` is left out, since the run writes there, except `push-ok`, each story's `base` and
+  `allow-once.json` (owl's grants for one build), which nothing writes during a story. Times are recorded with `ctime`, which can't be set back.
   **Limit:** the snapshot file lives in `.accio/run/` too, so code the story runs could rewrite it; like curfew
   (DESIGN § 6), this catches mistakes and leaves a trail, not a determined agent.
 - **diff start:** the base `accio-brief` recorded for the story (its parent's head when stacked), when it is a full
@@ -52,7 +52,7 @@ CODE_EXTENSIONS = frozenset({"py", "js", "jsx", "ts", "tsx", "mjs", "cjs", "go",
 DATA_EXTENSIONS = frozenset({"json", "yaml", "yml", "toml", "csv", "tsv", "txt", "xml", "html", "md", "snap", "plist",
                              "golden", "ini", "cfg", "png", "jpg", "jpeg", "gif", "svg", "pdf"})  # fixtures
 RUN_FOLDER = ".accio/run/"
-WATCHED_RUN_FILES = ("push-ok", "*/base")  # nothing writes these during a story
+WATCHED_RUN_FILES = ("push-ok", "*/base", "allow-once.json")  # nothing writes these during a story
 COMMIT_ID = re.compile(r"[0-9a-f]{40}|[0-9a-f]{64}")
 STORY_REFS = b"refs/heads/story/"  # story branches move with every checkpoint commit
 SNAPSHOT_NAME = "main-snapshot.json"

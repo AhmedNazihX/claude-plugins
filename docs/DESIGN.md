@@ -314,7 +314,7 @@ script's absolute path.
 
 | Script | Does |
 |---|---|
-| `accio-board` | parse stories → board.md (with a Dropped line), `ready --json` (including stacked children), `status`, `move`, `new` (IDs), `lock` / `unlock` (the run lock) |
+| `accio-board` | parse stories → board.md (with a Dropped line), `ready --json` (including stacked children), `status`, `move`, `new` (IDs), `lock` / `unlock` (the run lock), `plan` / `go` (prophecy's proposal and commit) |
 | `accio-brief` | story → brief.md (template), from base or from the parent's head; fix brief from findings |
 | `accio-ledger` | patch-id verdicts, `check`, `record` |
 | `accio-score` | complexity score → track, split flag |
@@ -323,7 +323,8 @@ script's absolute path.
 | `accio-claim` | run by `house-elf` as its first command; prints its worktree; `curfew` records the claim (decision 010) |
 | `accio-check` | `snapshot` of the main checkout before a story; then the checks scoped to the diff, the boundary and DoD-tag checks, and the snapshot and remote comparison, as `prefect`'s reply (§ 12.5) |
 | `accio-hooks` | install (with chaining), `verify`, `run <hook>`, uninstall |
-| `accio-summary` | reports and cost data → `run/owl.md` for the review |
+| `accio-summary` | reports and cost data → `run/owl.md` for the review; `--latest` finds this repo's brew runs since the iteration was planned |
+| `accio-owl` | owl's batch answer: `check` it, `close` the iteration after `accio-merge` (story files, outcome, board, `agent_allow`, one commit), `push-ok` (the token, never during a build) |
 
 ### 4.7 Output style (v1.1)
 `output-styles/plain.md` holds the plain-words rule for users who want it always on.
@@ -581,12 +582,13 @@ workflow launch: the first `/accio:brew` asks once, and "don't ask again" covers
 |---|---|---|
 | `design.md`, `decisions/` | `wand`, `vow` (main chat) | at once |
 | `stories/<ID>.md` | `quill` (in `sort`); `prophecy` (status `ready`, track overrides and drops, through `accio-board go` and Edit); `owl` (status, review notes, answers, drops) | in `sort`; at `prophecy`; once per iteration at `owl` |
-| `iterations/<N>.md` | `prophecy` (plan), `owl` (outcome) | at `prophecy` and at `owl` |
+| `iterations/<N>.md` | `prophecy` (plan, `accio-board go`), `owl` (outcome, `accio-owl close`) | at `prophecy` and at `owl` |
 | `board.md` | `accio-board` only | together with the stories |
 | `run/status.json` | `accio-board move` (from `portkey`/`prefect`) | never (runtime); `owl` folds it into the story files |
 | `run/ledger.tsv` | `accio-ledger` (from `prefect`; `headmaster` only reads it) | never |
 | `run/<ID>/main-snapshot.json` | `accio-check <ID> snapshot` (from `portkey`, once per brief; `accio-brief` clears it); `prefect` compares after the story (status, mode and content of each changed, untracked or ignored path; HEAD; `origin/<base>`) | never |
 | `run/brew.lock` | `accio-board lock` / `unlock` (from `portkey`), refreshed by `accio-board move` | never |
+| `run/allow-once.json` | `accio-owl close` (commands allowed for the next build only); watched by `accio-check`'s snapshot | never; removed when that build unlocks |
 | `run/claims.json` | `curfew` (when `house-elf` runs `accio-claim`) | never; cleared when a run starts |
 | `run/stuck.json` | `curfew` (a permission question reached an accio agent: it froze) | never |
 | `run/<ID>/brief.md`, `report.md`, `findings-*.md` | `accio-brief`; `house-elf`; each reviewer | never |

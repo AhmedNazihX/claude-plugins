@@ -430,7 +430,7 @@ free graders, all 1.00 locally, about $1 in all): the plugin's `bin/` isn't on P
 `${CLAUDE_PLUGIN_ROOT}/bin/<script>`; on macOS the eval sandbox breaks the `xcrun` git shim (see `evals/README.md`).
 
 ### S-022 · `owl` skill
-Deps: S-008, S-010, S-012 · Files: `skills/owl/SKILL.md`, `skills/owl/references/`, `evals/owl/`
+Deps: S-008, S-010, S-012 · Files: `skills/owl/SKILL.md`, `skills/owl/references/`, `evals/owl/`, `bin/accio-owl`, `bin/accio_lib/{owl,runs,storyfiles}.py`, `bin/accio-summary` (`--latest`), `bin/accio_lib/pushguard.py`, `hooks/curfew.py` (allow once)
 Context: DESIGN § 3.5, § 7.2, § 7.3.
 - [ ] S-022/1 (no test) reads only `run/owl.md` and takes one batch answer: accept, reject or drop per story; answers; push
 - [ ] S-022/2 (no test) refuses to accept a child without its parent, in plain words
