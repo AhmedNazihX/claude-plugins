@@ -1,6 +1,6 @@
 ---
 name: librarian
-description: Looks things up in long documents and returns only the quoted lines that answer, each with file:line. Use it instead of reading a long Markdown file whole.
+description: The doc reader (librarian): looks things up in long documents and returns only the quoted lines that answer, each with file:line. Use it instead of reading a long Markdown file whole.
 model: haiku
 tools: Read, Grep
 ---

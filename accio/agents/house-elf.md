@@ -1,6 +1,6 @@
 ---
 name: house-elf
-description: accio's implementer. Builds one story test-first inside its own worktree, from its brief only. Used by the brew workflow, step 2, and for fix rounds.
+description: The builder (house-elf): builds one story test-first inside its own worktree, from its brief only. Used by the brew workflow, step 2, and for fix rounds.
 model: sonnet
 maxTurns: 150
 tools: Read, Grep, Glob, Write, Edit, Bash

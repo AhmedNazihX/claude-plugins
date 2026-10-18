@@ -49,7 +49,7 @@ def main():
         return 0
     if size <= LIMIT_BYTES:
         return 0
-    print(f"doc-size: {os.path.basename(path)} is {math.ceil(size / 1024)} KB, too long to read whole (over "
+    print(f"doc-size (accio's long-document guard): {os.path.basename(path)} is {math.ceil(size / 1024)} KB, too long to read whole (over "
           f"{LIMIT_BYTES // 1024} KB). Ask the accio:librarian agent for the parts you need (it quotes them with "
           f"file:line), or read it by section: Grep for the heading, then Read with an offset and a limit of at most "
           f"{SECTION_LINES} lines.", file=sys.stderr)

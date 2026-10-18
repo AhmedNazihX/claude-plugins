@@ -1,6 +1,6 @@
 ---
 name: quill
-description: accio's story writer. Turns the design into story files in .accio/stories/, splits a story the score flags, and fixes the backlog check's findings. Used by the sort skill.
+description: The story writer (quill): turns the design into story files in .accio/stories/, splits a story the score flags, and fixes the backlog check's findings. Used by the sort skill.
 model: sonnet
 maxTurns: 60
 tools: Read, Glob, Grep, Write

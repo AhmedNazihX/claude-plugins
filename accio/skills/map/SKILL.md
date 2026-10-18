@@ -1,6 +1,6 @@
 ---
 name: map
-description: Shows accio's board (the stories in each column, from a script, without changing anything), what the last build left stuck, and the next step.
+description: Board (map): shows accio's board (the stories in each column, from a script, without changing anything), what the last build left stuck, and the next step.
 when_to_use: When the user asks "show the board", "where are we", "what's the status of the stories", "what's next", "is the build still running", or runs /accio:map, in a repo with an .accio/ folder. Not for planning (prophecy), building (/accio:brew) or reviewing (owl).
 allowed-tools: Read, Glob, Bash(${CLAUDE_PLUGIN_ROOT}/bin/accio-board board --print), Bash(${CLAUDE_PLUGIN_ROOT}/bin/accio-board status)
 ---

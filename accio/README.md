@@ -21,6 +21,31 @@ It is for a solo developer working on their own git repo.
 Everything accio knows lives in `.accio/` in your repo: the design, decisions, stories, iterations and board are
 committed; the build's runtime state (`.accio/run/`) is ignored by git.
 
+## Who does what
+
+accio's names come from a school of magic; each comes with a plain role.
+
+| Agent | Role | What it does |
+|---|---|---|
+| `portkey` | the setup clerk | takes the build lock, makes each story's worktree and brief |
+| `house-elf` | the builder | writes the story's tests and code, test-first |
+| `prefect` | the checker | runs the tests and accio's scripted checks; records the outcome |
+| `examiner` | the spec reviewer | checks every acceptance line is met and really tested |
+| `professor` | the code reviewer | looks for bugs, silent errors and code that's hard to change |
+| `auror` | the security reviewer | reviews changes that touch risky paths |
+| `headmaster` | the judge | settles a disagreement, or turns it into one question for you |
+| `quill` | the story writer | turns the design into small, testable story files |
+| `seeker` | the researcher | checks facts against live docs and the code |
+| `wandmaker` | the architect | proposes 2–3 designs with their trade-offs |
+| `librarian` | the doc reader | quotes the parts of a long document you need |
+
+| Guard | Role | What it does |
+|---|---|---|
+| `protego` | the shield | blocks destructive commands |
+| `fidelius` | the secret keeper | keeps secrets out of files and commits |
+| `curfew` | the gatekeeper | lets each build agent run only its own job |
+| `doc-size` | the long-document guard | sends a read of a very long document to `librarian` or to one section |
+
 ## Install
 
 ```bash
@@ -67,9 +92,8 @@ accio is developed here, in the `nazihx` marketplace repo:
 - Tests, from this folder: `python3 -m unittest discover -s tests` and
   `node --test 'tests/workflow/**/*.test.mjs'`. CI runs them on Linux and macOS.
 - Skill evals: `claude plugin eval` with free graders only; see `evals/README.md`. In CI they run only by hand.
-- Layout: `skills/` (the commands), `agents/` (portkey, house-elf, prefect, examiner, professor, auror, headmaster,
-  quill, seeker, wandmaker, librarian), `workflows/brew.js` (the build), `hooks/` (the guards), `bin/` (the
-  scripts the agents and skills run).
+- Layout: `skills/` (the commands), `agents/` (see "Who does what"), `workflows/brew.js` (the build), `hooks/` (the
+  guards), `bin/` (the scripts the agents and skills run).
 
 Not in v1: `brew-by-hand`, a build without workflows (decision 012), and `reparo`, `lumos` and `telescope`
 (v1.1). Licence: MIT (`../LICENSE`).

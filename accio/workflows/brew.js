@@ -1,6 +1,6 @@
 export const meta = {
   name: 'brew',
-  description: 'Build the ready stories: each in its own worktree, test-first, checked by scripts, reviewed, then marked for your review',
+  description: 'Build (brew): builds the ready stories: each in its own worktree, test-first, checked by scripts, reviewed, then marked for your review',
   whenToUse: 'After /accio:prophecy moved stories to Ready. Runs unattended; review the result with /accio:owl.',
   phases: [
     { title: 'Load', detail: 'take the run lock and list the stories to build' },
@@ -33,8 +33,9 @@ const HOUSE_ELF = 'accio:house-elf'
 const PREFECT = 'accio:prefect'
 const HEADMASTER = 'accio:headmaster'
 const QUESTIONS = '.accio/run/questions'
+const ROLES = { examiner: 'spec reviewer', professor: 'code reviewer', auror: 'security reviewer' }
 const IMPLEMENT_STATUSES = ['DONE', 'DONE_WITH_CONCERNS', 'NEEDS_CONTEXT', 'BLOCKED']
-const SILENT = 'The implementer stopped answering: it hit its turn limit (accio\'s stop at 2× its token budget), ' +
+const SILENT = 'The builder (house-elf) stopped answering: it hit its turn limit (accio\'s stop at 2× its token budget), ' +
   'or was silent for over 20 minutes, perhaps waiting on a permission question (see .accio/run/stuck.json). ' +
   'Build it again?'
 
@@ -168,7 +169,7 @@ async function record(story, worktree, outcome, question, asked) {
 function settle(reply, ruling) {
   if (!reply) return stop(SILENT)
   if (reply.status === 'BLOCKED') {
-    return stop(`The implementer stopped (BLOCKED); its report says why: ${reply.report || 'none'}.`)
+    return stop(`The builder (house-elf) stopped (BLOCKED); its report says why: ${reply.report || 'none'}.`)
   }
   return { reply, ruling }
 }
@@ -181,13 +182,13 @@ async function build(story, worktree, round, attempt, findings = [], earlier = '
   if (!first || first.status !== 'NEEDS_CONTEXT') return settle(first, earlier)
   const judged = await judge(story, worktree, round, first.report, findings)
   if (!judged || !judged.text) {
-    return stop(`The implementer needs context (see ${first.report || 'its report'}) and the judge didn't answer. Try again?`)
+    return stop(`The builder (house-elf) needs context (see ${first.report || 'its report'}) and the judge (headmaster) didn't answer. Try again?`)
   }
   if (judged.kind === 'question') return stop(judged.text, Boolean(judged.path))
   const ruling = addRuling(earlier, judged.text)
   const again = await attempt(ruling)
   if (again && again.status === 'NEEDS_CONTEXT') {
-    return stop(`The implementer still needs context after the judge's ruling; its report says what: ${again.report || 'none'}.`)
+    return stop(`The builder (house-elf) still needs context after the judge's (headmaster's) ruling; its report says what: ${again.report || 'none'}.`)
   }
   return settle(again, ruling)
 }
@@ -270,7 +271,7 @@ async function reviewAndFix(story, worktree, model, earlier) {
   for (let round = 0; ; round += 1) {
     const verdicts = await review(story, names, pkg, round, ruling)
     const silent = verdicts.find((each) => !each.reply)
-    if (silent) return stop(`Its reviewer ${silent.name} stopped answering for over 20 minutes. Review it again?`)
+    if (silent) return stop(`The ${ROLES[silent.name]} (${silent.name}) stopped answering for over 20 minutes. Review it again?`)
     const failing = verdicts.filter((each) => each.reply.verdict !== 'pass')
     if (!failing.length) return {}
     const findings = failing.map((each) => each.reply.path)

@@ -1,6 +1,6 @@
 ---
 name: sort
-description: Turns accio's design into a backlog of small, testable stories. The quill agent writes the story files, the score sets each track and flags stories to split, a backlog check finds weak stories and quill fixes them, then the stories are committed and the user sees a short summary.
+description: Stories (sort): turns accio's design into a backlog of small, testable stories. The quill agent writes the story files, the score sets each track and flags stories to split, a backlog check finds weak stories and quill fixes them, then the stories are committed and the user sees a short summary.
 when_to_use: When the user asks to "turn the design into stories", "write the backlog", "break the design down into stories", "add stories for the new part of the design", "sort the design", or runs /accio:sort, in a repo with .accio/design.md. Not for designing (wand), planning an iteration (prophecy), building (/accio:brew) or reviewing a build (owl).
 allowed-tools: Read, Glob, Agent, Bash(${CLAUDE_PLUGIN_ROOT}/bin/accio-board new), Bash(${CLAUDE_PLUGIN_ROOT}/bin/accio-board record *), Bash(${CLAUDE_PLUGIN_ROOT}/bin/accio-score *)
 ---

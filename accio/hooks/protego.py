@@ -426,7 +426,7 @@ def main():
     except Exception as error:  # noqa: BLE001  (in an accio repo a guard that fails blocks, never lets it through)
         reason = f"couldn't check this command ({type(error).__name__}), so it is blocked"
     if reason:
-        print(f"protego: {reason}", file=sys.stderr)
+        print(f"protego (accio's guard against destructive commands): {reason}", file=sys.stderr)
         return BLOCK_EXIT
     return 0
 

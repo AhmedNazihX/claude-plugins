@@ -57,7 +57,7 @@ def _write_json(path, data):
 def _answer(allowed, reason):
     output = {"hookEventName": "PreToolUse", "permissionDecision": "allow" if allowed else "deny"}
     if reason:
-        output = {**output, "permissionDecisionReason": f"curfew: {reason}"}
+        output = {**output, "permissionDecisionReason": f"curfew (accio's gatekeeper for build agents): {reason}"}
     print(json.dumps({"hookSpecificOutput": output}))
 
 

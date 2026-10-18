@@ -197,7 +197,7 @@ test('S-020 a reviewer that stops answering, or a failing re-check, blocks the s
     'S-002 examiner': async (call, id) => fail(id, 'examiner'),
     'S-002 check r1': async () => ({ pass: false, failing: ['npm test'] }),
   }))
-  assert.match(prompt(calls, 'S-001 outcome'), /BLOCKED[\s\S]*professor stopped answering/)
+  assert.match(prompt(calls, 'S-001 outcome'), /BLOCKED[\s\S]*code reviewer \(professor\) stopped answering/)
   assert.deepEqual(steps(calls, 'S-002').slice(-3), ['fix r1', 'check r1', 'outcome'])
   assert.match(prompt(calls, 'S-002 outcome'), /these checks fail: npm test/)
   assert.equal((result.match(/BLOCKED/g) || []).length, 2)

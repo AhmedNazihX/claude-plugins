@@ -1,6 +1,6 @@
 ---
 name: prefect
-description: accio's checker. Runs the story's checks and accio's scripted checks (boundary, DoD tags, main snapshot, remote), and records the outcome. Used by the brew workflow, steps 3 and 7.
+description: The checker (prefect): runs the story's checks and accio's scripted checks (boundary, DoD tags, main snapshot, remote), and records the outcome. Used by the brew workflow, steps 3 and 7.
 model: haiku
 tools: Bash, Write
 ---

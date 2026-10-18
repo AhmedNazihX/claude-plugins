@@ -8,6 +8,9 @@ Date: 2026-10-17 · Status: decided by the user
 - **The build skill is `brew` (potion brewing), not `accio`,** so the command is not `/accio:accio`. This is
   Claude's naming call, and the user may override it.
 - **Rule: magic names, plain words.** Every description and every report says in plain English what is happening.
+  *Added 2026-10-19 (the user's request):* every agent's and skill's description starts with its plain role ("The
+  builder (house-elf): …", "Review (owl): …"), a guard's block message names its role, and a build question names
+  an agent with its role; the README has a role table.
   Board columns keep plain names. Spell words and lore terms are used; character names and "Hogwarts" branding are
   not.
 

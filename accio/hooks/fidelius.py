@@ -156,7 +156,7 @@ def main():
         reason = (f"could not check this write ({type(error).__name__}), so it is stopped. Write the file without "
                   "secrets, or ask the user to look at the hook.")
     if reason:
-        print(f"fidelius: {reason}", file=sys.stderr)
+        print(f"fidelius (accio's secret keeper): {reason}", file=sys.stderr)
         return BLOCK_EXIT
     return 0
 

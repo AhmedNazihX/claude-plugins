@@ -35,5 +35,5 @@ PATH="$(xcode-select -p)/usr/bin:$PATH" claude plugin eval . --tag prophecy --ta
 - **Baseline, 2026-10-18** (Claude Code 2.1.302, Sonnet under test, run on macOS): the `ci` cases all scored 1.00
   in about 2 minutes for **$0.61**. One run of every case (all tags) costs about **$2** (wand's options case alone
   about $0.40, since wandmaker is Opus).
-- **Always-on context:** about **1,864 tokens** for every accio description (`claude --plugin-dir . plugin details
+- **Always-on context:** about **1,906 tokens** for every accio description (`claude --plugin-dir . plugin details
   accio`), within DESIGN § 8.5's target of about 2k.
