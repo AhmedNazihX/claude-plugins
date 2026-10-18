@@ -4,7 +4,8 @@ Two PreToolUse hooks for Claude Code:
 
 - **Git guard** (`hooks/block-dangerous-git.sh`, Bash): blocks force pushes (`--force`, `--force-with-lease`, `-f`,
   `+refspec`), `reset --hard`, `clean -f`, `branch -D` and `checkout .`/`restore .`; asks the user before any other
-  `git push`.
+  `git push`. A subagent can't show that question (a background one would wait on it forever), so its push is
+  denied with a reason, and the main session pushes.
 - **Secrets guard** (`hooks/block-secrets.sh`, Read/Write/Edit/MultiEdit/NotebookEdit/Bash): blocks reading or
   editing secrets files (`.env`, `.env.*`, `*.pem`, `*.key`, `*.p12`, `*.pfx`, SSH keys, `credentials.json`,
   `service-account*.json`; templates such as `.env.example` are allowed), writing real-looking API keys into files,

@@ -8,7 +8,8 @@
 # Blocked (exit 2): force pushes (--force, --force-with-lease, -f, +refspec); reset --hard; clean -f in any form;
 # branch -D / --delete --force; checkout -f or a whole-tree pathspec (., :/, *); restore of the whole tree;
 # switch --discard-changes / -f; stash drop / clear; worktree remove --force; filter-branch.
-# Asks the user: every other push.
+# Asks the user: every other push. A subagent can't show the question (a background one waits on it forever), so its
+# push is denied with a reason instead, and the main session pushes.
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 if ! command -v jq >/dev/null 2>&1; then
@@ -18,6 +19,7 @@ fi
 
 INPUT=$(cat)
 COMMAND=$(echo "$INPUT" | jq -r '.tool_input.command // empty')
+AGENT=$(echo "$INPUT" | jq -r '.agent_id // empty')
 [ -n "$COMMAND" ] || exit 0
 
 block() {
@@ -85,7 +87,15 @@ while IFS= read -r part; do
   esac
 done <<<"$PARTS"
 
-if [ -n "$ASK" ]; then
+if [ -n "$ASK" ] && [ -n "$AGENT" ]; then
+  jq -n --arg cmd "$ASK" '{
+    hookSpecificOutput: {
+      hookEventName: "PreToolUse",
+      permissionDecision: "deny",
+      permissionDecisionReason: ("git push needs the user'"'"'s approval, and a subagent can'"'"'t ask for it. Don'"'"'t push; report back that this is ready to push: " + $cmd)
+    }
+  }'
+elif [ -n "$ASK" ]; then
   jq -n --arg cmd "$ASK" '{
     hookSpecificOutput: {
       hookEventName: "PreToolUse",

@@ -46,6 +46,14 @@ run "$GIT" 2 "$(bash_cmd 'git worktree remove --force /tmp/x')" "worktree remove
 run "$GIT" 2 "$(bash_cmd 'git push -fu origin x')" "combined -fu push is blocked"
 asks "$(bash_cmd 'git -c user.name=x push origin main')" "push after -c asks"
 asks "$(bash_cmd 'git --no-pager push')" "push after --no-pager asks"
+# A subagent can't answer a prompt (a background one waits forever), so its push is denied with a reason instead.
+agent_cmd() { jq -nc --arg c "$1" '{tool_name:"Bash",agent_id:"a1",agent_type:"x:worker",tool_input:{command:$c}}'; }
+denies() {  # denies <json> <label>: the hook answers with a deny decision
+  if printf '%s' "$1" | "$GIT" 2>/dev/null | grep -q '"permissionDecision": *"deny"'; then echo "  ok    $2"
+  else echo "  FAIL  $2 (no deny)"; FAILS=$((FAILS + 1)); fi
+}
+denies "$(agent_cmd 'git push origin main')" "a subagent's push is denied, not asked"
+run "$GIT" 2 "$(agent_cmd 'git push --force origin main')" "a subagent's force push is still blocked"
 run "$GIT" 0 "$(bash_cmd 'git clean -n')" "clean -n (dry run) passes"
 run "$GIT" 0 "$(bash_cmd 'git checkout -b feature')" "checkout -b passes"
 run "$GIT" 0 "$(bash_cmd 'git worktree remove /tmp/x')" "worktree remove without --force passes"
