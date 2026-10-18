@@ -3,12 +3,15 @@ them; a block is exit 2 with the reason on stderr and never the secret, a pass i
 
 Every fake key is built at runtime by concatenation (S-011/6), so no key-shaped string sits in this file.
 """
+import importlib.util
+import io
 import json
 import pathlib
 import subprocess
 import sys
 import tempfile
 import unittest
+from unittest import mock
 
 from support import ROOT, git, init_repo, write
 
@@ -113,6 +116,57 @@ class FideliusTest(unittest.TestCase):
                                      "new_string": f'MIIEvQ\n"""\nB = """{header}\nMIIEvA\n"""\n'})
         self.assertEqual(result.returncode, 2)
         self.assertIn("line 4", result.stderr)
+
+    def test_S_014_1_a_new_body_under_an_existing_private_key_header_is_blocked(self):
+        begin, end = "-----BEGIN " + "PRIVATE KEY-----", "-----END " + "PRIVATE KEY-----"
+        target = self.repo / "keys.py"
+        write(target, f'A = """{begin}\nMIIEvQIBADANBgkqhkiG9w0BAQ\n{end}\n"""\n')
+        result = self.check("Edit", {"file_path": str(target), "old_string": "MIIEvQIBADANBgkqhkiG9w0BAQ",
+                                     "new_string": "MIIEpAIBAAKCAQEAu1SU1LfVLP"})
+        self.assertEqual(result.returncode, 2)
+        self.assertNotIn("MIIEpA", result.stderr)
+
+    def test_S_014_1_a_private_key_whose_body_looks_like_an_example_still_counts(self):
+        begin, end = "-----BEGIN " + "PRIVATE KEY-----", "-----END " + "PRIVATE KEY-----"
+        result = self.check("Write", {"file_path": str(self.repo / "key.pem.txt"),
+                                      "content": f"{begin}\nMIIEvQxxxxxxEXAMPLEIBAD\n{end}\n"})
+        self.assertEqual(result.returncode, 2)
+
+    def test_S_014_1_replace_all_is_simulated_on_every_occurrence(self):
+        key = stripe_key()
+        target = self.repo / "config.py"
+        write(target, f"X = 'TAIL'\nKEY = '{key[:18]}TAIL'\n")
+        result = self.check("Edit", {"file_path": str(target), "old_string": "TAIL", "new_string": key[18:],
+                                     "replace_all": True})
+        self.assertEqual(result.returncode, 2)
+
+    def test_S_014_1_a_key_finished_in_a_file_that_isnt_utf8_is_blocked(self):
+        key = stripe_key()
+        target = self.repo / "legacy.py"
+        target.write_bytes(b"# \xff\nKEY = '" + key[:18].encode() + b"PLACEHOLDER'\n")
+        result = self.check("Edit", {"file_path": str(target), "old_string": "PLACEHOLDER", "new_string": key[18:]})
+        self.assertEqual(result.returncode, 2)
+
+    def test_S_014_1_an_old_string_typed_with_straight_quotes_still_finds_curly_ones(self):
+        key = stripe_key()
+        target = self.repo / "config.py"
+        write(target, f"KEY = '{key[:18]}PLACEHOLDER' # “note”\n")
+        result = self.check("Edit", {"file_path": str(target), "old_string": "PLACEHOLDER' # \"note\"",
+                                     "new_string": f"{key[18:]}' # \"note\""})
+        self.assertEqual(result.returncode, 2)
+
+    def test_S_014_1_an_error_while_checking_blocks_the_write_without_the_content(self):
+        spec = importlib.util.spec_from_file_location("fidelius_under_test", FIDELIUS)
+        fidelius = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(fidelius)
+        payload = json.dumps({"tool_name": "Write", "cwd": str(self.repo),
+                              "tool_input": {"file_path": str(self.repo / "a.py"), "content": stripe_key()}})
+        stderr = io.StringIO()
+        with mock.patch.object(fidelius, "check", side_effect=RecursionError("deep")), \
+                mock.patch("sys.stdin", io.StringIO(payload)), mock.patch("sys.stderr", stderr):
+            self.assertEqual(fidelius.main(), 2)
+        self.assertIn("could not check", stderr.getvalue())
+        self.assertNotIn(stripe_key(), stderr.getvalue())
 
     def test_S_014_1_a_path_git_cannot_take_still_blocks_without_a_crash(self):
         result = self.check("Edit", {"file_path": str(self.repo / "a\u0000b"), "old_string": "x",

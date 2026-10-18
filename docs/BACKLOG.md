@@ -256,8 +256,11 @@ Done: two review rounds. A Write is checked whole; an Edit/MultiEdit as the file
 only as many occurrences of a value as were already there (a second key under the same PEM header counts). A real
 env file is exempt only when its resolved name is env-shaped with no template word and git ignores it (checked
 from its nearest existing folder). The repo is found from `cwd` and from the file's folder. **Open notes:** MCP
-filesystem write tools aren't matched; a file that isn't UTF-8 or is over 2 MB falls back to the new strings (the
-commit scan backs it up); a lone private-key header in prose blocks.
+filesystem write tools aren't matched; a file over 2 MB, or an old string not found even with curly quotes folded,
+falls back to the new strings (the commit scan backs it up); a lone private-key header in prose blocks.
+Follow-up (automated security reviews after merge): a private key's body up to END is part of its value (a new
+body under an old header is new) and is never taken for a documented example; a non-UTF-8 file is read byte for
+byte; curly quotes are folded like the Edit tool; `replace_all` is simulated; a guarded check that crashes blocks.
 
 ### S-015 · `curfew`: permission policy and worktree claims
 Deps: S-003, S-013 · Files: `hooks/curfew.py`, `hooks/hooks.json`, `bin/accio-claim`, `bin/accio_lib/policy.py`, `tests/test_curfew.py`

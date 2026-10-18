@@ -5,16 +5,15 @@ Blocks key-shaped values (the patterns of `accio_lib.secret_scan`, S-011) before
 echoes the secret: a finding shows only its first characters. A Write's whole content is checked. An Edit or
 MultiEdit is checked as the file would read after it, so a key split across pieces or finished by an edit is caught,
 and a secret already in the file blocks nothing (an edit that removes one passes; the commit scan still refuses it).
-When the file can't be read or an old string isn't found, the new strings are checked joined both ways. A
-NotebookEdit's new source is checked; list-valued text is joined.
+A file that isn't UTF-8 is read byte for byte. When the file is over MAX_FILE_BYTES or an old string isn't found
+(even with curly quotes folded), the new strings are checked joined both ways; the commit scan backs that up. A
+NotebookEdit's new source is checked; list-valued text is joined. A guarded call the hook fails to check is blocked.
 
 A real `.env` file is where secrets belong, so one is exempt when its real path has a `.env` name
 (`secret_scan.is_secret_file`) with no template word in it (`example`, `sample`, `template`, `dist`), and git ignores
-it (an untracked, ignored file, checked from its nearest existing folder). Symlinks are judged by their target. A
-file that can't be read (not UTF-8, over MAX_FILE_BYTES) falls back to the new strings; the commit scan backs that
-up. The repo is found from the payload's `cwd` (the hook's folder when that
-is missing) and from the file's folder; either one having `.accio/` turns the guard on. Exits 0 silently otherwise,
-for other tools and on bad input.
+it (an untracked, ignored file, checked from its nearest existing folder). Symlinks are judged by their target. The
+repo is found from the payload's `cwd` (the hook's folder when that is missing) and from the file's folder; either
+one having `.accio/` turns the guard on. Exits 0 silently otherwise, for other tools and on bad input.
 """
 import json
 import os
@@ -30,6 +29,7 @@ from accio_lib import paths, secret_scan  # noqa: E402
 BLOCK_EXIT = 2
 PATH_KEYS = ("file_path", "notebook_path")
 MAX_FILE_BYTES = 2_000_000
+QUOTES = str.maketrans("\u2018\u2019\u201c\u201d", "''\"\"")
 TEMPLATE_WORDS = frozenset({"example", "sample", "template", "dist"})
 NAME_PARTS = re.compile(r"[._-]")
 
@@ -56,9 +56,22 @@ def _read(target):
     try:
         if os.path.getsize(target) > MAX_FILE_BYTES:
             return None
-        return pathlib.Path(target).read_text(encoding="utf-8")
+        return pathlib.Path(target).read_bytes().decode("utf-8", "surrogateescape")
     except (OSError, ValueError):
         return None
+
+
+def _replace(text, old, new, every):
+    """`text` with `old` replaced (the first, or `every` one), or None when it isn't there. Like the Edit tool, an
+    old string with straight quotes also finds curly ones; folding keeps every length, so positions line up."""
+    haystack, needle = (text, old) if old in text else (text.translate(QUOTES), old.translate(QUOTES))
+    parts, start = [], 0
+    while (found := haystack.find(needle, start)) != -1:
+        parts += [text[start:found], new]
+        start = found + len(needle)
+        if not every:
+            break
+    return "".join(parts) + text[start:] if parts else None
 
 
 def _apply(before, edits):
@@ -66,9 +79,9 @@ def _apply(before, edits):
     text = before
     for edit in edits:
         old, new = _text(edit.get("old_string")), _text(edit.get("new_string"))
-        if not old or old not in text:
+        text = _replace(text, old, new, edit.get("replace_all") is True) if old else None
+        if text is None:
             return None
-        text = text.replace(old, new) if edit.get("replace_all") is True else text.replace(old, new, 1)
     return text
 
 
@@ -155,7 +168,11 @@ def main():
     payload = _payload(sys.stdin.read())
     if payload is None or not is_guarded(payload):
         return 0
-    reason = check(payload)
+    try:
+        reason = check(payload)
+    except Exception as error:  # noqa: BLE001 — a guard that crashes must stop the write, not wave it through
+        reason = (f"could not check this write ({type(error).__name__}), so it is stopped. Write the file without "
+                  "secrets, or ask the user to look at the hook.")
     if reason:
         print(f"fidelius: {reason}", file=sys.stderr)
         return BLOCK_EXIT

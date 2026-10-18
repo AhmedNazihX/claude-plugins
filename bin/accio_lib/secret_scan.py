@@ -29,6 +29,7 @@ import subprocess
 
 VISIBLE_PREFIX = 6
 KEY_RUN = 8
+MAX_KEY_BODY = 16384  # the body up to END belongs to the key, so a new body under an old header is new
 GITLEAKS_FOUND_EXIT = 99
 FILE_MODES = ("100644", "100755")
 OUTPUT_TAIL_CHARS = 2000
@@ -88,12 +89,14 @@ def _db_password_is_secret(match):
 
 def _is_placeholder(match):
     """A documented example key. A URL's password is judged whole by PASSWORD_PLACEHOLDER instead, so a real
-    password that merely contains `example` still counts."""
-    return "secret" not in match.re.groupindex and bool(PLACEHOLDER.search(match.group(0)))
+    password that merely contains `example` still counts; a private key never is one (its body is random text)."""
+    judged_elsewhere = {"secret", "pem_body"} & set(match.re.groupindex)
+    return not judged_elsewhere and bool(PLACEHOLDER.search(match.group(0)))
 
 
 PATTERNS = (
-    ("private key", re.compile(r"-----BEGIN (?:RSA |EC |DSA |OPENSSH |PGP |ENCRYPTED )?PRIVATE KEY(?: BLOCK)?-----"), None),
+    ("private key", re.compile(r"-----BEGIN (?:RSA |EC |DSA |OPENSSH |PGP |ENCRYPTED )?PRIVATE KEY(?: BLOCK)?-----"
+                                r"(?P<pem_body>[^-]{0,%d}-----END [A-Z ]{0,40}-----)?" % MAX_KEY_BODY), None),
     ("Anthropic API key", re.compile(r"sk-ant-[A-Za-z0-9_-]{20,}"), _has_random_body),
     ("OpenRouter API key", re.compile(r"sk-or-(?:v1-)?[A-Za-z0-9]{32,}"), _has_random_body),
     ("OpenAI API key", re.compile(r"sk-(?:proj-|svcacct-)?[A-Za-z0-9_-]{32,}"), _has_random_body),
