@@ -75,6 +75,9 @@ class ProtegoTest(unittest.TestCase):
             with self.subTest(command):
                 self.assert_blocked(command, "rm -rf")
 
+    def test_a_command_hidden_after_an_ansi_c_escape_is_seen(self):
+        self.assert_blocked(r"echo $'\c'; rm -rf ~; echo '#'", "rm -rf")
+
     def test_an_unexpected_error_blocks_the_command(self):
         result = self.check("rm -rf build", raw=json.dumps({"hook_event_name": "PreToolUse", "tool_name": "Bash",
                                                              "tool_input": {"command": ["not", "a", "string"]},

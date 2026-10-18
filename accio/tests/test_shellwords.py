@@ -45,6 +45,12 @@ class ShellwordsTest(unittest.TestCase):
             with self.subTest(command):
                 self.assertEqual(words(command), [expected])
 
+    def test_an_escape_never_swallows_the_closing_quote(self):
+        # bash finds where $'…' ends first (each \X a pair), then decodes: \c can't eat the quote (security review)
+        self.assertEqual(words(r"echo $'\c'; rm -rf ~; echo '#'"), [["echo", "\\c"], ["rm", "-rf", "~"], ["echo", "#"]])
+        self.assertEqual(words(r"echo $'\c\'x'; ls"), [["echo", "\x1c'x"], ["ls"]])
+        self.assertEqual(words(r"echo $'a\'b' c"), [["echo", "a'b", "c"]])
+
     def test_ansi_c_quotes_end_at_an_unescaped_quote(self):
         self.assertEqual(words("echo $'it\\'s' ; ls"), [["echo", "it's"], ["ls"]])
 
