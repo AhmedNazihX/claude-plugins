@@ -1,9 +1,9 @@
 """curfew's policy: what each accio agent may do (DESIGN § 4.4, § 6; decision 010; spike S-015).
 
 Every call by an accio agent gets an answer, so none waits on a permission question. Read tools and the reply tools
-are allowed for every agent (house-elf before its claim too): a reply only goes back to the agent's caller, and
-denying it loses the agent's result. Beyond that each agent has an exact list (AGENTS), and anything off it is denied with the reason, which
-in a build becomes a BLOCKED question at `owl`. No list lets an agent write `run/push-ok` or `run/brew.lock`.
+are allowed for every accio agent (house-elf before its claim too): a reply only goes back to the agent's caller,
+and denying it loses the agent's result. Beyond that each agent has an exact list (AGENTS), and anything off it is
+denied with the reason, which in a build becomes a BLOCKED question at `owl`. No list lets an agent write `run/push-ok` or `run/brew.lock`.
 
 `house-elf` first runs `accio-claim <ID>` on its own (accio's own script, nothing else in the command) for a story
 in progress (`doing` in `run/status.json`) that no other agent holds. That links its `agent_id` to the story's

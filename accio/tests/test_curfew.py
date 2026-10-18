@@ -325,14 +325,17 @@ class OtherAgentsTest(CurfewTestBase):
                 self.assert_denied("WebFetch", {"url": "https://example.com"}, agent=agent)
 
     def test_every_agent_may_hand_back_its_reply_even_before_a_claim(self):
-        # A background agent's reply reaches its caller only through SubagentHandback, and a workflow agent's
-        # schema reply only through StructuredOutput (spike finding 16); denying them loses every reply.
+        # A background agent's reply reaches its caller only through SubagentHandback (seen live 2026-10-19: curfew's
+        # deny lost the replies of seeker, wandmaker, quill and examiner), and a workflow agent's schema reply only
+        # through StructuredOutput (spike finding 16).
         for agent in (*policy.AGENTS, "house-elf"):
             for tool in sorted(policy.REPLY_TOOLS):
                 with self.subTest(agent=agent, tool=tool):
                     self.assert_allowed(tool, {"message": "done"}, agent=f"accio:{agent}")
-        self.assert_denied("SubagentHandback", {"message": "done"}, "accio:nobody", agent="accio:nobody")
-        self.assert_denied("TaskStop", {"task_id": "x"}, "TaskStop", agent="accio:quill")
+        for tool in sorted(policy.REPLY_TOOLS):
+            self.assert_denied(tool, {"message": "done"}, "accio:nobody", agent="accio:nobody")
+        for near_miss in ("subagenthandback", "SubagentHandbackX", "StructuredOutput2", "TaskStop"):
+            self.assert_denied(near_miss, {"message": "done"}, near_miss, agent="accio:quill")
 
     def test_S_015_7_each_agent_gets_its_own_exact_list(self):
         board = shlex.quote(str(ROOT / "bin" / "accio-board"))
