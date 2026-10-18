@@ -124,8 +124,12 @@ def read_helper(root):
 
 
 def _write_helper(root, script):
-    """Write the helper if it is missing or stale; returns a note, or None when it is current."""
+    """Write the helper if it is missing or stale; returns a note, or None when it is current. A symlink at the
+    helper's place, or for its folder, is refused rather than written through."""
     path, text = helper_path(root), helper_text(script, root)
+    if path.is_symlink() or path.parent.is_symlink():
+        raise HooksError(f"{path} is a symlink, so accio won't write through it; remove it and run "
+                         "`accio-hooks install`.")
     try:
         current = path.read_text(encoding="utf-8") if path.exists() else None
     except (OSError, UnicodeDecodeError) as error:

@@ -31,7 +31,7 @@ evals/                       scripts/publish.py
 | done | S-013 `protego` |
 | done | S-014 `fidelius` |
 | done | S-015 `curfew`: permission policy and worktree claims |
-| todo | S-016 `session-start` |
+| done | S-016 `session-start` |
 | todo | S-028 `doc-size` and `librarian` |
 | todo | S-017 Build agents: `portkey`, `house-elf`, `prefect` |
 | todo | S-018 Review agents and findings template |
@@ -306,12 +306,16 @@ needs (no `accio-hooks uninstall`, `accio-board unlock` for prefect, `accio-ledg
 house-elf writes only `report.md`.
 
 ### S-016 · `session-start`
-Deps: S-004, S-012 · Files: `hooks/session_start.py`, `hooks/hooks.json`, `tests/test_session_start.py`
+Deps: S-004, S-012 · Files: `hooks/session_start.py`, `hooks/hooks.json`, `bin/accio_lib/githooks.py`, `tests/test_session_start.py`
 Context: DESIGN § 4.4, § 10 (workflows off); S-012's outcome (missing-script rule).
-- [ ] S-016/1 WHEN the repo has `.accio/` THE SYSTEM SHALL inject at most 10 lines: board summary, next step, plain-words rule
-- [ ] S-016/2 WHEN `CLAUDE_CODE_DISABLE_WORKFLOWS` is set THE SYSTEM SHALL say so and point to `/accio:brew-by-hand`
-- [ ] S-016/3 WHEN the repo has no `.accio/` THE SYSTEM SHALL print nothing
-- [ ] S-016/4 WHEN a session starts in a repo with `.accio/` THE SYSTEM SHALL run `accio-hooks verify` quietly, so a path a plugin update made stale is rewritten at once, and mention only problems verify can't fix (user's decision, 2026-10-18)
+- [x] S-016/1 WHEN the repo has `.accio/` THE SYSTEM SHALL inject at most 10 lines: board summary, next step, plain-words rule
+- [x] S-016/2 WHEN `CLAUDE_CODE_DISABLE_WORKFLOWS` is set THE SYSTEM SHALL say so and point to `/accio:brew-by-hand`
+- [x] S-016/3 WHEN the repo has no `.accio/` THE SYSTEM SHALL print nothing
+- [x] S-016/4 WHEN a session starts in a repo with `.accio/` THE SYSTEM SHALL run `accio-hooks verify` quietly, so a path a plugin update made stale is rewritten at once, and mention only problems verify can't fix (user's decision, 2026-10-18)
+Done: one review round. The next step follows the board, including a build that stopped mid-way (`doing`: resume
+with brew). verify runs only where accio's helper already exists (never installed or uninstalled: nothing is
+written), and the helper is never written through a symlink. Every line is collapsed to one line of at most 240
+characters, since error text can come from repo files.
 
 ### S-028 · `doc-size` and `librarian`
 Deps: S-013 · Files: `hooks/doc_size.py`, `hooks/hooks.json`, `agents/librarian.md`, `tests/test_doc_size.py`
