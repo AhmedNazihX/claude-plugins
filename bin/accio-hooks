@@ -40,12 +40,34 @@ def _setup(command):
     return 1 if problems else 0
 
 
+def _common_dir(cwd):
+    return githooks.git_out(cwd, "rev-parse", "--path-format=absolute", "--git-common-dir")
+
+
+def _has_accio(root):
+    return root is not None and (root / paths.ACCIO_DIR_NAME).is_dir()
+
+
+def _root(root_arg):
+    """The repo from the hook line, never from where git was pointed (`--work-tree` keeps the same git dir, so it
+    can't move the guards). When the named repo has no `.accio/` (moved) or is another git repo (this one is a copy),
+    the current repo is used if it has `.accio/`, so a moved or copied repo keeps its own guards; `verify` then
+    writes the new path."""
+    named = pathlib.Path(root_arg) if root_arg else None
+    current = paths.main_root()
+    is_other_repo = named is None or not named.is_dir() or _common_dir(named) != _common_dir(pathlib.Path.cwd())
+    if _has_accio(current) and (not _has_accio(named) or is_other_repo):
+        stale = (f"accio: its hooks still name {named}; run `accio-hooks verify` to update them.",) if named else ()
+        return current, stale
+    return (named, ()) if _has_accio(named) else (None, ())
+
+
 def _run(hook, root_arg):
-    """The repo comes from the hook line, never from where git was pointed (`--work-tree`, `GIT_DIR`)."""
-    root = pathlib.Path(root_arg) if root_arg else paths.main_root()
-    accio = root / paths.ACCIO_DIR_NAME if root else None
-    if accio is None or not accio.is_dir():
+    root, notes = _root(root_arg)
+    if root is None:
         return 0
+    _print(notes, sys.stderr)
+    accio = root / paths.ACCIO_DIR_NAME
     if hook == "pre-commit":
         messages = pushguard.run_pre_commit(pathlib.Path.cwd())
         _print(messages, sys.stderr)

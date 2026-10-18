@@ -5,6 +5,7 @@ shell; every command here starts from an environment without it and sets it only
 """
 import os
 import pathlib
+import shutil
 import stat
 import subprocess
 import tempfile
@@ -336,13 +337,46 @@ class VerifyAndUninstallTest(HooksTestBase):
         self.assertEqual(result.returncode, 1)
         self.assertIn("executable", result.stdout)
 
-    def test_S_012_4_an_exit_before_accio_lines_is_reported(self):
+    def test_S_012_4_an_exit_before_accio_lines_is_reported_by_install_and_verify(self):
         write(self.hook_file("pre-push"), "#!/bin/sh\nnpm run prepush\nexit 0\n")
-        self.install()
-        result = self.hooks("verify")
+        for command in ("install", "verify"):
+            with self.subTest(command):
+                result = self.hooks(command)
+                self.assertEqual(result.returncode, 1)
+                self.assertIn("line 3", result.stdout)
+                self.assertIn("before accio", result.stdout)
+
+    def test_S_012_4_lines_that_can_skip_accio_are_told_apart_from_lines_that_cant(self):
+        skips = ("exit", "exit 0", '[ -n "$CI" ] && exit 0', 'if [ -n "$CI" ]; then exit 0; fi',
+                 'case "$b" in wip/*) exit 0;; esac', "exec npm test", "true || exec true",
+                 "read lref lsha rref rsha", "IFS=' ' read -r a b c d", "if read a b c d; then :; fi",
+                 "exec < /dev/tty")
+        harmless = ("npx lint-staged || exit 1", "npm test || exit $?", "if [ $? -ne 0 ]; then exit 1; fi",
+                    "exec 1>&2", "read -p 'Push? ' ans < /dev/tty", "while read l; do :; done",
+                    "# on CI; exit early", "echo 'done; exit' \"a && exec b\"", "npm test # see notes; exit")
+        for line in skips + harmless:
+            with self.subTest(line):
+                lines = [githooks.SHEBANG, line, githooks.MARKER, githooks.call_line("pre-push")]
+                problems = githooks._skipped_lines(pathlib.Path("pre-push"), lines, githooks._calls(lines),
+                                                   "pre-push")
+                self.assertEqual(bool(problems), line in skips, problems)
+
+    def test_S_012_4_a_partial_read_of_the_refs_is_reported_by_install(self):
+        write(self.hook_file("pre-push"), "#!/bin/sh\nread lref lsha rref rsha\n")
+        result = self.hooks("install")
         self.assertEqual(result.returncode, 1)
-        self.assertIn("line 3", result.stdout)
-        self.assertIn("before accio", result.stdout)
+        self.assertIn("line 2", result.stdout)
+        self.assertIn("refs", result.stdout)
+
+    def test_S_012_4_the_helper_never_runs_text_from_the_plugin_path(self):
+        marker = self.base / "PWNED"
+        script = self.base / f"plug$(touch {marker})" / "accio-hooks"
+        helper = self.base / "helper"
+        write(helper, githooks.helper_text(script, self.repo))
+        result = subprocess.run(["sh", str(helper), "pre-commit"], capture_output=True, text=True, check=False,
+                                env=clean_env())
+        self.assertFalse(marker.exists())
+        self.assertIn("$(touch", result.stderr)
 
     def test_S_012_4_lefthook_without_the_snippet_is_reported(self):
         write(self.hook_file("pre-commit"), LEFTHOOK_STUB)
@@ -506,6 +540,26 @@ class PrePushTest(HooksTestBase):
         result = self.push(":main")
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("accio: deleting main on the remote is blocked", result.stderr)
+
+    def test_S_012_5_a_copied_repo_uses_its_own_lock_not_the_originals(self):
+        copy = self.base / "copy"
+        shutil.copytree(self.repo, copy, symlinks=True)
+        runlock.lock_path(copy / ".accio" / "run").write_text("1\n")
+        self.new_commit(cwd=copy)
+        result = self.push("main", cwd=copy)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("build is running", result.stderr)
+
+    def test_S_012_7_a_moved_repo_keeps_both_guards_on_until_verify(self):
+        moved = self.base / "moved"
+        self.repo.rename(moved)
+        self.new_commit(cwd=moved)
+        result = self.push("main", cwd=moved, claude=True)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("accio-hooks verify", result.stderr)
+        write(moved / "config.py", f"KEY = '{stripe_key()}'\n")
+        self.git_run("add", "config.py", cwd=moved)
+        self.assertNotEqual(self.commit(moved).returncode, 0)
 
     def test_when_another_hook_read_the_refs_a_guarded_push_is_blocked(self):
         result = self.hooks("run", "pre-push", "origin", str(self.remote), claude=True)

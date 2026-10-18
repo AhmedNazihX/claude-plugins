@@ -221,6 +221,12 @@ runs (`.accio/run/` exists), and `session-start` will run `verify` (S-016/4) (us
 no local path: they run `<git dir>/accio/hook`, a helper that never leaves the machine and holds the plugin and repo
 paths, so husky's committed hooks don't publish anyone's folders (user's decision). The guards moved to
 `bin/accio_lib/pushguard.py`.
+Follow-up (security review of the fix round, two rounds): a moved or copied repo keeps its own guards (when the
+named repo has no `.accio/` or is another git repo, the current one is used, and the hook says to run `verify`);
+`install` also warns about lines before accio's pair that can skip it: `exit`/`exit 0`/`exec <cmd>` wherever a
+command starts (`&&`, `then`, a `case` branch; not `exit 1`, `exit $?` or `exec 1>&2`, which can't skip it), and in
+pre-push a lone `read` (also `IFS=… read`, `if read`) or `exec <` of git's ref list (not `read … < /dev/tty`);
+the helper prints the plugin path with `printf '%s'`, so a `$(…)` in it never runs.
 Open (design gap, for S-015/S-022): an agent could write `run/push-ok` or backdate `brew.lock` itself;
 curfew's write rules and `owl` must keep those files out of agents' reach. `base_branch` isn't checked with
 `git check-ref-format`.
@@ -270,6 +276,10 @@ Note (2026-10-18, from S-012's stalled reviews): a background agent waits foreve
 another plugin's hook answering `ask` (git-guardrails asks before every `git push`) may win over curfew's `allow`.
 Find which decision wins when hooks disagree, and make sure no accio agent runs a command another installed hook
 asks about. Reuse `accio_lib.shellwords` / `shellpaths` (S-013).
+Docs (hooks.md, 2026-10-18): PreToolUse precedence is `deny > defer > ask > allow`, and the user's settings
+`ask`/`deny` rules apply whatever a hook answers. So any `ask` rule (the user's settings, another plugin) beats
+curfew's allow and freezes an unattended build. Decide how accio handles this, e.g. setup warns about `ask` rules
+that match commands accio's agents run.
 - [ ] S-015/1 WHEN the caller's `agent_type` is not `accio:*` THE SYSTEM SHALL give no permission decision
 - [ ] S-015/2 WHEN `accio:house-elf` has not claimed THE SYSTEM SHALL deny its Write/Edit and every Bash command except `accio-claim <ID>`
 - [ ] S-015/3 WHEN it runs `accio-claim <ID>` THE SYSTEM SHALL record its `agent_id` → that story's worktree in `run/claims.json`
