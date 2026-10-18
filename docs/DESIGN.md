@@ -484,8 +484,9 @@ Next: /accio:owl
    cache reads re-read an agent's saved conversation on every step, so they are reported apart and not budgeted
    (the user's choice, 2026-10-18). Above budget, the build table shows a warning. At 2× the budget, the story stops
    and goes to Blocked. *`agent()` reports no usage (spike S-001), so the 2× stop is each agent's `maxTurns`
-   (provisional: `house-elf` 150, reviewers 60, `headmaster` 30; S-020). It caps each agent, not the story, and no
-   live run has yet shown what `agent()` returns when an agent hits it. `accio-cost` reports the real usage from the
+   (provisional: `house-elf` 150, reviewers 60, `headmaster` 30; S-020). It caps each agent, not the story. An agent that hits
+   it with a `schema` makes `agent()` throw (without one, it returns `""`), so brew's `call()` gives null and the
+   story goes to Blocked (spike S-001, finding 16). `accio-cost` reports the real usage from the
    transcripts after the run (decision 006).*
 7. **Measure.** `accio-cost` reports per story in `owl`, and per iteration in `pensieve`.
 

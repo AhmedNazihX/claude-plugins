@@ -32,6 +32,11 @@ Date: 2026-10-17 · Claude Code 2.1.302 · Status: **done: verdict GO** (decisio
 | 14 | Can a PreToolUse hook answer the permission question for an agent? | **Yes.** In default mode with no Bash allow rule, a hook returning `permissionDecision: allow` let `touch` run at once (the same command hung in run 2c2). `deny` failed fast, and the agent got the hook's reason and didn't retry. | run 4 |
 | 15 | Does the hook payload's `transcript_path` point at the agent's transcript? | **No,** it points at the main session's transcript. The agent is identified only by `agent_id` and `agent_type`. | run 4 hook log |
 
+### Addendum (2026-10-18, S-020): `maxTurns`
+| # | Question | Answer | Evidence |
+|---|---|---|---|
+| 16 | What does `agent()` return when a named agent hits its `maxTurns`? | **With a `schema`, it throws** ("subagent completed without calling StructuredOutput (after in-conversation nudge)"); **without one, it returns `""`**. No partial reply either way. brew always passes a schema, so a capped agent becomes null in `call()` and its story goes to Blocked. | throwaway plugin, agent `counter` (Haiku, `maxTurns: 3`, 10 echo steps asked); `claude -p` with `--allowedTools Workflow "Bash(echo:*)"`; `journal.jsonl`: `failed` for the schema call, `result: ""` for the text call; each transcript stops after 3 echoes |
+
 ## Verdict: GO
 A plugin workflow can run accio's named agents (1) in worktrees made by accio's own script (2), and the hooks fire
 and block inside those agents (10). **No fallback is needed.** `brew-by-hand` (S-027) stays conditional: it only
