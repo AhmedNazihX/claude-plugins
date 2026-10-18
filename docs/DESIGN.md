@@ -258,7 +258,7 @@ The build itself is the workflow `/accio:brew` (§ 4.3), not a skill.
 | `professor` | quality reviewer | Sonnet | same as examiner | same |
 | `auror` | security reviewer (risky paths) | Sonnet | same as examiner | same |
 | `headmaster` | judge | Sonnet | Read, Grep, Glob; Bash (only `accio-ledger key/check/record`); Write (only `run/questions/`) | `{ruling | question}` |
-| `quill` | writes story files from the design (in `sort`) | Sonnet | Read, Write to `.accio/stories/` | `stories: N · summary: <path>` |
+| `quill` | writes story files from the design (in `sort`) | Sonnet | Read, Glob, Grep; Write to `.accio/stories/S-*.md` and `run/sort/quill-summary.md` | `stories: N · summary: <path>` |
 | `librarian` | doc lookups, quotes only | Haiku | Read, Grep | quotes with `file:line` |
 
 ### 4.3 Workflow
@@ -589,6 +589,7 @@ workflow launch: the first `/accio:brew` asks once, and "don't ask again" covers
 | `run/<ID>/main-snapshot.json` | `accio-check <ID> snapshot` (from `portkey`, once per brief; `accio-brief` clears it); `prefect` compares after the story (status, mode and content of each changed, untracked or ignored path; HEAD; `origin/<base>`) | never |
 | `run/brew.lock` | `accio-board lock` / `unlock` (from `portkey`), refreshed by `accio-board move` | never |
 | `run/allow-once.json` | `accio-owl close` (commands allowed once, per story, until that story is next built); watched by `accio-check`'s snapshot | never; a story's grant goes when a build that touched it unlocks, or the next one starts after a crash |
+| `run/sort/quill-summary.md`, `run/sort/examiner-findings.md` | `quill` and `examiner` in `sort` (an agent-written file is never named `report*`, `summary*`, `findings*` or `analysis*`: Claude Code refuses those for subagents) | never |
 | `run/claims.json` | `curfew` (when `house-elf` runs `accio-claim`) | never; cleared when a run starts |
 | `run/stuck.json` | `curfew` (a permission question reached an accio agent: it froze) | never |
 | `run/<ID>/brief.md`, `build-report.md`, `*-findings.md` | `accio-brief`; `house-elf`; each reviewer | never |

@@ -87,14 +87,15 @@ class SubagentFileNamesTest(unittest.TestCase):
     in any case ("Subagents should return findings as text"), so no file an accio agent writes may be named so."""
 
     BLOCKED = re.compile(r"^(report|summary|findings|analysis).*\.md$", re.IGNORECASE)
-    READ_ONLY = {"findings-template.md"}  # agents read it; only writes are refused
+    READ_ONLY = {"findings-template.md", "analysis.md"}  # read (the template) or cited (docs/research); never written
 
     def test_S_023_no_file_an_agent_writes_has_a_name_claude_code_refuses(self):
-        sources = [*AGENTS.glob("*.md"), *(ROOT / "skills").rglob("*.md"), *(ROOT / "bin" / "accio_lib").glob("*.py"),
-                   *(ROOT / "bin" / "accio_lib" / "templates").glob("*"), ROOT / "workflows" / "brew.js"]
+        sources = [*AGENTS.glob("*.md"), *(ROOT / "skills").rglob("*.md"), *(ROOT / "bin").rglob("*.py"),
+                   *(ROOT / "bin").glob("accio-*"), *(ROOT / "bin" / "accio_lib" / "templates").rglob("*.md"),
+                   *(ROOT / "hooks").glob("*.py"), *(ROOT / "workflows").glob("*.js")]
         found = []
         for source in sources:
-            for name in re.findall(r"[\w.<>*${}/-]+\.md\b", source.read_text(encoding="utf-8")):
+            for name in re.findall(r"[\w.<>*${}/-]+\.md\b", source.read_text(encoding="utf-8"), re.IGNORECASE):
                 base = name.rsplit("/", 1)[-1]
                 if self.BLOCKED.match(base) and base not in self.READ_ONLY:
                     found.append(f"{source.relative_to(ROOT)}: {name}")

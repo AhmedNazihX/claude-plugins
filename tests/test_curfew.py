@@ -293,7 +293,8 @@ class OtherAgentsTest(CurfewTestBase):
         for target in (accio / "stories" / "S-012.md", self.run_dir / "sort" / "quill-summary.md"):
             self.assert_allowed("Write", {"file_path": str(target), "content": "x"}, agent="accio:quill")
         for target in (accio / "config.json", accio / "stories" / "notes.md", accio / "design.md",
-                       self.worktree / "a.py"):
+                       self.worktree / "a.py", self.run_dir / "sort" / "examiner-findings.md",
+                       self.run_dir / "S-001" / "build-report.md"):
             self.assert_denied("Write", {"file_path": str(target), "content": "x"}, "quill", agent="accio:quill")
         self.assert_denied("Bash", self.bash("ls"), "Bash", agent="accio:quill")
 

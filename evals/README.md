@@ -18,6 +18,8 @@ PATH="$(xcode-select -p)/usr/bin:$PATH" claude plugin eval . --tag prophecy --ta
 - **macOS:** `/usr/bin/git` is Apple's `xcrun` shim, and inside the eval's OS sandbox it can't write its cache under
   `/var/folders`, so every git call fails. Putting the real binary's folder first on `PATH` (the command above)
   fixes the scripts, `accio-board go`'s commit included (the skill never runs git itself).
+- `sort/split` checks a too-big part ends up as small stacked stories. quill usually splits it while writing, so the
+  score's split flag (the safety net) rarely fires in a run; that path is in the skill and `tests/test_sort.py`.
 - Skills call accio's scripts as `${CLAUDE_PLUGIN_ROOT}/bin/<script>`: the plugin's `bin/` is not on `PATH` in eval
   runs.
 - `prophecy/workflows-off` (S-021/6) has its own tag, because it needs the `Workflow` tool taken away for the whole

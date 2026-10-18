@@ -74,6 +74,7 @@ class SortScriptsTest(unittest.TestCase):
     def test_S_023_1_record_commits_exactly_the_stories_and_the_board_when_all_are_sound(self):
         first = self.add("S-001", ["src/a.py"])
         second = self.add("S-002", ["src/b.py"], deps=["S-001"])
+        self.add("S-003", ["src/c.py"])  # sound, but not given: it stays out of the commit
         write(self.repo / "notes.txt", "mine\n")
         git(self.repo, "add", "notes.txt")
         reply = self.run_script(BOARD, "record", first, second)
@@ -82,7 +83,8 @@ class SortScriptsTest(unittest.TestCase):
         committed = set(git(self.repo, "show", "--name-only", "--format=", "HEAD").splitlines())
         self.assertEqual(committed, {".accio/stories/S-001.md", ".accio/stories/S-002.md", ".accio/board.md"})
         self.assertIn("S-002 Story S-002", (self.accio / "board.md").read_text())
-        self.assertEqual(git(self.repo, "status", "--porcelain"), "A  notes.txt")
+        self.assertEqual(git(self.repo, "status", "--porcelain").splitlines(),
+                         ["A  notes.txt", "?? .accio/stories/S-003.md"])
 
     def test_S_023_1_record_refuses_unsound_stories_and_commits_nothing(self):
         first = self.add("S-001", ["src/a.py"], deps=["S-009"])
@@ -101,7 +103,9 @@ class SortScriptsTest(unittest.TestCase):
         write(self.repo / "src.py", "x = 1\n")
         self.assertIn("story files", self.run_script(BOARD, "record", self.repo / "src.py", check=False).stderr)
         runlock.take(self.accio / "run")
-        self.assertIn("build is running", self.run_script(BOARD, "record", first, check=False).stderr)
+        for args in (("record", first), ("new",)):  # sort's first command stops it before quill writes anything
+            with self.subTest(args):
+                self.assertIn("build is running", self.run_script(BOARD, *args, check=False).stderr)
 
 
 if __name__ == "__main__":

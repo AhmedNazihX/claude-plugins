@@ -1,7 +1,7 @@
 ---
 name: prophecy
 description: Plans the next accio iteration with the user. Proposes up to 8 buildable stories from .accio/'s backlog, settles their open questions one at a time, and on "go" marks them Ready and commits the plan.
-when_to_use: When the user asks "what should we build next", "what's next", "plan the next iteration/sprint", "pick the next batch of stories", or runs /accio:prophecy, in a repo with an .accio/ folder. Not for writing or splitting stories (sort), designing (wand), building (/accio:brew) or reviewing a build (owl).
+when_to_use: When the user asks "what should we build next", "what's next", "plan the next iteration/sprint", "pick the next batch of stories", or runs /accio:prophecy, in a repo with an .accio/ folder. Not for writing stories (sort), designing (wand), building (/accio:brew) or reviewing a build (owl).
 allowed-tools: Read, Edit, Bash(${CLAUDE_PLUGIN_ROOT}/bin/accio-board *)
 ---
 

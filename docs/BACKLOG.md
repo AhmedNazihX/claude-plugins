@@ -39,7 +39,7 @@ evals/                       scripts/publish.py
 | done | S-020 `brew.js`: review, judge, fix rounds, budgets |
 | done | S-021 `prophecy` skill |
 | done | S-022 `owl` skill |
-| todo | S-023 `sort` skill and `quill` |
+| done | S-023 `sort` skill and `quill` |
 | todo | S-024 `wand` skill, `seeker`, `wandmaker` |
 | todo | S-025 `map` and `vow` skills |
 | todo | S-026 Skill evals and baseline cost |
@@ -457,13 +457,23 @@ across `close`, since the ledger takes it too); a dropped worktree with ignored 
 kept and named, never removed.
 
 ### S-023 · `sort` skill and `quill`
-Deps: S-005, S-018 · Files: `skills/sort/SKILL.md`, `agents/quill.md`, `evals/sort/`
+Deps: S-005, S-018 · Files: `skills/sort/SKILL.md`, `agents/quill.md`, `evals/sort/`, `bin/accio-score` (`--apply`), `bin/accio-board` (`record`), `bin/accio_lib/backlog.py`, `agents/examiner.md` (backlog check)
 Context: DESIGN § 3.2, § 5.1.
-- [ ] S-023/1 (no test) `quill` writes story files in the § 5.1 format, with numbered EARS DoD lines and `(no test)` marks
-- [ ] S-023/2 (no test) a story the score flags is split, and each child gets the next free ID
-- [ ] S-023/3 (no test) `examiner` checks the backlog and its findings are fixed in the same run
-- [ ] S-023/4 (no test) the main chat shows only the summary
-- [ ] S-023/5 (no test) `quill` copies the design's outcome ("what should be true after it ships, and how we'd know") into each story's Context (decision 011)
+- [x] S-023/1 (no test) `quill` writes story files in the § 5.1 format, with numbered EARS DoD lines and `(no test)` marks
+- [x] S-023/2 (no test) a story the score flags is split, and each child gets the next free ID
+- [x] S-023/3 (no test) `examiner` checks the backlog and its findings are fixed in the same run
+- [x] S-023/4 (no test) the main chat shows only the summary
+- [x] S-023/5 (no test) `quill` copies the design's outcome ("what should be true after it ships, and how we'd know") into each story's Context (decision 011)
+Done: a code review, a skill review and a focused re-review of the rewritten skill and agent. Scripts carry the
+rules: `accio-score --apply` sets tracks (all or nothing), `accio-board record` commits only sound stories and only
+those given, and `accio-board new` refuses during a build. quill writes only parts of the design no story covers,
+splits a flagged story once, fixes the backlog check's findings, and asks a question the design leaves open before
+the check. Evals: 2 cases, 1.00 locally. quill usually splits a too-big part while writing, so the score's split
+flag (the safety net) rarely fires in a run.
+**Found by this story's eval:** Claude Code refuses a subagent's Write to a file named
+`^(REPORT|SUMMARY|FINDINGS|ANALYSIS).*\.md$`, any case. brew's handoffs used such names; they are now
+`build-report.md`, `<reviewer>-findings.md` and `quill-summary.md`, and a test keeps every agent-written name clear
+(`docs/research/platform-facts.md`).
 
 ### S-024 · `wand` skill, `seeker`, `wandmaker`
 Deps: S-012, S-025 · Files: `skills/wand/SKILL.md`, `skills/wand/references/`, `agents/{seeker,wandmaker}.md`, `evals/wand/`

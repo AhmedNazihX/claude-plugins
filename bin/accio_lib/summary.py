@@ -7,6 +7,7 @@ story: its one question from `run/questions/<ID>.md`.
 """
 import re
 
+REPORT_NAME = "build-report.md"  # house-elf writes it; a name Claude Code lets a subagent write (S-023)
 STORY_TOKEN_TARGET = 150
 CHARS_PER_TOKEN = 4
 STORY_CHARS = STORY_TOKEN_TARGET * CHARS_PER_TOKEN - 1  # the most characters estimate_tokens keeps within target
@@ -138,7 +139,7 @@ def render(stories, status, run_dir, costs):
     for story_id in sorted(stories):
         parsed, entry = stories[story_id], costs.get(story_id)
         if status[story_id] == "review":
-            blocks.append(ready_block(parsed, status, _read(run_dir / story_id / "build-report.md"), entry))
+            blocks.append(ready_block(parsed, status, _read(run_dir / story_id / REPORT_NAME), entry))
         elif status[story_id] == "blocked":
             blocks.append(blocked_block(parsed, _read(run_dir / "questions" / f"{story_id}.md"), entry))
     body = "\n\n".join(blocks) or "Nothing is ready or blocked."

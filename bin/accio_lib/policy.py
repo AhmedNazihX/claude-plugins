@@ -19,13 +19,13 @@ import pathlib
 import re
 import shlex
 
-from accio_lib import bashpolicy, paths, shellwords, story
+from accio_lib import bashpolicy, paths, shellwords, story, summary
 
 READ_TOOLS = frozenset({"Read", "Grep", "Glob", "LS"})
 WRITE_TOOLS = frozenset({"Write", "Edit", "MultiEdit", "NotebookEdit"})
 WEB_TOOLS = frozenset({"WebSearch", "WebFetch"})
 CLAIM_SCRIPT = "accio-claim"
-REPORT_NAME = "build-report.md"
+REPORT_NAME = summary.REPORT_NAME
 BOARD_RUN = frozenset({"ready", "status", "lock", "unlock", "move", "refresh"})
 LEDGER_USE = frozenset({"key", "check", "record"})
 SCRIPTS = {  # each Bash policy's accio scripts and the subcommands it may run (None: any)
@@ -55,7 +55,7 @@ AGENTS = {
     "headmaster": Lists(writes=("run/questions/*.md",), bash="ledger"),
     "seeker": Lists(web=True),
     "wandmaker": Lists(),
-    "quill": Lists(writes=("stories/S-*.md", "run/sort/*.md")),
+    "quill": Lists(writes=("stories/S-*.md", "run/sort/quill-summary.md")),
     "librarian": Lists(),
 }
 

@@ -39,6 +39,8 @@ def _loaded(accio):
 
 
 def cmd_new(_args, accio):
+    if runlock.is_held(board.run_dir(accio)):  # sort's first command: no story file is written during a build
+        raise board.BoardError("a build is running (run/brew.lock); write stories after it ends")
     print(board.next_id(accio))
 
 

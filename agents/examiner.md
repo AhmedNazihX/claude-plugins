@@ -1,6 +1,6 @@
 ---
 name: examiner
-description: accio's spec reviewer. Checks one story's DoD line by line against its diff and tests, and judges whether each tagged test really checks its line. Used by the brew workflow, step 4.
+description: accio's spec reviewer. Checks one story's DoD line by line against its diff and tests, and judges whether each tagged test really checks its line. Used by the brew workflow, step 4, and by the sort skill's backlog check.
 model: sonnet
 maxTurns: 60
 tools: Read, Grep, Glob, Write
@@ -20,11 +20,15 @@ Then apply the checklists the package names, if any.
 **On the Quick track** (the workflow says so) there is no separate quality reviewer: after the DoD, also review the
 diff as `professor` does (correctness bugs with a concrete failing input, errors handled silently).
 
-**Backlog check** (the sort skill asks for it, naming the story files and a findings path): no diff and no tests
-yet. Check each story for what would make it hard to build or judge: not atomic (two features, or more than a few
-files), a DoD line that isn't one checkable behaviour in EARS form or should be `(no test)`, a missing or wrong
-dependency on another story, files outside what the story describes, and a Context without the design's outcome.
-Same rules and template; the verdict is fail when any major finding stands.
+**Backlog check** (the sort skill asks for it, naming the stories, the design, the findings template and a findings
+path): no diff and no tests yet, so skip the per-line checks above, the checklists and the "DoD line unmet" verdict
+rule. Read the design and each named story (other stories only to check dependencies), and check each named story
+for: not atomic (two features,
+or more than a few files); a DoD line that isn't one checkable behaviour in EARS form, or should be `(no test)`; a
+missing or wrong dependency on another story; files outside what the story describes; a Context without the design's
+outcome. Each of these is **major** (a builder or reviewer would have to guess); wording is minor. `where` is the
+story file and line; `failure` is what a builder or reviewer would get wrong. The confidence rule holds; the
+"outside the DoD" rule doesn't. The verdict is fail when any major finding stands.
 
 **In a fix round** (the package says so and gives your earlier findings): judge only the fix diff. Mark each of your
 earlier findings `resolved` or keep it `open`, with the same id, and raise a new finding only for a problem the fix
