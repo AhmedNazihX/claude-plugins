@@ -65,6 +65,8 @@ HUSKY_OFF = ("`HUSKY=0` turns off the project's git hooks, accio's included. Ins
              "then run the command normally.")
 HOOKS_PATH = ("changing `core.hooksPath` points git away from accio's hooks. Instead: use `accio-hooks install` or "
               "`accio-hooks uninstall`.")
+TOO_DEEP = (f"this command nests commands more than {MAX_DEPTH} levels deep, too deep to check. Instead: run the inner "
+            "commands directly.")
 GUARD = (f"unsetting `{GUARD_VAR}` hides that Claude is running the command, and accio's push guard needs it to "
          "tell Claude's pushes from yours. Instead: keep it set; to push yourself, use your own terminal.")
 
@@ -93,6 +95,10 @@ class GitCall:
 
 # --- reading a command ------------------------------------------------------------------------------------------
 
+def _words(script):
+    return [word for segment in shellwords.segments(script) for word in segment.words]
+
+
 def _env_options(tokens):
     """(the tokens after env's options, the names env unsets; `-i` clears them all, CLAUDECODE included)."""
     unsets, index = set(), 0
@@ -105,6 +111,11 @@ def _env_options(tokens):
             unsets.add(token.split("=", 1)[1])
         elif token.startswith("-u") and len(token) > 2:
             unsets.add(token[2:])
+        elif token in ("-S", "--split-string") and index + 1 < len(tokens):
+            return [*_words(tokens[index + 1]), *tokens[index + 2:]], unsets
+        elif token.startswith("--split-string=") or (token.startswith("-S") and len(token) > 2):
+            script = token.split("=", 1)[1] if token.startswith("--") else token[2:]
+            return [*_words(script), *tokens[index + 1:]], unsets
         elif token in ENV_CLEARS or (not token.startswith("--") and "i" in token[1:]):
             unsets.add(GUARD_VAR)
         index += 1
@@ -275,7 +286,8 @@ def _rm_outside(call, cwd, scope):
     options = [token for token in call.argv[1:] if token.startswith("-") and token != "-"]
     if "--" in options:
         options = options[:options.index("--")]
-    flags = _short_flags(options) | {token[2:3] for token in options if token in ("--recursive", "--force")}
+    flags = _short_flags(options) | ({"r"} if _has_long(options, "--recursive", "--r") else set()) | \
+        ({"f"} if _has_long(options, "--force", "--f") else set())
     if not ({"r", "R"} & flags and "f" in flags):
         return None
     targets = [token for token in call.argv[1:] if token not in options and token != "--"]
@@ -297,7 +309,10 @@ def check_command(command, cwd, scope, depth=0):
     """The block message for the first part of `command` on the list, or None."""
     segments = tuple(shellwords.segments(command))
     scope = dataclasses.replace(scope, assigned=scope.assigned | shellpaths.assigned_names(s.words for s in segments))
-    for inner in shellwords.substitutions(command) if depth < MAX_DEPTH else ():
+    inners = shellwords.substitutions(command)
+    if inners and depth >= MAX_DEPTH:
+        return TOO_DEEP
+    for inner in inners:
         reason = check_command(inner, cwd, scope, depth + 1)
         if reason:
             return reason
@@ -338,7 +353,10 @@ def _scripts_run(call, name, segment):
 
 
 def _check_call(call, name, segment, cwd, scope, depth):
-    for script in _scripts_run(call, name, segment) if depth < MAX_DEPTH else ():
+    scripts = _scripts_run(call, name, segment)
+    if scripts and depth >= MAX_DEPTH:
+        return TOO_DEEP
+    for script in scripts:
         reason = check_command(script, cwd, scope, depth + 1)
         if reason:
             return reason

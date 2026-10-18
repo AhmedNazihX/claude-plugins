@@ -19,6 +19,8 @@ VARIABLE = re.compile(r"\$(?:\{(\w+)\}|(\w+))")
 UNRESOLVABLE = re.compile(r"[$`{]|^~")
 BRACE_LIST = re.compile(r"\{([^{}]*,[^{}]*)\}")
 MAX_ALTERNATIVES = 64
+MAX_BRACE_GROUPS = 6
+MAX_WORD_CHARS = 4096
 WHOLE_FOLDER_GLOBS = ("*", ".*")
 TEMP_ROOTS = tuple(dict.fromkeys(pathlib.Path(os.path.realpath(folder))
                                  for folder in (tempfile.gettempdir(), "/tmp", "/var/tmp")))
@@ -54,9 +56,12 @@ def expand(text, cwd, assigned=frozenset()):
 
 def brace_alternatives(word):
     """bash's brace expansion of comma lists; too many alternatives leaves the word as written (unknowable)."""
-    match = BRACE_LIST.search(word)
-    if not match:
+    groups = BRACE_LIST.findall(word)
+    if not groups:
         return (word,) if word else ()
+    if len(groups) > MAX_BRACE_GROUPS or len(word) > MAX_WORD_CHARS:
+        return (word,)  # a brace bomb: judged as written, so it counts as unknowable
+    match = BRACE_LIST.search(word)
     results = []
     for option in match.group(1).split(","):
         results.extend(brace_alternatives(word[:match.start()] + option + word[match.end():]))

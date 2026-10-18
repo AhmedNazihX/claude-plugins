@@ -2,6 +2,7 @@
 import os
 import pathlib
 import tempfile
+import time
 import unittest
 
 from support import init_repo
@@ -29,6 +30,12 @@ class ShellpathsTest(unittest.TestCase):
         self.assertIsNone(shellpaths.target_path("build/{1..3}", str(self.repo)))
         too_many = "{" + ",".join("abcdefghij") + "}{" + ",".join("abcdefghij") + "}"
         self.assertEqual(shellpaths.brace_alternatives(too_many), (too_many,))
+
+    def test_a_brace_bomb_with_few_groups_is_refused_at_once(self):
+        bomb = "{" + ",".join(f"o{n}" for n in range(20)) + "}"
+        started = time.monotonic()
+        self.assertEqual(shellpaths.brace_alternatives(bomb * 6), (bomb * 6,))
+        self.assertLess(time.monotonic() - started, 1)
 
     def test_a_loop_variable_from_the_environment_is_not_trusted(self):
         names = shellpaths.assigned_names([("for", "TMPDIR", "in", "/")])

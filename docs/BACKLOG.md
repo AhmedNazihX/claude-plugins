@@ -225,6 +225,12 @@ decision 004 amendment). A third look (a short review of the new tokenizer plus 
 grammar gaps (`$'…'`, reserved words, braces, `cd -P`, substitutions, heredocs fed to a shell, `case`); fixed
 with tests, and the path logic moved to `bin/accio_lib/shellpaths.py`. Later shell gaps go here as notes rather
 than more rounds (decision 004: protego is an early warning).
+Follow-up (automated reviews after merge): `$(…)` inside arithmetic, brace bombs (≤ 6 groups), fail closed at the
+nesting limit, `env -S`, and `rm --rec --for` fixed. **Open notes**, each a narrower bypass of an early warning:
+`cd`/`pushd` with unusual option letters; variables set by `unset`, `printf -v`, `getopts`, `select` or
+`${X:=…}`; a real subshell inside a `case` branch; `clean.requireForce` set through `GIT_CONFIG_*`; glob characters
+other than a final `*` in `rm` targets; `$(…)` inside an unquoted heredoc body; a `#` or `case` inside a quoted
+`$(…)`; `CDPATH`; a shell started inside `.git`.
 
 ### S-014 · `fidelius`
 Deps: S-011, S-013 · Files: `hooks/fidelius.py`, `hooks/hooks.json`, `tests/test_fidelius.py`
@@ -236,6 +242,10 @@ Context: DESIGN § 4.4, § 6.
 Deps: S-003, S-013 · Files: `hooks/curfew.py`, `hooks/hooks.json`, `bin/accio-claim`, `bin/accio_lib/policy.py`, `tests/test_curfew.py`
 Context: DESIGN § 4.4, § 6; decision 010; `docs/research/spike-s001.md` findings 10, 14, 15. The brief writes the
 worktree path shell-quoted (`shlex.quote`), so the `cd <worktree> &&` check must accept that form.
+Note (2026-10-18, from S-012's stalled reviews): a background agent waits forever on a permission prompt, and
+another plugin's hook answering `ask` (git-guardrails asks before every `git push`) may win over curfew's `allow`.
+Find which decision wins when hooks disagree, and make sure no accio agent runs a command another installed hook
+asks about. Reuse `accio_lib.shellwords` / `shellpaths` (S-013).
 - [ ] S-015/1 WHEN the caller's `agent_type` is not `accio:*` THE SYSTEM SHALL give no permission decision
 - [ ] S-015/2 WHEN `accio:house-elf` has not claimed THE SYSTEM SHALL deny its Write/Edit and every Bash command except `accio-claim <ID>`
 - [ ] S-015/3 WHEN it runs `accio-claim <ID>` THE SYSTEM SHALL record its `agent_id` → that story's worktree in `run/claims.json`
@@ -288,6 +298,8 @@ Deps: S-001, S-017 · Files: `workflows/brew.js`, `tests/workflow/brew-core.test
 Context: DESIGN § 3.4, § 12.6; `docs/research/build-engine.md` "Option C in detail".
 - [ ] S-019/1 WHEN more than 3 stories are ready THE SYSTEM SHALL keep at most 3 in progress
 - [ ] S-019/2 WHEN an agent is silent past `stallMs` THE SYSTEM SHALL mark the story BLOCKED with a plain question
+Note (2026-10-18): `stallMs` does not end an agent waiting on a permission prompt (spike S-001), and another
+plugin's `ask` hook can cause one (see S-015's note); the build needs its own way to notice and end that wait.
 - [ ] S-019/3 WHEN a child's parent is not yet READY THE SYSTEM SHALL hold the child and give its slot to another story
 - [ ] S-019/4 WHEN the parent ends BLOCKED THE SYSTEM SHALL not start the child
 - [ ] S-019/5 WHEN the ledger reports a skip THE SYSTEM SHALL not re-run that step

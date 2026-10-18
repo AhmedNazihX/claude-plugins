@@ -167,9 +167,12 @@ class _Reader:
             self.add(command[index:end + 1], end + 1)
         elif command.startswith("$'", index):
             self.add(*reversed(_ansi_quoted(command, index)))
-        else:  # arithmetic: one word, whatever it holds
+        else:  # arithmetic: one word, but a `$(…)` or backtick inside it still runs
             opener = next(opener for opener in ARITHMETIC_OPENERS if command.startswith(opener, index))
             end = _closing_paren(command, index + len(opener) - 1, self.substitutions)
+            body = command[index + len(opener):end]
+            if "$(" in body or "`" in body:
+                self.substitutions.append(body)
             self.add(command[index:end + 1], end + 1)
 
     def step(self):

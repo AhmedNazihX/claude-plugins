@@ -4,9 +4,11 @@ sends them; a block is exit 2 with the reason and the safe alternative on stderr
 import json
 import os
 import pathlib
+import shlex
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 
 from support import ROOT, init_repo, write
@@ -166,6 +168,27 @@ class ProtegoTest(unittest.TestCase):
                         "cat <<< 'unset CLAUDECODE'", "echo \"$(git status)\""):
             with self.subTest(command):
                 self.assert_allowed(command)
+
+    def test_follow_up_gaps_are_closed(self):
+        deep = 'echo "$(echo "$(echo "$(echo "$(git reset --hard)")")")"'
+        for command in ("echo $(( $(git reset --hard) ))", "echo $(( `git reset --hard` ))", deep,
+                        "env -S 'git reset --hard'", "env -S'git reset --hard'", "env --split-string='git reset --hard'",
+                        "rm --rec --for /usr/local/accio-other", "rm -r --f /usr/local/accio-other"):
+            with self.subTest(command):
+                self.assert_blocked(command)
+        self.assert_allowed("echo $(( 1 + 2 ))")
+
+    def test_commands_nested_past_the_limit_are_blocked_not_skipped(self):
+        command = "git status"
+        for _ in range(5):
+            command = "eval " + shlex.quote(command)
+        self.assert_blocked(command, "too deep")
+
+    def test_a_brace_bomb_is_judged_quickly_and_blocked(self):
+        bomb = "rm -rf " + "{a,b,c}" * 30 + "/x"
+        started = time.monotonic()
+        self.assert_blocked(bomb, "rm -rf")
+        self.assertLess(time.monotonic() - started, 5)
 
     def test_odd_input_never_crashes_the_hook(self):
         for command in ("cd a\u0000b; rm -rf c", "rm -rf a\u0000b"):
