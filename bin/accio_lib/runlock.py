@@ -12,7 +12,8 @@ import time
 
 LOCK_NAME = "brew.lock"
 CLAIMS_NAME = "claims.json"
-ALLOW_ONCE_NAME = "allow-once.json"  # commands owl allowed for the next build only (S-022)
+ALLOW_ONCE_NAME = "allow-once.json"  # commands owl allowed once, per story, until its next build (S-022)
+STATUS_NAME = "status.json"  # the build's statuses (accio_lib.board writes it)
 GUARD_NAME = ".guard"
 STALE_SECONDS = 30 * 60
 
@@ -85,28 +86,41 @@ def take(run_dir):
         note = f"replaced a stale lock left by an earlier build ({path})" if path.exists() else ""
         try:
             path.write_text(f"{os.getpid()}\n", encoding="utf-8")
-            (run_dir / CLAIMS_NAME).unlink(missing_ok=True)
-            _claim_allow_once(run_dir)
         except OSError as error:
             raise LockError(f"cannot write {path}: {error}") from error
+        try:
+            (run_dir / CLAIMS_NAME).unlink(missing_ok=True)
+            _expire_grants(run_dir)  # a crashed build's stories used theirs
+        except OSError as error:
+            path.unlink(missing_ok=True)
+            raise LockError(f"cannot start the build's run state in {run_dir}: {error}") from error
     return note
 
 
-def _claim_allow_once(run_dir):
-    """owl's one-build grants go to the build that starts next: it marks them as its own. A grant an earlier build
-    already marked (it crashed before `release`) is used up, so it goes."""
+def _expire_grants(run_dir):
+    """owl's one-build grants last until their story is built: drop those for the stories this build (or a crashed
+    one) touched, which are the ones in run/status.json."""
     path = run_dir / ALLOW_ONCE_NAME
     try:
         grants = json.loads(path.read_text(encoding="utf-8"))
     except FileNotFoundError:
         return
-    except (OSError, UnicodeDecodeError, ValueError):
+    except (UnicodeDecodeError, ValueError):
         path.unlink(missing_ok=True)
         return
-    if not isinstance(grants, dict) or grants.get("claimed"):
+    try:
+        built = json.loads((run_dir / STATUS_NAME).read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        built = {}
+    except (UnicodeDecodeError, ValueError):
+        built = None  # can't tell which stories were built: drop every grant rather than keep a used one
+    stories = grants.get("stories") if isinstance(grants, dict) else None
+    left = {sid: commands for sid, commands in stories.items() if sid not in built} if (
+        isinstance(stories, dict) and isinstance(built, dict)) else {}
+    if left:
+        path.write_text(json.dumps({"stories": left}) + "\n", encoding="utf-8")
+    else:
         path.unlink(missing_ok=True)
-        return
-    path.write_text(json.dumps({**grants, "claimed": True}) + "\n", encoding="utf-8")
 
 
 def refresh(run_dir):
@@ -118,9 +132,9 @@ def refresh(run_dir):
 
 
 def release(run_dir):
-    """End the build: remove the lock, and with it the commands owl allowed for this one build only."""
-    for path in (run_dir / ALLOW_ONCE_NAME, lock_path(run_dir)):
-        try:
-            path.unlink(missing_ok=True)
-        except OSError as error:
-            raise LockError(f"cannot remove {path}: {error}") from error
+    """End the build: the grants of the stories it built are used up, then the lock goes."""
+    try:
+        _expire_grants(run_dir)
+        lock_path(run_dir).unlink(missing_ok=True)
+    except OSError as error:
+        raise LockError(f"cannot end the build in {run_dir}: {error}") from error

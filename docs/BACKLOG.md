@@ -38,7 +38,7 @@ evals/                       scripts/publish.py
 | done | S-019 `brew.js`: load, prepare, implement, check, outcome |
 | done | S-020 `brew.js`: review, judge, fix rounds, budgets |
 | done | S-021 `prophecy` skill |
-| todo | S-022 `owl` skill |
+| done | S-022 `owl` skill |
 | todo | S-023 `sort` skill and `quill` |
 | todo | S-024 `wand` skill, `seeker`, `wandmaker` |
 | todo | S-025 `map` and `vow` skills |
@@ -432,16 +432,29 @@ free graders, all 1.00 locally, about $1 in all): the plugin's `bin/` isn't on P
 ### S-022 · `owl` skill
 Deps: S-008, S-010, S-012 · Files: `skills/owl/SKILL.md`, `skills/owl/references/`, `evals/owl/`, `bin/accio-owl`, `bin/accio_lib/{owl,runs,storyfiles}.py`, `bin/accio-summary` (`--latest`), `bin/accio_lib/pushguard.py`, `hooks/curfew.py` (allow once)
 Context: DESIGN § 3.5, § 7.2, § 7.3.
-- [ ] S-022/1 (no test) reads only `run/owl.md` and takes one batch answer: accept, reject or drop per story; answers; push
-- [ ] S-022/2 (no test) refuses to accept a child without its parent, in plain words
-- [ ] S-022/3 (no test) on reject, writes the Review notes, clears the ledger, and sends the story and its children back to Ready
-- [ ] S-022/4 (no test) on drop, sets `dropped` with the reason and removes the worktree
-- [ ] S-022/5 (no test) runs `accio-merge`, writes the push token only after the user confirms, and makes one `chore(accio): iteration <N> review` commit
-- [ ] S-022/6 (no test) runs `accio-hooks verify` and raises a missing marker as a question
-- [ ] S-022/7 (no test) offers allow once / allow from now on / no for each command `curfew` denied; "from now on" adds it to `agent_allow`
+- [x] S-022/1 (no test) reads only `run/owl.md` and takes one batch answer: accept, reject or drop per story; answers; push
+- [x] S-022/2 (no test) refuses to accept a child without its parent, in plain words
+- [x] S-022/3 (no test) on reject, writes the Review notes, clears the ledger, and sends the story and its children back to Ready
+- [x] S-022/4 (no test) on drop, sets `dropped` with the reason and removes the worktree
+- [x] S-022/5 (no test) runs `accio-merge`, writes the push token only after the user confirms, and makes one `chore(accio): iteration <N> review` commit
+- [x] S-022/6 (no test) runs `accio-hooks verify` and raises a missing marker as a question
+- [x] S-022/7 (no test) offers allow once / allow from now on / no for each command `curfew` denied; "from now on" adds it to `agent_allow`
 Note (S-015): a listed check runs code an agent wrote, so an agent can write `run/push-ok` despite curfew. The push
 token must be useless to it, e.g. the `pre-push` refuses the token while `brew.lock` is held and owl writes it only
 after the build ends, or the token names something an agent can't know in advance.
+Done: two review rounds (code with security, skill), two automated security reviews and a focused re-review. The
+rules live in `accio-owl` (`check`, `close`, `push-ok`; `accio_lib/owl.py`). The push token never opens a build or
+a story worktree, and `push-ok` writes it only after the build, on the base branch. "Allow once" is per story and
+lasts until that story is next built (`run/allow-once.json`, watched by the main snapshot); "from now on" goes to
+`agent_allow`. `accio-summary --latest` finds this repo's brew runs by their transcripts' `cwd`. prophecy's `go`
+waits until owl closed the last build. Text from outside (questions, answers) can't open a section. Evals: 3 owl
+cases, all 1.00 locally; the merge itself can't run in the eval sandbox (its integration worktree is outside the
+workspace) and is covered by `tests/test_merge.py`.
+Known limits: a house-elf that claims another story still doing gets that story's one-build grant (it is then held
+to that story's worktree, and its own story fails); code a check runs can rewrite `run/claims.json`, which the
+snapshot doesn't watch; `close` and a build starting at the same moment can race (the run guard can't be held
+across `close`, since the ledger takes it too); a dropped worktree with ignored files (build output, `.env`) is
+kept and named, never removed.
 
 ### S-023 · `sort` skill and `quill`
 Deps: S-005, S-018 · Files: `skills/sort/SKILL.md`, `agents/quill.md`, `evals/sort/`

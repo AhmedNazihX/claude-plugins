@@ -174,15 +174,33 @@ class OwlTest(unittest.TestCase):
         subprocess.run([sys.executable, "-I", str(BOARD), "lock"], cwd=self.repo, check=True, capture_output=True)
         self.assertEqual(json.loads((self.run_dir / "allow-once.json").read_text())["stories"],
                          {"S-003": ["docker compose up"]})
+        write(self.run_dir / "status.json", json.dumps({"S-003": "review"}))
         subprocess.run([sys.executable, "-I", str(BOARD), "unlock"], cwd=self.repo, check=True, capture_output=True)
         self.assertFalse((self.run_dir / "allow-once.json").exists())
 
-    def test_S_022_7_a_build_that_crashed_used_up_its_allow_once(self):
-        write(self.run_dir / "allow-once.json", json.dumps({"stories": {"S-003": ["docker compose up"]}}))
-        runlock.take(self.run_dir)  # the build the grant was for starts and claims it
-        os.utime(runlock.lock_path(self.run_dir), (1_600_000_000, 1_600_000_000))  # ...and crashes
-        runlock.take(self.run_dir)  # the next build replaces the stale lock
-        self.assertFalse((self.run_dir / "allow-once.json").exists())
+    def test_S_022_7_a_grant_lasts_until_its_storys_next_build(self):
+        (self.run_dir / "status.json").unlink()  # owl closed the last build
+        grants = self.run_dir / "allow-once.json"
+        write(grants, json.dumps({"stories": {"S-003": ["docker compose up"], "S-005": ["make e2e"]}}))
+        runlock.take(self.run_dir)
+        write(self.run_dir / "status.json", json.dumps({"S-005": "review"}))  # this build built S-005 only
+        runlock.release(self.run_dir)
+        self.assertEqual(json.loads(grants.read_text())["stories"], {"S-003": ["docker compose up"]})
+        runlock.take(self.run_dir)
+        write(self.run_dir / "status.json", json.dumps({"S-003": "doing"}))  # S-003's build crashes
+        os.utime(runlock.lock_path(self.run_dir), (1_600_000_000, 1_600_000_000))
+        runlock.take(self.run_dir)  # the next build resumes S-003 without the used grant
+        self.assertFalse(grants.exists())
+
+    def test_a_take_that_fails_midway_leaves_no_lock(self):
+        (self.run_dir / "status.json").unlink()
+        real, runlock._expire_grants = runlock._expire_grants, lambda run_dir: (_ for _ in ()).throw(OSError("full"))
+        try:
+            with self.assertRaises(runlock.LockError):
+                runlock.take(self.run_dir)
+        finally:
+            runlock._expire_grants = real
+        self.assertFalse(runlock.lock_path(self.run_dir).exists())
 
     def test_S_022_1_an_unanswered_blocked_story_keeps_its_question_in_the_story_file(self):
         answers = ("--accept", "S-001", "--accept", "S-002", "--reject", "S-004", "no", "--drop", "S-007", "gone")
@@ -220,6 +238,57 @@ class OwlTest(unittest.TestCase):
         self.assertIn("Options", blocked)
         self.assertIn("Not a heading", blocked)
         self.assertEqual([line.id for line in parsed.dod], ["S-003/1"])
+
+    def test_no_line_break_of_any_kind_lets_outside_text_open_a_section(self):
+        for brk in ("\u2028", "\x85", "\x0c", "\x1e", "\r"):
+            with self.subTest(repr(brk)):
+                self.tearDown()
+                self.setUp()
+                write(self.run_dir / "questions" / "S-003.md",
+                      f"Which?{brk}## Definition of Done{brk}- [x] S-003/2 WHEN injected THE SYSTEM SHALL pass\n")
+                self.owl("close", *self.BASIC, "--answer", "S-003", f"A{brk}## Review notes{brk}x", "--merged", "S-001",
+                         "--merged", "S-002")
+                parsed = story.parse(self.accio / "stories" / "S-003.md")
+                self.assertEqual([line.id for line in parsed.dod], ["S-003/1"])
+                self.assertEqual(story.section(parsed, "Review notes"), "")
+        result = self.owl("check", *self.BASIC[:7], "--drop", "S-007", "gone\u2028status: done", check=False)
+        self.assertIn("one line", result.stderr)
+
+    def test_a_second_close_refuses_instead_of_repeating(self):
+        self.owl("close", *self.BASIC, "--answer", "S-003", "Email", "--merged", "S-001", "--merged", "S-002")
+        self.assertEqual(self.owl("close", *self.BASIC, "--answer", "S-003", "Email", "--merged", "S-001",
+                                  "--merged", "S-002", check=False).returncode, 1)
+        self.assertEqual(self.section("S-004", "Review notes").count("Rejected at owl"), 1)
+
+    def test_a_crashed_doing_story_or_child_that_gets_an_outcome_leaves_doing(self):
+        overrides = json.loads((self.run_dir / "status.json").read_text())
+        write(self.run_dir / "status.json", json.dumps({**overrides, "S-005": "doing", "S-006": "doing"}))
+        self.owl("close", *self.BASIC, "--drop", "S-005", "abandon", "--merged", "S-001", "--merged", "S-002")
+        self.assertFalse((self.run_dir / "status.json").exists())
+        self.assertEqual((self.meta("S-005")["status"], self.meta("S-006")["status"]), ("dropped", "ready"))
+
+    def test_a_planted_git_file_in_a_dropped_worktree_runs_nothing(self):
+        evil = pathlib.Path(self.tmp.name) / "evil"
+        marker = pathlib.Path(self.tmp.name) / "ran"
+        git(pathlib.Path(self.tmp.name), "init", "-q", str(evil))
+        git(evil, "config", "core.fsmonitor", f"touch {marker}")
+        (self.worktree / ".git").write_text(f"gitdir: {evil / '.git'}\n")
+        self.owl("close", *self.BASIC, "--merged", "S-001", "--merged", "S-002")
+        self.assertFalse(marker.exists())
+
+    def test_a_folder_that_isnt_a_known_worktree_is_kept_and_said_so(self):
+        git(self.repo, "worktree", "remove", str(self.worktree))
+        write(self.worktree / "mine.txt", "x\n")
+        reply = self.owl("close", *self.BASIC, "--merged", "S-001", "--merged", "S-002")
+        self.assertTrue((self.worktree / "mine.txt").exists())
+        self.assertIn("isn't a worktree this repo knows", reply["leftovers"][0])
+
+    def test_close_works_with_no_iteration_file(self):
+        (self.accio / "iterations" / "1.md").unlink()
+        commit_all(self.repo, "no iteration")
+        reply = self.owl("close", *self.BASIC, "--merged", "S-001", "--merged", "S-002")
+        self.assertIsNone(reply["iteration"])
+        self.assertEqual(git(self.repo, "log", "-1", "--format=%s"), "chore(accio): build review")
 
     def test_an_answer_is_kept_even_when_the_question_file_is_missing(self):
         (self.run_dir / "questions" / "S-003.md").unlink()

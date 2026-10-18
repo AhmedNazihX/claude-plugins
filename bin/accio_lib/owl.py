@@ -18,6 +18,7 @@
 """
 import dataclasses
 import json
+import pathlib
 import re
 import shlex
 import subprocess
@@ -27,9 +28,10 @@ from accio_lib import board, ledger, merge, paths, plan, pushguard, runlock, sto
 COMMIT_MESSAGE = "chore(accio): iteration {number} review"
 PUSH_TOKEN = pushguard.TOKEN_NAME
 QUESTIONS = "questions"
-SENT_BACK_FROM = ("review", "blocked")
-CONTROL = re.compile(r"[\x00-\x1f\x7f]")
-HEADING_LINE = re.compile(r"^(\s*)#", re.MULTILINE)
+SENT_BACK_FROM = ("review", "blocked", "doing")
+CONTROL = re.compile("[\x00-\x1f\x7f\x85\u2028\u2029]")  # with every other break str.splitlines knows
+HEADING = re.compile(r"^(\s*)#")
+NO_ITERATION_MESSAGE = "chore(accio): build review"
 
 
 class OwlError(Exception):
@@ -185,8 +187,9 @@ def _outcomes(stories, status, answers, merged, culprit):
 
 
 def _escaped(text):
-    """Outside text, kept inside one section: a line starting with `#` can't become a heading."""
-    return HEADING_LINE.sub(r"\1\\#", text)
+    """Outside text, kept inside one section: every line break becomes `\\n` (the story parser splits on all that
+    str.splitlines knows), and a line starting with `#` can't become a heading."""
+    return "\n".join(HEADING.sub(r"\1\\#", line) for line in text.splitlines())
 
 
 def _story_text(parsed, new_status, note, question, answered, dropped):
@@ -223,16 +226,37 @@ def _git(cwd, *args):
         raise OwlError(f"git could not run in {cwd}: {error}") from error
 
 
+SAFE_GIT = ("-c", "core.fsmonitor=false", "-c", "core.hooksPath=/dev/null")
+
+
+def _admin_dir(root, worktree):
+    """The worktree's record in the main repo's git dir, found from the main side: the worktree's own `.git` file is
+    something code a check ran could rewrite, so git never discovers the repo from inside it."""
+    common = _git(root, "rev-parse", "--path-format=absolute", "--git-common-dir").stdout.strip()
+    target = (worktree / ".git").resolve(strict=False)
+    for record in sorted(pathlib.Path(common, "worktrees").glob("*")) if common else ():
+        try:
+            if pathlib.Path((record / "gitdir").read_text(encoding="utf-8").strip()).resolve(strict=False) == target:
+                return record
+        except OSError:
+            continue
+    return None
+
+
 def _remove_worktree(root, sid):
     """Remove a dropped story's worktree when it holds nothing of its own; else return why it was kept."""
     worktree = paths.worktree_root(root) / sid
     if not worktree.exists():
         return None
-    own = _git(worktree, "status", "--porcelain", "--ignored", "--untracked-files=all").stdout.split("\n")
+    record = _admin_dir(root, worktree)
+    if record is None:
+        return f"{worktree} (kept: it isn't a worktree this repo knows)"
+    own = _git(root, *SAFE_GIT, f"--git-dir={record}", f"--work-tree={worktree}", "status", "--porcelain",
+               "--ignored", "--untracked-files=all").stdout.split("\n")
     own = [line[3:] for line in own if line.strip()]
     if own:
         return f"{worktree} (kept: it holds {', '.join(own[:3])}{' …' if len(own) > 3 else ''})"
-    return None if _git(root, "worktree", "remove", str(worktree)).returncode == 0 else str(worktree)
+    return None if _git(root, *SAFE_GIT, "worktree", "remove", str(worktree)).returncode == 0 else str(worktree)
 
 
 def _texts(accio, stories, status, answers, outcomes, number):
@@ -244,8 +268,9 @@ def _texts(accio, stories, status, answers, outcomes, number):
         question = _question(run_dir, sid) if kept else ""
         texts[stories[sid].path] = _story_text(stories[sid], new_status, note, question, answered.get(sid, []),
                                                dropped.get(sid))
-    iteration = accio / plan.ITERATIONS / f"{number}.md"
-    texts[iteration] = _iteration_text(iteration, outcomes)
+    if number is not None:
+        iteration = accio / plan.ITERATIONS / f"{number}.md"
+        texts[iteration] = _iteration_text(iteration, outcomes)
     texts[accio / board.BOARD_NAME] = board.render(stories, {**status, **{sid: change[0] for sid, change in
                                                                          outcomes.items()}})
     commands = [command for _, command in answers.allow]
@@ -254,11 +279,12 @@ def _texts(accio, stories, status, answers, outcomes, number):
     return texts
 
 
-def _settle_run(accio, answers, outcomes, status):
+def _settle_run(accio, answers, outcomes):
     """Right after the write: the run's statuses (only a crash's Doing stays), the grants for the next build, the
     question files that are answered or moot. Doing this first makes a second close refuse instead of repeating."""
     run_dir = board.run_dir(accio)
-    doing = {sid: value for sid, value in board.read_overrides(accio).items() if value == "doing"}
+    doing = {sid: value for sid, value in board.read_overrides(accio).items()
+             if value == "doing" and sid not in outcomes}
     path = run_dir / board.STATUS_NAME
     if doing:
         path.write_text(json.dumps(doing) + "\n", encoding="utf-8")
@@ -274,10 +300,10 @@ def _settle_run(accio, answers, outcomes, status):
             (run_dir / QUESTIONS / f"{sid}.md").unlink(missing_ok=True)
 
 
-def _tidy(accio, answers, outcomes, status):
+def _tidy(accio, answers, outcomes):
     """After the write: settle the run, clear ledger entries, remove dropped worktrees; returns leftovers."""
     try:
-        _settle_run(accio, answers, outcomes, status)
+        _settle_run(accio, answers, outcomes)
         for sid, (_, _, _, clear) in outcomes.items():
             if clear:
                 ledger.clear(board.run_dir(accio), sid)
@@ -303,17 +329,16 @@ def close(accio, answers, base, merged=(), culprit=None):
     accepted = check(stories, status, answers)
     _check_merge(stories, status, accepted, tuple(merged), culprit)
     iterations = plan.iterations(accio)
-    if not iterations:
-        raise OwlError("there is no iteration to close (.accio/iterations/ is empty); plan one with prophecy")
-    number = iterations[-1][0]
+    number = iterations[-1][0] if iterations else None
     outcomes = _outcomes(stories, status, answers, tuple(merged), culprit)
     texts = _texts(accio, stories, status, answers, outcomes, number)
     try:
-        storyfiles.write_all(texts, f"iteration {number}'s review")
+        storyfiles.write_all(texts, "the review")
     except storyfiles.WriteError as error:
         raise OwlError(str(error)) from error
-    leftovers = _tidy(accio, answers, outcomes, status)
-    commit, why = storyfiles.commit(accio.parent, list(map(str, texts)), COMMIT_MESSAGE.format(number=number))
+    leftovers = _tidy(accio, answers, outcomes)
+    message = COMMIT_MESSAGE.format(number=number) if number is not None else NO_ITERATION_MESSAGE
+    commit, why = storyfiles.commit(accio.parent, list(map(str, texts)), message)
     return {"iteration": number, "outcomes": {sid: words for sid, (_, words, _, _) in sorted(outcomes.items())},
             "leftovers": leftovers, "commit": commit, "commit_error": why}
 
