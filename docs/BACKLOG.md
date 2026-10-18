@@ -36,7 +36,7 @@ evals/                       scripts/publish.py
 | done | S-017 Build agents: `portkey`, `house-elf`, `prefect` |
 | done | S-018 Review agents and findings template |
 | done | S-019 `brew.js`: load, prepare, implement, check, outcome |
-| todo | S-020 `brew.js`: review, judge, fix rounds, budgets |
+| done | S-020 `brew.js`: review, judge, fix rounds, budgets |
 | todo | S-021 `prophecy` skill |
 | todo | S-022 `owl` skill |
 | todo | S-023 `sort` skill and `quill` |
@@ -392,16 +392,25 @@ time or token column: workflows have no clock and `agent()` reports no usage (`o
 Open: a DoD line that takes house-elf over 30 min with no checkpoint lets the lock go stale mid-story.
 
 ### S-020 · `brew.js`: review, judge, fix rounds, budgets
-Deps: S-018, S-019 · Files: `workflows/brew.js`, `tests/workflow/brew-review.test.mjs`
+Deps: S-018, S-019 · Files: `workflows/brew.js`, `tests/workflow/brew-review.test.mjs`, `bin/accio-brief` (`--review`), `bin/accio_lib/review.py`, `bin/accio-ledger` + `ledger.py` (`panel_id`), `bin/accio_lib/policy.py`, `agents/*.md`, `references/checklists/README.md`
 Context: DESIGN § 3.4 steps 4–6, § 7.1, § 8.6.
 Label every agent with its story id first (`S-012 implement`): `accio-cost` ties usage to stories by that
 prefix, and treat its 2× stop flags as unreliable while its report is `partial` (S-009).
-- [ ] S-020/1 WHEN findings remain after 2 fix rounds THE SYSTEM SHALL mark the story BLOCKED and never run a third
-- [ ] S-020/2 WHEN a fix round runs THE SYSTEM SHALL re-run only the reviewers that raised findings, on the fix diff only
-- [ ] S-020/3 WHEN a finding conflicts with the story, or an agent returns NEEDS_CONTEXT THE SYSTEM SHALL call `headmaster`
-- [ ] S-020/4 WHEN `headmaster` returns a question THE SYSTEM SHALL write `run/questions/<ID>.md` and mark the story BLOCKED
-- [ ] S-020/5 WHEN a story is on the Quick track THE SYSTEM SHALL use one combined reviewer; WHEN it touches a risky path THE SYSTEM SHALL add `auror`
-- [ ] S-020/6 WHEN usage passes 2× the budget (or `maxTurns`, per S-001) THE SYSTEM SHALL stop the story as BLOCKED
+- [x] S-020/1 WHEN findings remain after 2 fix rounds THE SYSTEM SHALL mark the story BLOCKED and never run a third
+- [x] S-020/2 WHEN a fix round runs THE SYSTEM SHALL re-run only the reviewers that raised findings, on the fix diff only
+- [x] S-020/3 WHEN a finding conflicts with the story, or an agent returns NEEDS_CONTEXT THE SYSTEM SHALL call `headmaster`
+- [x] S-020/4 WHEN `headmaster` returns a question THE SYSTEM SHALL write `run/questions/<ID>.md` and mark the story BLOCKED
+- [x] S-020/5 WHEN a story is on the Quick track THE SYSTEM SHALL use one combined reviewer; WHEN it touches a risky path THE SYSTEM SHALL add `auror`
+- [x] S-020/6 WHEN usage passes 2× the budget (or `maxTurns`, per S-001) THE SYSTEM SHALL stop the story as BLOCKED
+Done: two review rounds (plus an automated security review). portkey writes the review package (`accio-brief
+--review [--since]`: package and diff as files, `risky` when the diff touches a risky path or `risk` names security).
+Quick has `examiner` alone, also reviewing quality. A fix round re-checks, and re-reviews only the fix diff with the
+reviewers that failed, plus `auror` whenever the package is risky. A conflicting finding comes back as house-elf's
+NEEDS_CONTEXT, so every NEEDS_CONTEXT goes to headmaster; a ruling holds for the rest of the story. headmaster no
+longer records in the ledger (curfew denies it): a pass recorded before the re-review could be skipped to. The ledger
+key's panel now includes `risk` and `risky_paths`. The table lists stories in load order. Budgets count fresh tokens
+(the user's choice; S-009 fix). The 2× stop is `maxTurns` per agent (house-elf 150, reviewers 60, headmaster 30;
+provisional): it caps agents, not the story.
 
 ### S-021 · `prophecy` skill
 Deps: S-004, S-005 · Files: `skills/prophecy/SKILL.md`, `skills/prophecy/references/`, `evals/prophecy/`
