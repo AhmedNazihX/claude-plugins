@@ -32,7 +32,7 @@ SCRIPTS = {  # each Bash policy's accio scripts and the subcommands it may run (
     "scripts": {"accio-board": BOARD_RUN, "accio-brief": None, "accio-hooks": frozenset({"verify"}),
                 "accio-check": None},
     "checks": {"accio-ledger": LEDGER_USE, "accio-board": frozenset({"move", "refresh"}), "accio-check": None},
-    "ledger": {"accio-ledger": LEDGER_USE},
+    "ledger": {"accio-ledger": frozenset({"key", "check"})},  # headmaster reads; prefect records the outcome (S-020)
 }
 PREFECT_CHECK = re.compile(r"S-\d{3,}")  # prefect runs exactly `accio-check <ID>`; only portkey takes snapshots
 IN_PROGRESS = "doing"

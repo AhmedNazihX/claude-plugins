@@ -147,15 +147,15 @@ def existing_files(main, onto, files):
     return tuple(path for path in files if _git(main, "cat-file", "-e", f"{onto}:{path}", check=False).returncode == 0)
 
 
-def _bullets(items, empty="none"):
+def bullets(items, empty="none"):
     return "\n".join(f"- {item}" for item in items) or f"- {empty}"
 
 
-def _fill(name, values):
+def fill(name, values):
     return string.Template((TEMPLATES / name).read_text(encoding="utf-8")).substitute(values)
 
 
-def _common(parsed, worktree, accio):
+def common(parsed, worktree, accio):
     story_id = parsed.meta["id"]
     return {"story_id": story_id, "title": parsed.meta["title"], "worktree": worktree,
             "worktree_q": shlex.quote(str(worktree)), "branch": branch_name(story_id),
@@ -163,20 +163,24 @@ def _common(parsed, worktree, accio):
             "report": accio / "run" / story_id / "report.md", "report_sections": summary.report_sections()}
 
 
+def dod_lines(parsed):
+    return "\n".join(f"- {line.id} {'(no test) ' if not line.testable else ''}{line.text}" for line in parsed.dod)
+
+
 def render_brief(parsed, accio, worktree, onto, checks, reuse_files, notes):
-    dod = "\n".join(f"- {line.id} {'(no test) ' if not line.testable else ''}{line.text}" for line in parsed.dod)
+    dod = dod_lines(parsed)
     reuse = [*filter(None, [story.section(parsed, "Reuse")]), *(f"`{path}`" for path in reuse_files)]
-    values = {**_common(parsed, worktree, accio), "base": onto[:12], "dod": dod,
-              "files": _bullets(f"`{path}`" for path in parsed.meta.get("files", ())),
-              "reuse": _bullets(reuse), "checks": _bullets(f"`{check['command']}`" for check in checks),
-              "scripts": _bullets(f"`{shlex.quote(str(path))}`" for path in sorted(BIN.glob("accio-*"))),
+    values = {**common(parsed, worktree, accio), "base": onto[:12], "dod": dod,
+              "files": bullets(f"`{path}`" for path in parsed.meta.get("files", ())),
+              "reuse": bullets(reuse), "checks": bullets(f"`{check['command']}`" for check in checks),
+              "scripts": bullets(f"`{shlex.quote(str(path))}`" for path in sorted(BIN.glob("accio-*"))),
               "review_notes": story.section(parsed, "Review notes") or "none",
               "notes": "".join(f"\n## Before you start\n{note}\n" for note in notes)}
-    return _fill("brief.md", values)
+    return fill("brief.md", values)
 
 
 def render_fix(parsed, accio, worktree, findings):
-    return _fill("fix-brief.md", {**_common(parsed, worktree, accio), "findings": "\n\n".join(findings)})
+    return fill("fix-brief.md", {**common(parsed, worktree, accio), "findings": "\n\n".join(findings)})
 
 
 def write_file(path, text):

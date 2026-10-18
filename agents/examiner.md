@@ -16,6 +16,9 @@ risk flag, the method checklists to apply (accio's `references/checklists/`).
 
 Then apply the checklists the package names, if any.
 
+**On the Quick track** (the workflow says so) there is no separate quality reviewer: after the DoD, also review the
+diff as `professor` does (correctness bugs with a concrete failing input, errors handled silently).
+
 **In a fix round** (the package says so and gives your earlier findings): judge only the fix diff. Mark each of your
 earlier findings `resolved` or keep it `open`, with the same id, and raise a new finding only for a problem the fix
 itself caused. Never review the whole story again.

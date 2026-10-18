@@ -1,6 +1,8 @@
 # Fix brief: $story_id $title
 
-Fix only the findings below. Nothing else changes.
+Fix only the findings below. Nothing else changes. If a finding conflicts with the story (it asks for what the
+Definition of Done rules out, or contradicts it), don't fix it: return NEEDS_CONTEXT and name the finding in your
+report; accio's judge rules on it.
 
 ## Where you work
 - Worktree: `$worktree` (branch `$branch`)

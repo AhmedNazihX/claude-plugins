@@ -308,7 +308,8 @@ class OtherAgentsTest(CurfewTestBase):
                  ("portkey", "accio-check S-001 snapshot --fresh", True),
                  ("portkey", "accio-check S-001 snapshot", True), ("headmaster", "accio-check S-001", False),
                  ("headmaster", "accio-ledger check S-001", True),
-                 ("headmaster", "accio-ledger clear S-001", False))
+                 ("headmaster", "accio-ledger clear S-001", False),
+                 ("headmaster", "accio-ledger record S-001 k pass", False))  # S-020: the workflow records
         for agent, command, allowed in cases:
             with self.subTest(agent=agent, command=command):
                 name, _, rest = command.partition(" ")

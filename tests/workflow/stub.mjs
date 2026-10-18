@@ -47,7 +47,8 @@ export async function runWorkflow(name, responder, args, options = {}) {
   return { result, calls }
 }
 
-// The default happy-path replies, by step; a test overrides what it needs.
+// The default happy-path replies, by step; a test overrides what it needs, by full label (`S-001 examiner r1`) or by
+// step (`examiner`). A label is `<ID> <step>`, plus ` r<n>` in a fix round.
 export function happy(stories, overrides = {}) {
   return async (call) => {
     const [id, step] = call.label.includes(' ') ? call.label.split(' ') : [null, call.label]
@@ -55,10 +56,19 @@ export function happy(stories, overrides = {}) {
     if (override) return override(call, id)
     if (step === 'load') return { locked: true, stories }
     if (step === 'prepare') return { worktree: `/wt/${id}`, brief: `/run/${id}/brief.md`, base: 'abc' }
-    if (step === 'implement') return { status: 'DONE', head: 'def', report: `/run/${id}/report.md` }
+    if (step === 'implement' || step === 'fix') return { status: 'DONE', head: 'def', report: `/run/${id}/report.md` }
     if (step === 'check') return { pass: true, skipped: false, failing: [] }
+    if (step === 'package') return { package: `/run/${id}/review-package.md`, head: 'h0', risky: false }
+    if (REVIEWERS.includes(step)) return pass(id, step)
+    if (step === 'fix-brief') return { worktree: `/wt/${id}`, brief: `/run/${id}/fix-brief.md`, base: 'abc' }
+    if (step === 'judge') return { kind: 'ruling', text: 'The story is right; the finding goes.', path: null }
     return { done: true }
   }
 }
+
+const REVIEWERS = ['examiner', 'professor', 'auror']
+const counts = (major) => ({ critical: 0, major, minor: 0 })
+export const pass = (id, reviewer) => ({ verdict: 'pass', counts: counts(0), path: `/run/${id}/findings-${reviewer}.md` })
+export const fail = (id, reviewer) => ({ verdict: 'fail', counts: counts(1), path: `/run/${id}/findings-${reviewer}.md` })
 
 export const story = (id, extra = {}) => ({ id, title: `Story ${id}`, track: 'story', parents: [], resume: null, ...extra })

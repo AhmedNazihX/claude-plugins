@@ -1,10 +1,10 @@
 export const meta = {
   name: 'brew',
-  description: 'Build the ready stories: each in its own worktree, test-first, checked by scripts, then marked for review',
+  description: 'Build the ready stories: each in its own worktree, test-first, checked by scripts, reviewed, then marked for your review',
   whenToUse: 'After /accio:prophecy moved stories to Ready. Runs unattended; review the result with /accio:owl.',
   phases: [
     { title: 'Load', detail: 'take the run lock and list the stories to build' },
-    { title: 'Build', detail: 'prepare, implement, check and record each story, at most 3 at once' },
+    { title: 'Build', detail: 'prepare, implement, check, review, fix and record each story, at most 3 at once' },
     { title: 'Finish', detail: 'release the run lock' },
   ],
 }
@@ -14,15 +14,28 @@ export const meta = {
 // READY and gives its slot to another story meanwhile, and never starts when a parent ends BLOCKED. A story a crash
 // left in Doing resumes at check or prepare. portkey takes the run lock at load and releases it in `finally`;
 // every step refreshes it (a board move, or prefect's and house-elf's `accio-board refresh`). The run returns the
-// build table only. Review, the judge and fix rounds come in S-020; until then a story that passes its checks is
-// READY.
+// build table only.
+// A story that passes its checks is reviewed by its panel (Quick: examiner alone; else examiner and professor;
+// auror on a risky path). Findings get at most 2 fix rounds, each a fresh house-elf (one tier up in round 2), a
+// re-check, and a re-review of only the fix diff by only the reviewers that raised them. A house-elf that returns
+// NEEDS_CONTEXT, which includes a fix it refuses because the finding conflicts with the story, goes to headmaster:
+// a ruling gets one more try, a question blocks the story. house-elf's `maxTurns` is the 2× budget stop (S-001).
+// Every label starts with the story id: accio-cost ties usage to stories by it.
 
 const WIP = 3
 const STALL_MS = 20 * 60 * 1000
+const MAX_FIX_ROUNDS = 2
+const REVIEW_MODEL = 'sonnet'
+const TIER_UP = { haiku: 'sonnet', sonnet: 'opus', opus: 'opus' }
 const PORTKEY = 'accio:portkey'
 const HOUSE_ELF = 'accio:house-elf'
 const PREFECT = 'accio:prefect'
+const HEADMASTER = 'accio:headmaster'
+const QUESTIONS = '.accio/run/questions'
 const IMPLEMENT_STATUSES = ['DONE', 'DONE_WITH_CONCERNS', 'NEEDS_CONTEXT', 'BLOCKED']
+const SILENT = 'The implementer stopped answering: it hit its turn limit (accio\'s stop at 2× its token budget), ' +
+  'or was silent for over 20 minutes, perhaps waiting on a permission question (see .accio/run/stuck.json). ' +
+  'Build it again?'
 
 const STORY_SCHEMA = {
   type: 'object',
@@ -56,6 +69,24 @@ const CHECK_SCHEMA = {
     weak_tests: { type: 'array', items: { type: 'string' } }, error: { type: 'string' },
   },
 }
+const PACKAGE_SCHEMA = {
+  type: 'object',
+  properties: { package: { type: 'string' }, head: { type: 'string' }, risky: { type: 'boolean' }, error: { type: 'string' } },
+}
+const COUNT = { type: 'integer' }
+const REVIEW_SCHEMA = {
+  type: 'object',
+  properties: {
+    verdict: { type: 'string', enum: ['pass', 'fail'] }, path: { type: 'string' },
+    counts: { type: 'object', properties: { critical: COUNT, major: COUNT, minor: COUNT }, required: ['critical', 'major', 'minor'] },
+  },
+  required: ['verdict', 'counts', 'path'],
+}
+const JUDGE_SCHEMA = {
+  type: 'object',
+  properties: { kind: { type: 'string', enum: ['ruling', 'question'] }, text: { type: 'string' }, path: { type: ['string', 'null'] } },
+  required: ['kind', 'text'],
+}
 const OUTCOME_SCHEMA = { type: 'object', properties: { done: { type: 'boolean' }, error: { type: 'string' } }, required: ['done'] }
 
 // --- agents ---------------------------------------------------------------------------------------------------
@@ -63,11 +94,16 @@ const OUTCOME_SCHEMA = { type: 'object', properties: { done: { type: 'boolean' }
 async function call(prompt, opts) {
   // A stalled or dead agent gives null (or throws): the story then goes to Blocked with a plain question.
   try {
-    return await agent(prompt, { phase: 'Build', ...opts })
+    return await agent(prompt, { phase: 'Build', stallMs: STALL_MS, ...opts })
   } catch (error) {
     return null
   }
 }
+
+const label = (story, step, round) => `${story.id} ${step}${round ? ` r${round}` : ''}`
+const rulingNote = (ruling) => (ruling ? ` The judge ruled: ${ruling}` : '')
+// A step that ends the story; `asked` when headmaster already wrote the question file.
+const stop = (question, asked = false) => ({ stop: true, question, asked })
 
 function parentFlag(story) {
   return story.parents.length ? ` --parent story/${story.parents[story.parents.length - 1]}` : ''
@@ -78,41 +114,98 @@ function prepare(story) {
     `Step 1, prepare story ${story.id}. Run, in order: \`accio-board move ${story.id} doing\`, ` +
       `\`accio-brief ${story.id}${parentFlag(story)}\`, \`accio-check ${story.id} snapshot\`. ` +
       'Reply with {worktree, brief, base} from accio-brief, or {error} if a script fails.',
-    { agentType: PORTKEY, model: 'haiku', schema: PREPARE_SCHEMA, label: `${story.id} prepare`, stallMs: STALL_MS },
+    { agentType: PORTKEY, model: 'haiku', schema: PREPARE_SCHEMA, label: label(story, 'prepare') },
   )
 }
 
-function implement(story, prepared) {
-  const model = story.track === 'feature' ? 'opus' : 'sonnet'
+function implement(story, prepared, model, ruling) {
   return call(
     `Build story ${story.id} (${story.title}). Your brief is ${prepared.brief}; your worktree is ${prepared.worktree}. ` +
-      'Run the claim command from the brief first, on its own.',
-    { agentType: HOUSE_ELF, model, schema: IMPLEMENT_SCHEMA, label: `${story.id} implement`, stallMs: STALL_MS },
+      'Run the claim command from the brief first, on its own.' + rulingNote(ruling),
+    { agentType: HOUSE_ELF, model, schema: IMPLEMENT_SCHEMA, label: label(story, 'implement') },
   )
 }
 
-function check(story, worktree) {
+function check(story, worktree, round) {
   return call(
     `Step 3, check story ${story.id}. Worktree: ${worktree}. Panel: ${story.track}. Follow your step 3. Reply ` +
       'with accio-check\'s JSON, or {"skipped": true} when the ledger says skip, or {error}.',
-    { agentType: PREFECT, model: 'haiku', schema: CHECK_SCHEMA, label: `${story.id} check`, stallMs: STALL_MS },
+    { agentType: PREFECT, model: 'haiku', schema: CHECK_SCHEMA, label: label(story, 'check', round) },
   )
 }
 
-async function record(story, worktree, outcome, question) {
-  const tail = outcome === 'READY'
-    ? `It is READY: move it to review and record pass.`
+function judge(story, worktree, round, report, findings) {
+  const about = findings.length
+    ? ` It was fixing these findings and says one conflicts with the story: ${findings.join(', ')}.` : ''
+  return call(
+    `Step 5, judge story ${story.id}. The implementer returned NEEDS_CONTEXT; its report: ${report || 'none'}.` +
+      `${about} The story: .accio/stories/${story.id}.md; worktree: ${worktree}. Rule from the story and the ` +
+      `design, or, if only the user can answer, write one question to ${QUESTIONS}/${story.id}.md. The workflow ` +
+      'records the outcome. Reply {kind, text, path}.',
+    { agentType: HEADMASTER, model: REVIEW_MODEL, schema: JUDGE_SCHEMA, label: label(story, 'judge', round) },
+  )
+}
+
+async function record(story, worktree, outcome, question, asked) {
+  const blocked = asked
+    ? `It is BLOCKED: move it to blocked and record fail. headmaster already wrote the question to ` +
+      `${QUESTIONS}/${story.id}.md; don't add one.`
     : `It is BLOCKED: move it to blocked, record fail, and write this question: ${question}`
   const reply = await call(
-    `Step 7, outcome of story ${story.id}. Worktree: ${worktree}. Panel: ${story.track}. ${tail} ` +
+    `Step 7, outcome of story ${story.id}. Worktree: ${worktree}. Panel: ${story.track}. ` +
+      `${outcome === 'READY' ? 'It is READY: move it to review and record pass.' : blocked} ` +
       'Reply {"done": true} or {error}.',
-    { agentType: PREFECT, model: 'haiku', schema: OUTCOME_SCHEMA, label: `${story.id} outcome`, stallMs: STALL_MS })
+    { agentType: PREFECT, model: 'haiku', schema: OUTCOME_SCHEMA, label: label(story, 'outcome') })
   const recorded = Boolean(reply && reply.done && !reply.error)
   const note = recorded ? '' : 'the board was not updated; the next brew resumes it'
   return { id: story.id, title: story.title, outcome, question: question || '', note }
 }
 
-// --- one story -------------------------------------------------------------------------------------------------
+// --- building: implement or fix, with the judge on NEEDS_CONTEXT ----------------------------------------------
+
+function settle(reply, ruling) {
+  if (!reply) return stop(SILENT)
+  if (reply.status === 'BLOCKED') {
+    return stop(`The implementer stopped (BLOCKED); its report says why: ${reply.report || 'none'}.`)
+  }
+  return { reply, ruling }
+}
+
+// `attempt(ruling)` runs a fresh house-elf. NEEDS_CONTEXT goes to headmaster once (S-020/3): a ruling gets one more
+// try, a question stops the story with headmaster's question file (S-020/4).
+async function build(story, worktree, round, attempt, findings = []) {
+  const first = await attempt('')
+  if (!first || first.status !== 'NEEDS_CONTEXT') return settle(first, '')
+  const judged = await judge(story, worktree, round, first.report, findings)
+  if (!judged || !judged.text) {
+    return stop(`The implementer needs context (see ${first.report || 'its report'}) and the judge didn't answer. Try again?`)
+  }
+  if (judged.kind === 'question') return stop(judged.text, true)
+  const again = await attempt(judged.text)
+  if (again && again.status === 'NEEDS_CONTEXT') {
+    return stop(`The implementer still needs context after the judge's ruling; its report says what: ${again.report || 'none'}.`)
+  }
+  return settle(again, judged.text)
+}
+
+async function fixRound(story, worktree, round, findings, model) {
+  const flags = findings.map((path) => ` --fix ${path}`).join('')
+  const brief = await call(
+    `Fix round ${round} of story ${story.id}: run \`accio-brief ${story.id}${flags}\`. Reply with its ` +
+      '{worktree, brief, base}, or {error} if it fails.',
+    { agentType: PORTKEY, model: 'haiku', schema: PREPARE_SCHEMA, label: label(story, 'fix-brief', round) })
+  if (!brief || brief.error || !brief.brief) {
+    return stop(`Writing the fix brief failed (${(brief && brief.error) || 'no answer'}). Try again?`)
+  }
+  return build(story, worktree, round, (ruling) => call(
+    `Fix round ${round} of story ${story.id}. Your fix brief is ${brief.brief}; your worktree is ${worktree}. ` +
+      'Run the claim command from the brief first, on its own. If a finding conflicts with the story (it asks ' +
+      'for what the DoD rules out, or contradicts it), don\'t fix it: reply NEEDS_CONTEXT and name it in your ' +
+      'report.' + rulingNote(ruling),
+    { agentType: HOUSE_ELF, model, schema: IMPLEMENT_SCHEMA, label: label(story, 'fix', round) }), findings)
+}
+
+// --- checks and review -----------------------------------------------------------------------------------------
 
 function checkQuestion(result) {
   const parts = [
@@ -127,7 +220,76 @@ function checkQuestion(result) {
   return `The checks stopped it: ${why}. Should it be fixed and built again?`
 }
 
+function checkStop(result) {
+  if (!result || result.error) return stop(`The check step failed (${(result && result.error) || 'no answer'}). Try again?`)
+  return result.skipped || result.pass ? null : stop(checkQuestion(result))
+}
+
+function panel(story, risky) {
+  const base = story.track === 'quick' ? ['examiner'] : ['examiner', 'professor']
+  return risky ? [...base, 'auror'] : base
+}
+
+async function packageFor(story, round, since) {
+  const reply = await call(
+    `Step 4, review package for story ${story.id}: run \`accio-brief ${story.id} --review` +
+      `${since ? ` --since ${since}` : ''}\`. Reply with its JSON {package, head, risky}, or {error} if it fails.`,
+    { agentType: PORTKEY, model: 'haiku', schema: PACKAGE_SCHEMA, label: label(story, 'package', round) })
+  if (!reply || reply.error || !reply.package || !reply.head) {
+    return stop(`Writing the review package failed (${(reply && reply.error) || 'no answer'}). Try again?`)
+  }
+  return reply
+}
+
+function reviewPrompt(story, name, pkg, round, ruling) {
+  const quick = story.track === 'quick' && name === 'examiner'
+    ? ' Quick track: no separate quality reviewer, so after the DoD also review the diff as professor does ' +
+      '(correctness bugs, silent errors).' : ''
+  const fix = round
+    ? ` This is fix round ${round}: judge only the fix diff, and mark each of your earlier findings resolved or open.` : ''
+  return `Step 4, review story ${story.id}. Your review package: ${pkg.package}.${quick}${fix}${rulingNote(ruling)} ` +
+    'Reply {verdict, counts, path}.'
+}
+
+async function review(story, names, pkg, round, ruling) {
+  const replies = await Promise.all(names.map((name) => call(reviewPrompt(story, name, pkg, round, ruling),
+    { agentType: `accio:${name}`, model: REVIEW_MODEL, schema: REVIEW_SCHEMA, label: label(story, name, round) })))
+  return names.map((name, index) => ({ name, reply: replies[index] }))
+}
+
+// Review, then at most MAX_FIX_ROUNDS fix rounds (S-020/1, /2, /5). Returns a stop, or {} when the story is READY.
+async function reviewAndFix(story, worktree, model) {
+  let pkg = await packageFor(story, 0, null)
+  if (pkg.stop) return pkg
+  let names = panel(story, pkg.risky)
+  let ruling = ''
+  for (let round = 0; ; round += 1) {
+    const verdicts = await review(story, names, pkg, round, ruling)
+    const silent = verdicts.find((each) => !each.reply)
+    if (silent) return stop(`Its reviewer ${silent.name} stopped answering for over 20 minutes. Review it again?`)
+    const failing = verdicts.filter((each) => each.reply.verdict !== 'pass')
+    if (!failing.length) return {}
+    const findings = failing.map((each) => each.reply.path)
+    if (round === MAX_FIX_ROUNDS) {
+      return stop(`Findings remain after ${MAX_FIX_ROUNDS} fix rounds (${findings.join(', ')}). Fix them by hand, ` +
+        'or change the story?')
+    }
+    const fixed = await fixRound(story, worktree, round + 1, findings, round + 1 === MAX_FIX_ROUNDS ? TIER_UP[model] : model)
+    if (fixed.stop) return fixed
+    ruling = fixed.ruling || ruling
+    const failed = checkStop(await check(story, worktree, round + 1))
+    if (failed) return failed
+    pkg = await packageFor(story, round + 1, pkg.head)
+    if (pkg.stop) return pkg
+    names = failing.map((each) => each.name)
+  }
+}
+
+// --- one story -------------------------------------------------------------------------------------------------
+
 async function runStory(story) {
+  const model = story.track === 'feature' ? 'opus' : 'sonnet'
+  const blocked = (worktree, ended) => record(story, worktree, 'BLOCKED', ended.question, ended.asked)
   let worktree = story.worktree
   if (story.resume !== 'check') {
     const prepared = await prepare(story)
@@ -136,25 +298,15 @@ async function runStory(story) {
       return record(story, worktree, 'BLOCKED', `Preparing it failed (${why}). Try again?`)
     }
     worktree = prepared.worktree
-    const built = await implement(story, prepared)
-    if (!built) {
-      return record(story, worktree, 'BLOCKED', 'The implementer stopped answering for over 20 minutes; it may have ' +
-        'waited on a permission question (see .accio/run/stuck.json). Build it again?')
-    }
-    if (built.status === 'BLOCKED' || built.status === 'NEEDS_CONTEXT') {
-      return record(story, worktree, 'BLOCKED',
-        `The implementer stopped (${built.status}); its report says why: ${built.report || 'none'}.`)
-    }
+    const built = await build(story, worktree, 0, (ruling) => implement(story, prepared, model, ruling))
+    if (built.stop) return blocked(worktree, built)
   }
-  const result = await check(story, worktree)
-  if (!result || result.error) {
-    const why = (result && result.error) || 'no answer'
-    return record(story, worktree, 'BLOCKED', `The check step failed (${why}). Try again?`)
-  }
-  if (result.skipped || result.pass) {
-    return record(story, worktree, 'READY')
-  }
-  return record(story, worktree, 'BLOCKED', checkQuestion(result))
+  const result = await check(story, worktree, 0)
+  if (result && result.skipped && !result.error) return record(story, worktree, 'READY')  // passed review before
+  const failed = checkStop(result)
+  if (failed) return blocked(worktree, failed)
+  const reviewed = await reviewAndFix(story, worktree, model)
+  return reviewed.stop ? blocked(worktree, reviewed) : record(story, worktree, 'READY')
 }
 
 // --- scheduling ------------------------------------------------------------------------------------------------
@@ -198,7 +350,8 @@ async function schedule(stories) {
     outcomes.set(story.id, row.outcome)
     rows.push(row)
   }
-  return rows
+  const order = stories.map((story) => story.id)  // the table lists stories in load (dependency) order
+  return rows.sort((a, b) => order.indexOf(a.id) - order.indexOf(b.id))
 }
 
 // --- the build table -------------------------------------------------------------------------------------------
@@ -224,7 +377,7 @@ const loaded = await call(
     'Reply {"locked": true, "stories": [...]} with each story\'s id, title, track, parents, resume and worktree. ' +
     'If taking the lock fails, reply {"locked": false, "stories": [], "error": "..."}; if a script fails after ' +
     'the lock was taken, reply {"locked": true, "stories": [], "error": "..."}.',
-  { agentType: PORTKEY, model: 'haiku', schema: LOAD_SCHEMA, label: 'load', phase: 'Load', stallMs: STALL_MS },
+  { agentType: PORTKEY, model: 'haiku', schema: LOAD_SCHEMA, label: 'load', phase: 'Load' },
 )
 if (!loaded) {
   return table([], "Build didn't start: portkey didn't answer. If it took the run lock, the lock goes stale after " +
@@ -242,7 +395,7 @@ try {
 } finally {
   phase('Finish')
   await call('Release the run lock: run `accio-board unlock`. Reply {"done": true} or {error}.',
-    { agentType: PORTKEY, model: 'haiku', schema: OUTCOME_SCHEMA, label: 'unlock', phase: 'Finish', stallMs: STALL_MS })
+    { agentType: PORTKEY, model: 'haiku', schema: OUTCOME_SCHEMA, label: 'unlock', phase: 'Finish' })
 }
 const empty = loaded.error ? `Build didn't start: ${loaded.error}` : 'Nothing to build: no story is ready'
 return table(rows, rows.length ? '' : empty)

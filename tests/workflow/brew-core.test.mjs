@@ -70,8 +70,8 @@ test('S-019/5 a ledger skip counts as passed and nothing is re-run', async () =>
 test('S-019/6 a story a crash left in Doing resumes at check or prepare', async () => {
   const stories = [story('S-001', { resume: 'check' }), story('S-002', { resume: 'prepare' })]
   const { calls } = await runWorkflow('brew', happy(stories))
-  assert.deepEqual(steps(calls, 'S-001'), ['check', 'outcome'])
-  assert.deepEqual(steps(calls, 'S-002'), ['prepare', 'implement', 'check', 'outcome'])
+  assert.deepEqual(steps(calls, 'S-001'), ['check', 'package', 'examiner', 'professor', 'outcome'])
+  assert.deepEqual(steps(calls, 'S-002'), ['prepare', 'implement', 'check', 'package', 'examiner', 'professor', 'outcome'])
   assert.match(calls[0].prompt, /--resume/)
 })
 
@@ -129,7 +129,7 @@ test('S-019/2 an implementer that returns BLOCKED or NEEDS_CONTEXT stops its sto
     'S-002 implement': async () => ({ status: 'NEEDS_CONTEXT', report: '/run/S-002/report.md' }),
   }))
   assert.deepEqual(steps(calls, 'S-001'), ['prepare', 'implement', 'outcome'])
-  assert.deepEqual(steps(calls, 'S-002'), ['prepare', 'implement', 'outcome'])
+  assert.deepEqual(steps(calls, 'S-002'), ['prepare', 'implement', 'judge', 'implement', 'outcome'])  // S-020/3
   assert.match(calls.find((call) => call.label === 'S-001 outcome').prompt, /report says why: \/run\/S-001\/report.md/)
   assert.equal((result.match(/BLOCKED/g) || []).length, 2)
 })
@@ -155,7 +155,7 @@ test('S-019/3 a child with two parents in this run waits for the next run; a par
   assert.ok(order.indexOf('S-001 outcome') < order.indexOf('S-003 prepare'), order.join(', '))
   assert.deepEqual(steps(calls, 'S-004'), [])
   assert.match(result, /S-004 Story S-004\s+NOT STARTED\s+it needs 2 stories from this run/)
-  assert.deepEqual(steps(calls, 'S-005'), ['prepare', 'implement', 'check', 'outcome'])
+  assert.deepEqual(steps(calls, 'S-005'), ['prepare', 'implement', 'check', 'package', 'examiner', 'professor', 'outcome'])
 })
 
 test('S-019/7 an outcome the board did not take, or a check with no reasons, still reads plainly', async () => {

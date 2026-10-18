@@ -1,9 +1,12 @@
 #!/usr/bin/env python3
-"""accio-brief <ID> [--parent <branch>] [--fix <findings-file> ...] (DESIGN § 3.4 step 1, § 12.3).
+"""accio-brief <ID> [--parent <branch>] [--fix <findings-file> ... | --review [--since <commit>]]
+(DESIGN § 3.4 steps 1, 4 and 6, § 12.3).
 
 Without --fix: create or reuse the story's worktree and branch, rebase it, and write run/<ID>/brief.md.
 With --fix: write run/<ID>/fix-brief.md listing only the given findings; the worktree is not touched.
 Prints {"worktree", "brief", "base"} as JSON (portkey's reply).
+With --review: write run/<ID>/review.diff and review-package.md for the reviewers; --since <commit> limits the diff
+to a fix round's. Prints {"package", "diff", "head", "risky"}; the worktree is not touched.
 """
 import argparse
 import json
@@ -12,7 +15,14 @@ import sys
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 
-from accio_lib import brief, checks, config, globs, paths, runlock, story  # noqa: E402
+from accio_lib import brief, checks, config, globs, paths, review, runlock, story  # noqa: E402
+
+
+def _existing_worktree(main, story_id):
+    worktree = paths.worktree_root(main) / story_id
+    if not brief.has_worktree(main, story_id):
+        raise brief.BriefError(f"the worktree {worktree} doesn't exist; run `accio-brief {story_id}` first")
+    return worktree
 
 
 def run(args):
@@ -30,11 +40,11 @@ def run(args):
     settings = config.load(accio)
     onto = brief.resolve_onto(main, settings["base_branch"], args.parent)
     run_dir = accio / "run" / args.id
+    if args.review:
+        return review.package(accio, parsed, _existing_worktree(main, args.id), settings, args.since)
     runlock.release_claim(accio / "run", args.id)  # the house-elf of this brief claims afresh (S-015)
     if args.fix:
-        worktree = paths.worktree_root(main) / args.id
-        if not brief.has_worktree(main, args.id):
-            raise brief.BriefError(f"the worktree {worktree} doesn't exist; run `accio-brief {args.id}` first")
+        worktree = _existing_worktree(main, args.id)
         text = brief.render_fix(parsed, accio, worktree, brief.read_findings(args.fix))
         target = brief.write_file(run_dir / "fix-brief.md", text)
     else:
@@ -51,8 +61,13 @@ def main(argv=None):
     parser = argparse.ArgumentParser(prog="accio-brief", description=__doc__)
     parser.add_argument("id")
     parser.add_argument("--parent")
-    parser.add_argument("--fix", action="append", type=pathlib.Path, default=[])
+    modes = parser.add_mutually_exclusive_group()
+    modes.add_argument("--fix", action="append", type=pathlib.Path, default=[])
+    modes.add_argument("--review", action="store_true")
+    parser.add_argument("--since")
     args = parser.parse_args(argv)
+    if args.since and not args.review:
+        parser.error("--since goes with --review")
     try:
         print(json.dumps(run(args)))
     except (brief.BriefError, story.StoryError, config.ConfigError, globs.GlobError, runlock.LockError) as error:
