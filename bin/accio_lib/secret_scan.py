@@ -96,7 +96,8 @@ def _is_placeholder(match):
 
 PATTERNS = (
     ("private key", re.compile(r"-----BEGIN (?:RSA |EC |DSA |OPENSSH |PGP |ENCRYPTED )?PRIVATE KEY(?: BLOCK)?-----"
-                                r"(?P<pem_body>[^-]{0,%d}-----END [A-Z ]{0,40}-----)?" % MAX_KEY_BODY), None),
+                                r"(?P<pem_body>(?:(?!-----END )[\s\S]){0,%d}-----END [A-Z ]{0,40}-----)?" % MAX_KEY_BODY),
+     None),
     ("Anthropic API key", re.compile(r"sk-ant-[A-Za-z0-9_-]{20,}"), _has_random_body),
     ("OpenRouter API key", re.compile(r"sk-or-(?:v1-)?[A-Za-z0-9]{32,}"), _has_random_body),
     ("OpenAI API key", re.compile(r"sk-(?:proj-|svcacct-)?[A-Za-z0-9_-]{32,}"), _has_random_body),

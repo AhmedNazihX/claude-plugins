@@ -140,6 +140,14 @@ class FideliusTest(unittest.TestCase):
                                      "replace_all": True})
         self.assertEqual(result.returncode, 2)
 
+    def test_S_014_1_a_new_body_under_an_armored_key_with_a_dash_in_its_comment_is_blocked(self):
+        begin = "-----BEGIN PGP " + "PRIVATE KEY BLOCK-----"
+        end = "-----END PGP " + "PRIVATE KEY BLOCK-----"
+        target = self.repo / "keys.py"
+        write(target, f'A = """{begin}\nComment: GPGTools - https://gpgtools.org\n\nlQOYBF0bQ2\n{end}\n"""\n')
+        result = self.check("Edit", {"file_path": str(target), "old_string": "lQOYBF0bQ2", "new_string": "lQVYBGaX9e"})
+        self.assertEqual(result.returncode, 2)
+
     def test_S_014_1_a_key_finished_in_a_file_that_isnt_utf8_is_blocked(self):
         key = stripe_key()
         target = self.repo / "legacy.py"
