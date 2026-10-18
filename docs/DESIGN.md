@@ -86,11 +86,14 @@ v1.1:     reparo (quick fix) · lumos (explain) · telescope (research)
 
 **Steps:**
 1. **Interview the user, one question at a time.** Every requirement must have an owner; a requirement without one
-   is deleted.
+   is deleted. One question is always the outcome behind the request: "after this ships, what should be true, and
+   how would you know?" (decision 011); `quill` copies the answer into each story's Context.
 2. **Research the facts.** `seeker` checks live docs and the existing code. A capability the docs don't mention
    counts as unavailable until a spike proves it.
 3. **Propose designs.** `wandmaker` proposes 2–3 stack and architecture options with trade-offs and "what breaks
-   first".
+   first". For each option it answers four depth questions (decision 011): what a top professional would do, the
+   rawest material to work from, the methods and tools the best people use, and what besides the model or the user
+   would show it is right; that last answer seeds the DoD lines.
 4. **Grill the user's choice.**
 
 **Output:** `.accio/design.md`, one page plus sections that grow as needed, and a `vow` per real decision.
@@ -135,7 +138,7 @@ This is the unattended part. The full spec is in `docs/research/build-engine.md`
 | 0 load | `portkey` | Haiku | `accio-board ready --json`, in dependency order; also recovers stories a crash left in *Doing* (§ 12.6); `accio-hooks verify`; takes the run lock with `accio-board lock` (§ 4.5) |
 | 1 prepare | `portkey` | Haiku | `accio-brief` creates or reuses the worktree and branch `story/<ID>` (§ 12.3), from base or from the parent's head when stacked, and writes `brief.md`, including review notes from a rejection |
 | 2 implement | `house-elf` | Sonnet; Opus if complex or risky | first runs `accio-claim <ID>` (§ 4.4); reads only the brief; starts each Bash command that touches files with `cd <worktree> &&` or uses `git -C <worktree>`; test-first; tags each test with its DoD line; checkpoint commits; `report.md`; returns a status |
-| 3 check | `prefect` | Haiku | the ledger skips an exact key that already passed (§ 12.4); checks scoped to the change; **boundary check:** a diff outside the story's `files` (plus tests) becomes a finding; **DoD tags:** every numbered line not marked `(no test)` has a tagged test; **main snapshot:** the main checkout's `git status` is unchanged; **remote check:** `origin/<base>` has not moved |
+| 3 check | `prefect` | Haiku | the ledger skips an exact key that already passed (§ 12.4); checks scoped to the change; **boundary check:** a diff outside the story's `files` (plus tests) becomes a finding; **DoD tags:** every numbered line not marked `(no test)` has a tagged test; **main snapshot:** the main checkout's `git status` is unchanged; **remote check:** `origin/<base>` has not moved; **test audit:** a tagged test that still passes with the story's non-test changes reverted (in a scratch copy) is a weak test (decision 011) |
 | 4 review | `examiner` + `professor` (+ `auror` on risky paths); Quick track: 1 combined reviewer | Sonnet | read-only; review package as a file; confidence ≥ 80 |
 | 5 judge | `headmaster` | Sonnet | only when a finding conflicts with the story, or on NEEDS_CONTEXT; rules it, or marks the story needs-user |
 | 6 fix | a fresh `house-elf` | one tier up in round 2 | **≤ 2 rounds**; the re-review covers only the fix diff, and only the reviewers that raised findings run |
@@ -426,7 +429,11 @@ Messages show only a prefix of the secret.
   - a test written from each EARS line, carrying its tag (`S-012/1`)
   - `prefect` fails a numbered line that has no tagged test, with a grep and no model (decision 009)
   - `examiner` judges only whether each tagged test really checks its line
-- A break-the-code test audit (mutate the code and expect a test to fail) is a **v2** candidate.
+  - **test audit (decision 011, moved from v2):** `prefect`'s script reverts the story's non-test changes in a
+    scratch copy and re-runs the tagged tests; one that still passes is listed in `weak_tests`, with no model
+- **Method checklists (decision 011):** the story's risk flag picks checklists for the reviewers (performance, data
+  migration, auth and security, accessibility, …); each lists what an expert would run or inspect, not a persona.
+- A deeper audit that mutates single lines (rather than reverting the whole change) stays a **v2** candidate.
 
 ### 7.2 Report template (every user-facing message)
 ```
@@ -605,7 +612,7 @@ from = merge-base with base, or the parent's head for a stacked child
 | Agent | Reply |
 |---|---|
 | `house-elf` | `status ∈ {DONE, DONE_WITH_CONCERNS, NEEDS_CONTEXT, BLOCKED}` |
-| `prefect` | `{pass: bool, failing: [check], skipped: bool, out_of_bounds: [path], untagged: [dod-id], main_changed: [path], remote_moved: bool}` |
+| `prefect` | `{pass: bool, failing: [check], skipped: bool, out_of_bounds: [path], untagged: [dod-id], weak_tests: [dod-id], main_changed: [path], remote_moved: bool}` |
 | reviewers | `{verdict ∈ {pass, fail}, counts: {critical, major, minor}, path}` |
 | `headmaster` | `{kind ∈ {ruling, question}, text, path}` |
 

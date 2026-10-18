@@ -257,7 +257,7 @@ S-016, but numbered last because it was added later.
 
 ### S-017 · Build agents: `portkey`, `house-elf`, `prefect`
 Deps: S-007, S-006, S-015 · Files: `agents/{portkey,house-elf,prefect}.md`, `bin/accio_lib/checks.py`, `tests/test_checks.py`
-Context: DESIGN § 3.4 steps 0–3 and 7, § 4.2, § 12.5.
+Context: DESIGN § 3.4 steps 0–3 and 7, § 4.2, § 7.1, § 12.5; decision 011.
 - [ ] S-017/1 WHEN `prefect`'s check script runs THE SYSTEM SHALL run only the checks whose globs match the diff
 - [ ] S-017/2 WHEN the diff touches a file outside the story's `files` (plus tests) THE SYSTEM SHALL list it in `out_of_bounds`
 - [ ] S-017/3 WHEN a numbered DoD line not marked `(no test)` has no tagged test THE SYSTEM SHALL list it in `untagged`
@@ -265,14 +265,16 @@ Context: DESIGN § 3.4 steps 0–3 and 7, § 4.2, § 12.5.
 - [ ] S-017/5 (no test) each agent file sets the model from § 4.2, the tools from § 4.2 and the reply schema from § 12.5
 - [ ] S-017/6 WHEN `origin/<base>` moved during the story THE SYSTEM SHALL set `remote_moved` and the story goes to Blocked
 - [ ] S-017/7 (no test) `house-elf`'s prompt makes `accio-claim <ID>` its first command and states the `cd <worktree> &&` rule
+- [ ] S-017/8 WHEN a tagged test still passes with the story's non-test changes reverted in a scratch copy THE SYSTEM SHALL list its DoD line in `weak_tests` (decision 011)
 
 ### S-018 · Review agents and findings template
-Deps: S-017 · Files: `agents/{examiner,professor,auror,headmaster}.md`, `agents/references/findings-template.md`, `tests/test_agents.py`
-Context: DESIGN § 3.4 steps 4–5, § 7.1, § 12.5.
+Deps: S-017 · Files: `agents/{examiner,professor,auror,headmaster}.md`, `agents/references/findings-template.md`, `agents/references/checklists/`, `tests/test_agents.py`
+Context: DESIGN § 3.4 steps 4–5, § 7.1, § 12.5; decision 011.
 - [ ] S-018/1 WHEN an agent file is loaded THE TEST SHALL find its model, tools and reply schema as in § 4.2 and § 12.5
 - [ ] S-018/2 (no test) the findings template holds severity, confidence, `file:line`, claim, failure scenario and DoD tag
 - [ ] S-018/3 (no test) `examiner` checks the DoD line by line and judges only whether each tagged test checks its line
 - [ ] S-018/4 (no test) each reviewer lists the false positives it ignores and the ≥ 80 confidence rule
+- [ ] S-018/5 (no test) the story's risk flag picks method checklists (performance, data migration, auth and security, accessibility) that list what an expert runs or inspects, not a persona (decision 011)
 
 ### S-019 · `brew.js`: load, prepare, implement, check, outcome
 Deps: S-001, S-017 · Files: `workflows/brew.js`, `tests/workflow/brew-core.test.mjs`, `tests/workflow/stub.mjs`
@@ -327,14 +329,17 @@ Context: DESIGN § 3.2, § 5.1.
 - [ ] S-023/2 (no test) a story the score flags is split, and each child gets the next free ID
 - [ ] S-023/3 (no test) `examiner` checks the backlog and its findings are fixed in the same run
 - [ ] S-023/4 (no test) the main chat shows only the summary
+- [ ] S-023/5 (no test) `quill` copies the design's outcome ("what should be true after it ships, and how we'd know") into each story's Context (decision 011)
 
 ### S-024 · `wand` skill, `seeker`, `wandmaker`
 Deps: S-012, S-025 · Files: `skills/wand/SKILL.md`, `skills/wand/references/`, `agents/{seeker,wandmaker}.md`, `evals/wand/`
-Context: DESIGN § 3.1, § 12.1.
+Context: DESIGN § 3.1, § 12.1; decision 011.
 - [ ] S-024/1 (no test) interviews one question at a time and deletes a requirement without an owner
 - [ ] S-024/2 (no test) `seeker` returns `findings: <path>` and treats an undocumented capability as unavailable
 - [ ] S-024/3 (no test) `wandmaker` returns 2–3 options with trade-offs and "what breaks first"
 - [ ] S-024/4 (no test) writes `.accio/design.md`, records each decision with `vow`, and runs `accio-hooks install` on first use
+- [ ] S-024/5 (no test) the interview asks "after this ships, what should be true, and how would you know?" (decision 011)
+- [ ] S-024/6 (no test) `wandmaker` answers the four depth questions for each option, and the evidence answer seeds the DoD lines (decision 011)
 
 ### S-025 · `map` and `vow` skills
 Deps: S-004, S-016 · Files: `skills/{map,vow}/SKILL.md`, `evals/{map,vow}/`
