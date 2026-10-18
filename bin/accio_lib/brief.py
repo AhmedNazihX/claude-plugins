@@ -8,13 +8,14 @@
   branch is left as it was; only a rebase this run started is ever aborted.
 - Existing code to reuse: the story's `## Reuse` section, plus its listed files that already exist at `onto`.
 - Paths in shell commands are shell-quoted (curfew's `cd <worktree> &&` check expects that form).
+- A relative `core.hooksPath` (husky) is shared with the worktree, so accio's git hooks run there too (S-012).
 """
 import pathlib
 import shlex
 import string
 import subprocess
 
-from accio_lib import globs, paths, story, summary
+from accio_lib import githooks, globs, paths, story, summary
 
 TEMPLATES = pathlib.Path(__file__).resolve().parent / "templates"
 BIN = pathlib.Path(__file__).resolve().parents[1]
@@ -81,6 +82,7 @@ def prepare_worktree(main, run_dir, story_id, onto):
     if not _branch_exists(main, branch):
         _git(main, "worktree", "add", "-q", str(worktree), "-b", branch, onto)
         _record_base(run_dir, onto)
+        _share_hooks(main, worktree)
         return worktree, ()
     if worktree.resolve() not in _registered(main):
         if worktree.exists():
@@ -89,7 +91,15 @@ def prepare_worktree(main, run_dir, story_id, onto):
     notes = rebase(worktree, onto, _recorded_base(run_dir))
     if not notes:
         _record_base(run_dir, onto)
+    _share_hooks(main, worktree)
     return worktree, notes
+
+
+def _share_hooks(main, worktree):
+    try:
+        githooks.share_with_worktree(main, worktree)
+    except githooks.HooksError as error:
+        raise BriefError(str(error)) from error
 
 
 def _rebase_in_progress(worktree):

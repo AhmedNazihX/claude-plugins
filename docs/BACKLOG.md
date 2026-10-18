@@ -27,7 +27,7 @@ evals/                       scripts/publish.py
 | done | S-009 `accio-cost` |
 | done | S-010 `accio-summary` |
 | done | S-011 Secret patterns and `pre-commit` |
-| todo | S-012 `accio-hooks`: install, chain, verify, `pre-push` |
+| done | S-012 `accio-hooks`: install, chain, verify, `pre-push` |
 | done | S-013 `protego` |
 | todo | S-014 `fidelius` |
 | todo | S-015 `curfew`: permission policy and worktree claims |
@@ -196,19 +196,34 @@ security review. Left open (notes): BOM-less UTF-16/UTF-32 files and `postgresql
 ### S-012 · `accio-hooks`: install, chain, verify, `pre-push`
 Deps: S-011 · Files: `bin/accio-hooks`, `bin/accio_lib/githooks.py`, `tests/test_githooks.py`
 Context: DESIGN § 4.5, § 12.1; decisions 004 and 009.
-- [ ] S-012/1 WHEN the repo has no hook manager THE SYSTEM SHALL write the hooks, or append to hand-written ones under `# accio`
-- [ ] S-012/2 WHEN husky is active THE SYSTEM SHALL append the `# accio` call to `.husky/<hook>` after the project's lines
-- [ ] S-012/3 WHEN lefthook or the pre-commit framework is found THE SYSTEM SHALL edit nothing and print a copy-paste snippet
-- [ ] S-012/4 WHEN `verify` runs THE SYSTEM SHALL report a missing marker, an inactive hooks folder, or a stale plugin path, and rewrite a stale path
-- [ ] S-012/5 WHEN `run/brew.lock` is fresh and a push to base has no valid token THE SYSTEM SHALL block it, whoever pushes
-- [ ] S-012/6 WHEN a push to base comes from a story worktree without a valid token THE SYSTEM SHALL block it
-- [ ] S-012/7 WHEN no run is live THE SYSTEM SHALL block a tokenless push to base with `CLAUDECODE=1`, and allow it without
-- [ ] S-012/8 WHEN `run/brew.lock` has had no refresh for 30 min THE SYSTEM SHALL treat it as stale and say so
-- [ ] S-012/9 WHEN the token matches the pushed sha THE SYSTEM SHALL allow one fast-forward push and delete the token
-- [ ] S-012/10 WHEN anyone force-pushes THE SYSTEM SHALL block it
-- [ ] S-012/11 WHEN `uninstall` runs THE SYSTEM SHALL remove only the marked lines
-- [ ] S-012/12 WHEN `install` runs THE SYSTEM SHALL write no allow rules to the project's settings (decision 010)
-- [ ] S-012/13 WHEN `install` runs in a repo whose git dir is separate (`git init --separate-git-dir`) THE SYSTEM SHALL warn that story worktrees aren't supported there
+- [x] S-012/1 WHEN the repo has no hook manager THE SYSTEM SHALL write the hooks, or append to hand-written ones under `# accio`
+- [x] S-012/2 WHEN husky is active THE SYSTEM SHALL append the `# accio` call to `.husky/<hook>` after the project's lines
+- [x] S-012/3 WHEN lefthook or the pre-commit framework is found THE SYSTEM SHALL edit nothing and print a copy-paste snippet
+- [x] S-012/4 WHEN `verify` runs THE SYSTEM SHALL report a missing marker, an inactive hooks folder, or a stale plugin path, and rewrite a stale path
+- [x] S-012/5 WHEN `run/brew.lock` is fresh and a push to base has no valid token THE SYSTEM SHALL block it, whoever pushes
+- [x] S-012/6 WHEN a push to base comes from a story worktree without a valid token THE SYSTEM SHALL block it
+- [x] S-012/7 WHEN no run is live THE SYSTEM SHALL block a tokenless push to base with `CLAUDECODE=1`, and allow it without
+- [x] S-012/8 WHEN `run/brew.lock` has had no refresh for 30 min THE SYSTEM SHALL treat it as stale and say so
+- [x] S-012/9 WHEN the token matches the pushed sha THE SYSTEM SHALL allow one fast-forward push and delete the token
+- [x] S-012/10 WHEN anyone force-pushes THE SYSTEM SHALL block it
+- [x] S-012/11 WHEN `uninstall` runs THE SYSTEM SHALL remove only the marked lines
+- [x] S-012/12 WHEN `install` runs THE SYSTEM SHALL write no allow rules to the project's settings (decision 010)
+- [x] S-012/13 WHEN `install` runs in a repo whose git dir is separate (`git init --separate-git-dir`) THE SYSTEM SHALL warn that story worktrees aren't supported there
+Outcome (2026-10-18): one fix round after a code review and a security review (both reran three times: they hung
+on git-guardrails' push prompt). Fixed: the hook line names the repo root, so `git --work-tree=…`/`--git-dir`
+can't switch the guards off; story worktrees share a relative `core.hooksPath` (husky) through a per-worktree
+setting set by `accio-brief`; managers are recognised by their generated hook, not a config file; the
+pre-commit framework's `PRE_COMMIT_*` variables are no longer trusted (its users get a `pre-push.legacy`
+snippet); a missing script warns instead of blocking every commit; other-language hooks and symlinks are left
+alone; re-install keeps the pair in place; `verify` reports a hook that isn't executable and an `exit`/`exec`
+before accio's lines (user's decision). A missing script warns you but stops Claude (`CLAUDECODE=1`) where accio
+runs (`.accio/run/` exists), and `session-start` will run `verify` (S-016/4) (user's decision). Hook files carry
+no local path: they run `<git dir>/accio/hook`, a helper that never leaves the machine and holds the plugin and repo
+paths, so husky's committed hooks don't publish anyone's folders (user's decision). The guards moved to
+`bin/accio_lib/pushguard.py`.
+Open (design gap, for S-015/S-022): an agent could write `run/push-ok` or backdate `brew.lock` itself;
+curfew's write rules and `owl` must keep those files out of agents' reach. `base_branch` isn't checked with
+`git check-ref-format`.
 
 ### S-013 · `protego`
 Deps: S-003 · Files: `hooks/protego.py`, `hooks/hooks.json`, `tests/test_protego.py`
@@ -257,11 +272,12 @@ asks about. Reuse `accio_lib.shellwords` / `shellpaths` (S-013).
 - [ ] S-015/9 WHEN the repo has no `.accio/` THE SYSTEM SHALL exit 0 silently
 
 ### S-016 · `session-start`
-Deps: S-004 · Files: `hooks/session_start.py`, `hooks/hooks.json`, `tests/test_session_start.py`
-Context: DESIGN § 4.4, § 10 (workflows off).
+Deps: S-004, S-012 · Files: `hooks/session_start.py`, `hooks/hooks.json`, `tests/test_session_start.py`
+Context: DESIGN § 4.4, § 10 (workflows off); S-012's outcome (missing-script rule).
 - [ ] S-016/1 WHEN the repo has `.accio/` THE SYSTEM SHALL inject at most 10 lines: board summary, next step, plain-words rule
 - [ ] S-016/2 WHEN `CLAUDE_CODE_DISABLE_WORKFLOWS` is set THE SYSTEM SHALL say so and point to `/accio:brew-by-hand`
 - [ ] S-016/3 WHEN the repo has no `.accio/` THE SYSTEM SHALL print nothing
+- [ ] S-016/4 WHEN a session starts in a repo with `.accio/` THE SYSTEM SHALL run `accio-hooks verify` quietly, so a path a plugin update made stale is rewritten at once, and mention only problems verify can't fix (user's decision, 2026-10-18)
 
 ### S-028 · `doc-size` and `librarian`
 Deps: S-013 · Files: `hooks/doc_size.py`, `hooks/hooks.json`, `agents/librarian.md`, `tests/test_doc_size.py`
