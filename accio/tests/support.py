@@ -27,5 +27,8 @@ def init_repo(path):
     """A git repo with one commit on main."""
     write(path / "README.md", "test repo\n")
     git(path, "init", "-q", "-b", "main")
+    # an identity of its own: accio's scripts commit, rebase and merge, and a CI runner may have none (Linux)
+    git(path, "config", "user.name", "t")
+    git(path, "config", "user.email", "t@example.com")
     commit_all(path, "init")
     return path
