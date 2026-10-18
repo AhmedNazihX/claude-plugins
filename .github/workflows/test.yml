@@ -1,11 +1,14 @@
 # Runs the marketplace's checks on every push and pull request:
 #   - git-guardrails' hook tests
+#   - accio's Python and workflow tests, on Linux and macOS
 #   - claude plugin validate, for the marketplace and every plugin folder it lists
+# accio's skill evals run only by hand (workflow_dispatch): they spend API credit.
 name: test
 
 on:
   push:
   pull_request:
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -39,3 +42,61 @@ jobs:
           for source in $(jq -r '.plugins[].source' .claude-plugin/marketplace.json); do
             claude plugin validate "$source"
           done
+
+  accio-tests:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        working-directory: accio
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: "22"
+      - name: Python tests
+        run: python3 -m unittest discover -s tests -v
+      - name: Workflow tests
+        run: node --test 'tests/workflow/**/*.test.mjs'
+
+  accio-evals:
+    # One cheap case per skill (tag `ci`), free graders only, capped at $2 a run (accio DESIGN § 9, decision 006).
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: accio
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: "22"
+      - name: Install Claude Code and the sandbox it runs Bash in
+        run: |
+          sudo apt-get update && sudo apt-get install -y bubblewrap socat
+          npm install -g @anthropic-ai/claude-code@2.1.302  # the version the baseline was measured with
+      - name: Skill evals
+        # The key reaches this step only, and Bash is granted for this checkout's own scripts only: a script the
+        # model under test writes elsewhere (say ./x/bin/accio-y) matches no grant.
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: claude plugin eval . --tag ci --runs 1 --ablation none --scaffold --trust-plugin --allow-tools Write Edit "Bash(${{ github.workspace }}/accio/bin/accio-* *)" --max-cost-usd 2
+      - name: Keep the report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: accio-eval-report
+          path: accio/evals/results/

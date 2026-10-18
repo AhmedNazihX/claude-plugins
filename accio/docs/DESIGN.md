@@ -566,7 +566,7 @@ Next: /accio:owl
 | A hook manager hides the native wall | chaining for plain and husky; a snippet for the others; `verify` at every `brew` and `owl` |
 | The budgets are guesses | tune them from `accio-cost` after the first two iterations |
 | Lore names hurt clarity | every description and report in plain words; a README mapping table |
-| Skills cached per session slow dogfooding | test with `claude --plugin-dir`; one source tree published by a script (a second copy drifts) |
+| Skills cached per session slow dogfooding | test with `claude --plugin-dir`; one source tree in the marketplace repo, which the release repo pulls (decision 013) |
 
 ---
 

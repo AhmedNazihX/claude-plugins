@@ -11,7 +11,7 @@ Each DoD line has an ID (`S-004/2`). The test that proves it carries that tag in
 workflows/brew.js            hooks/hooks.json        hooks/<name>.py
 bin/accio-<name>             bin/accio_lib/          (shared Python, stdlib only)
 tests/test_<name>.py         tests/workflow/*.test.mjs (node --test)   tests/fixtures/
-evals/                       scripts/publish.py
+evals/                       (CI: the marketplace's .github/workflows/test.yml)
 ```
 
 | Status | Story |
@@ -58,6 +58,7 @@ answers permissions; worktree claims). The interactive permission prompt was not
 - [x] S-001/4 (no test) THE REPORT SHALL end with one verdict: go, fallback 1, or fallback 2 (`brew-by-hand`, S-027), and any DESIGN changes it implies
 
 ### S-002 · Scaffold, CI and publish
+*Moved (decision 013): accio now lives in the nazihx marketplace repo; its CI is the marketplace's `test.yml`, and `publish.py` is retired (the release repo pulls the marketplace).*
 Deps: S-001 · Files: `.claude-plugin/plugin.json`, `.github/workflows/ci.yml`, `scripts/publish.py`, `tests/test_scaffold.py`, `tests/test_publish.py`, `tests/workflow/meta.test.mjs`, `.gitignore` (layout folders appear with the stories that fill them)
 Context: DESIGN § 4, § 9 (CI), § 11 (one source tree); decision 007 (marketplace).
 - [x] S-002/1 WHEN `claude plugin validate` runs on the repo THE SYSTEM SHALL pass

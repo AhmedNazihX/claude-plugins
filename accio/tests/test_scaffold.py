@@ -30,7 +30,9 @@ class ManifestTest(unittest.TestCase):
 
 class CiConfigTest(unittest.TestCase):
     def test_S_002_2_ci_runs_both_test_suites_on_macos_and_linux(self):
-        lines = (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8").splitlines()
+        text = (ROOT.parent / ".github" / "workflows" / "test.yml").read_text(encoding="utf-8")  # the marketplace's CI
+        self.assertIn("working-directory: accio", text)
+        lines = text.splitlines()
         runs = [line.strip() for line in lines if line.strip().startswith("run:")]
         matrix = [line.strip() for line in lines if line.strip().startswith("os:")]
         self.assertEqual(matrix, ["os: [ubuntu-latest, macos-latest]"])

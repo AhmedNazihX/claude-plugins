@@ -8,7 +8,7 @@ from support import ROOT
 
 EVALS = ROOT / "evals"
 SKILLS = ROOT / "skills"
-CI = ROOT / ".github" / "workflows" / "ci.yml"
+CI = ROOT.parent / ".github" / "workflows" / "test.yml"  # accio lives in the nazihx marketplace repo
 FREE_GRADERS = {"regex", "tool_used", "tool_order", "file_exists"}
 FIELD = re.compile(r"^(\w+):\s*(.*)$", re.MULTILINE)
 
@@ -35,10 +35,10 @@ class EvalSuiteTest(unittest.TestCase):
         command = next(line for line in text.splitlines() if "claude plugin eval" in line)
         self.assertIn("--max-cost-usd 2", command)
         self.assertIn("--tag ci", command)
-        evals_job = text[text.index("  evals:"):]
+        evals_job = text[text.index("  accio-evals:"):]
         self.assertIn("workflow_dispatch", text.split("jobs:")[0])
         self.assertIn("github.event_name == 'workflow_dispatch'", evals_job)
-        self.assertIn('"Bash(${{ github.workspace }}/bin/accio-* *)"', command)  # only this checkout's scripts
+        self.assertIn('"Bash(${{ github.workspace }}/accio/bin/accio-* *)"', command)  # only this checkout's scripts
         self.assertNotIn("*/bin/", command)
         before_steps = evals_job.split("steps:")[0]
         self.assertNotIn("ANTHROPIC_API_KEY", before_steps)  # the key reaches the eval step only

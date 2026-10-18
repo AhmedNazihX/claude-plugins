@@ -1,6 +1,5 @@
 """S-018: the review agents, the findings template and the method checklists (DESIGN § 4.2, § 7.1, § 12.5;
 decision 011); and, for every accio agent, that its tools match what curfew lets it do (S-015)."""
-import importlib.util
 import pathlib
 import re
 import unittest
@@ -116,14 +115,6 @@ class AgentsMatchCurfewTest(unittest.TestCase):
                 self.assertEqual("Bash" in agent_tools, bool(lists.bash))
                 self.assertEqual("Write" in agent_tools, bool(lists.writes))
                 self.assertEqual(bool({"WebSearch", "WebFetch"} & agent_tools), lists.web)
-
-
-class PublishTest(unittest.TestCase):
-    def test_the_references_the_reviewers_read_are_published(self):
-        spec = importlib.util.spec_from_file_location("publish_under_test", ROOT / "scripts" / "publish.py")
-        publish = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(publish)
-        self.assertIn("references", publish.SHIPPED)
 
 
 if __name__ == "__main__":
