@@ -249,8 +249,8 @@ The build itself is the workflow `/accio:brew` (§ 4.3), not a skill.
 ### 4.2 Agents
 | Agent | Role | Model | Tools | Returns |
 |---|---|---|---|---|
-| `seeker` | researcher (live docs and code facts in `wand`; better ways via `telescope` in v1.1) | Sonnet | Read, Grep, Glob, WebSearch, WebFetch | `findings: <path>` |
-| `wandmaker` | architect, 2–3 options | Opus | read-only | `options: <path>` |
+| `seeker` | researcher (live docs and code facts in `wand`; better ways via `telescope` in v1.1) | Sonnet | Read, Grep, Glob, WebSearch, WebFetch; Write to `run/wand/seeker-notes.md` | `findings: <path>` |
+| `wandmaker` | architect, 2–3 options | Opus | read-only; Write to `run/wand/wandmaker-options.md` | `options: <path>` |
 | `portkey` | worktree and brief | Haiku | Bash (scripts only) | `{worktree, brief, base}` |
 | `house-elf` | implementer | Sonnet / Opus | Read, Grep, Glob, Write, Edit, Bash, kept short because `curfew` must answer every tool (§ 4.4) | `{status, head, report}` |
 | `prefect` | checks, ledger, DoD tags, main snapshot (`accio-check`) | Haiku | Bash, Write (only `run/questions/`) | `{pass, failing[], skipped}` |
@@ -314,7 +314,7 @@ script's absolute path.
 
 | Script | Does |
 |---|---|
-| `accio-board` | parse stories → board.md (with a Dropped line), `ready --json` (including stacked children), `status`, `move`, `new` (IDs), `lock` / `unlock` (the run lock), `plan` / `go` (prophecy's proposal and commit) |
+| `accio-board` | parse stories → board.md (with a Dropped line), `ready --json` (including stacked children), `status`, `move`, `new` (IDs), `lock` / `unlock` (the run lock), `plan` / `go` (prophecy's proposal and commit), `record` (sort), `init` / `record-design` (wand's setup and design commit), `board --print` (map) |
 | `accio-brief` | story → brief.md (template), from base or from the parent's head; fix brief from findings |
 | `accio-ledger` | patch-id verdicts, `check`, `record` |
 | `accio-score` | complexity score → track, split flag |
@@ -573,7 +573,7 @@ Next: /accio:owl
 ## 12. Contracts and lifecycle (added after the design review)
 
 ### 12.1 One-time setup
-`accio-hooks install` runs at the first `wand` or `brew` and installs the native git hooks, chaining into an
+`accio-board init` (at the first `wand`) creates `.accio/` and makes git ignore `.accio/run/`; then `accio-hooks install` runs at the first `wand` or `brew` and installs the native git hooks, chaining into an
 existing hook manager where it can (§ 4.5). **It writes no allow rules** to the project's settings, because
 `curfew` answers permission questions for accio's agents itself (decision 010). The only other approval is the
 workflow launch: the first `/accio:brew` asks once, and "don't ask again" covers later runs.

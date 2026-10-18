@@ -274,6 +274,9 @@ def snippet(kind, root):
 
 def install(root, script):
     """Install or refresh accio's hooks; returns (notes, problems)."""
+    off = _switched_off(root)
+    if off:
+        return (), (off,)
     found = layout(root)
     notes = [note for note in (_write_helper(root, script),) if note]
     if found.is_manager:
@@ -339,13 +342,21 @@ def _hook_problems(path, lines, calls, hook):
     return problems + _skipped_lines(path, lines, calls, hook)
 
 
-def verify(root, script):
-    """(problems, fixes): problems need the user; fixes are what verify wrote (a missing or stale helper)."""
+def _switched_off(root):
+    """The plain problem when `core.hooksPath` points at something that isn't a folder (e.g. /dev/null), else None."""
     active = active_folder(root)
     if active.exists() and not active.is_dir():
-        return ((f"git's hooks are switched off: core.hooksPath points to {active}, which isn't a folder, so accio's "
-                 "commit and push checks never run. Unset it (`git config --unset core.hooksPath`) and run "
-                 "`accio-hooks install`, or carry on without them."),), ()
+        return (f"git's hooks are switched off: core.hooksPath points to {active}, which isn't a folder, so accio's "
+                "commit and push checks never run. Unset it (`git config --unset core.hooksPath`) and run "
+                "`accio-hooks install`, or carry on without them.")
+    return None
+
+
+def verify(root, script):
+    """(problems, fixes): problems need the user; fixes are what verify wrote (a missing or stale helper)."""
+    off = _switched_off(root)
+    if off:
+        return (off,), ()
     found = layout(root)
     fixes = [fix for fix in (_write_helper(root, script),) if fix]
     if found.is_manager:

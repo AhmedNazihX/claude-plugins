@@ -288,6 +288,17 @@ class FlagsAndFormsTest(CurfewTestBase):
 
 
 class OtherAgentsTest(CurfewTestBase):
+    def test_S_024_seeker_and_wandmaker_write_only_their_notes(self):
+        accio = self.repo / ".accio"
+        for agent, own in (("seeker", "seeker-notes.md"), ("wandmaker", "wandmaker-options.md")):
+            with self.subTest(agent):
+                self.assert_allowed("Write", {"file_path": str(self.run_dir / "wand" / own), "content": "x"},
+                                    agent=f"accio:{agent}")
+                for target in (accio / "design.md", self.run_dir / "wand" / "other.md", accio / "stories" / "S-001.md"):
+                    self.assert_denied("Write", {"file_path": str(target), "content": "x"}, agent, agent=f"accio:{agent}")
+        self.assert_allowed("WebSearch", {"query": "x"}, agent="accio:seeker")
+        self.assert_denied("WebSearch", {"query": "x"}, "wandmaker", agent="accio:wandmaker")
+
     def test_S_023_1_quill_writes_story_files_and_its_summary_only(self):
         accio = self.repo / ".accio"
         for target in (accio / "stories" / "S-012.md", self.run_dir / "sort" / "quill-summary.md"):

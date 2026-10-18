@@ -1,0 +1,4 @@
+schema_version: "1.1"
+name: wand-outcome-asked
+context:
+  scaffold_script: repo.sh

@@ -340,11 +340,13 @@ class VerifyAndUninstallTest(HooksTestBase):
     def test_S_022_6_hooks_switched_off_by_core_hookspath_are_a_problem_not_a_crash(self):
         self.install()
         git(self.repo, "config", "core.hooksPath", "/dev/null")
-        result = self.hooks("verify")
-        self.assertNotEqual(result.returncode, 0)
-        self.assertIn("switched off", result.stdout + result.stderr)
-        self.assertNotIn("Traceback", result.stderr)
-        self.assertNotIn("cannot read", result.stderr)
+        for command in ("verify", "install"):
+            with self.subTest(command):
+                result = self.hooks(command)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn("switched off", result.stdout + result.stderr)
+                self.assertNotIn("Traceback", result.stderr)
+                self.assertNotIn("cannot read", result.stderr)
 
     def test_S_012_4_an_exit_before_accio_lines_is_reported_by_install_and_verify(self):
         write(self.hook_file("pre-push"), "#!/bin/sh\nnpm run prepush\nexit 0\n")

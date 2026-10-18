@@ -1,7 +1,7 @@
 ---
 name: vow
 description: Records a decision the user made as a numbered decision record in .accio/decisions/ (what was decided, the options with their pros, cons and costs, the choice and why) and commits it.
-when_to_use: When the user says "record this decision", "write that down as a decision", "log the decision", "write an ADR" or "decision record", or runs /accio:vow, and when wand settles a real decision, in a repo with an .accio/ folder. Not for writing design text (wand) or stories (sort).
+when_to_use: When the user says "record this decision", "write that down as a decision", "log the decision", "write an ADR" or "decision record", or runs /accio:vow, and when wand settles a real decision, in a repo with an .accio/ folder. Not when the user also wants a design written (wand records those decisions itself), nor for stories (sort).
 allowed-tools: Read, Write, Bash(${CLAUDE_PLUGIN_ROOT}/bin/accio-vow *)
 ---
 
