@@ -1,17 +1,22 @@
 """Decision records, `.accio/decisions/NNN-<slug>.md` (DESIGN § 3.7, § 12.2): numbered, checked, committed alone.
 
-`next_record` gives the path for a new record: one past the highest number already there, and a slug of the title
-(ASCII letters and digits, dashes between words). `record` checks a record before committing it: its file is under
-`.accio/decisions/`, its heading carries the same number as its name, and it has every section a decision needs.
-It commits only that file (`git commit --only`).
+`next_record` gives the path for a new record: one past the highest number on any numbered file there, and a short
+slug of the title (ASCII letters and digits, dashes between words; `decision` when the title has none of those).
+`record` checks a record before committing it: no build is running (nothing commits to main during one), its file is
+under `.accio/decisions/`, no other record has its number, its heading carries that number, and every section a
+decision needs is there and has text (a heading inside a ``` block doesn't count). It commits only that file.
 """
 import re
 import unicodedata
 
-from accio_lib import storyfiles
+from accio_lib import runlock, storyfiles
 
 DECISIONS = "decisions"
 RECORD_FILE = re.compile(r"^(\d{3,})-[a-z0-9-]+\.md$")
+NUMBERED = re.compile(r"^(\d+)\D")
+FENCE = re.compile(r"^\s*(```|~~~)")
+FALLBACK_SLUG = "decision"
+SLUG_CHARS = 60
 SECTIONS = ("## What was decided", "## Options", "## Decision", "## Why")
 COMMIT_MESSAGE = "docs(accio): decision {number} {title}"
 SLUG_WORDS = 8
@@ -24,37 +29,74 @@ class VowError(Exception):
 def slug(title):
     plain = unicodedata.normalize("NFKD", title).encode("ascii", "ignore").decode().lower()
     words = re.findall(r"[a-z0-9]+", plain)[:SLUG_WORDS]
-    if not words:
-        raise VowError(f"the title {title!r} has no letters or digits to name the file by")
-    return "-".join(words)
+    return "-".join(words)[:SLUG_CHARS].strip("-") or FALLBACK_SLUG
+
+
+def _no_build(accio):
+    if runlock.is_held(accio / "run"):
+        raise VowError("a build is running (run/brew.lock), and nothing new reaches the main checkout during one; "
+                       "record the decision after it ends")
 
 
 def next_record(accio, title):
+    _no_build(accio)
     folder = accio / DECISIONS
-    numbers = [int(match.group(1)) for path in folder.glob("*.md") if (match := RECORD_FILE.match(path.name))]
+    numbers = [int(match.group(1)) for path in folder.iterdir() if (match := NUMBERED.match(path.name))] \
+        if folder.is_dir() else []
     number = max(numbers, default=0) + 1
     return {"number": number, "path": str(folder / f"{number:03d}-{slug(title)}.md")}
+
+
+def _outside_fences(text):
+    kept, fenced = [], False
+    for line in text.splitlines():
+        if FENCE.match(line):
+            fenced = not fenced
+        elif not fenced:
+            kept.append(line)
+    return kept
+
+
+def _sections(lines):
+    """{`## heading`: its body text} for the record's `##` sections, outside code blocks."""
+    found, current = {}, None
+    for line in lines:
+        if line.startswith("## "):
+            current = line.rstrip()
+            found.setdefault(current, "")
+        elif current:
+            found[current] += line.strip()
+    return found
 
 
 def _checked(accio, path):
     if path.resolve().parent != (accio / DECISIONS).resolve() or not RECORD_FILE.match(path.name):
         raise VowError(f"a decision record is .accio/decisions/NNN-<slug>.md, not {path}")
+    number = RECORD_FILE.match(path.name).group(1)
+    twins = sorted(other.name for other in path.parent.iterdir() if other.name != path.name
+                   and (match := NUMBERED.match(other.name)) and int(match.group(1)) == int(number))
+    if twins:
+        raise VowError(f"{', '.join(twins)} already has number {number}; run `accio-vow next` for a free one")
     try:
         text = path.read_text(encoding="utf-8")
     except (OSError, UnicodeDecodeError) as error:
         raise VowError(f"cannot read {path}: {error}") from error
-    number = RECORD_FILE.match(path.name).group(1)
-    heading = re.match(rf"^# {number} — (.+)$", text.split("\n", 1)[0])
+    heading = re.match(rf"^# {number} — (.+)$", text.split("\n", 1)[0].rstrip("\r"))
     if not heading:
         raise VowError(f"{path.name} must start with the heading `# {number} — <title>`")
-    missing = [section for section in SECTIONS if not re.search(rf"^{re.escape(section)}\s*$", text, re.MULTILINE)]
+    found = _sections(_outside_fences(text))
+    missing = [section for section in SECTIONS if section not in found]
     if missing:
         raise VowError(f"{path.name} lacks {', '.join(missing)}; a decision record needs {', '.join(SECTIONS)}")
+    empty = [section for section in SECTIONS if not found[section]]
+    if empty:
+        raise VowError(f"in {path.name}, {' and '.join(empty)} is empty")
     return number, heading.group(1).strip()
 
 
 def record(accio, path):
     """Commit one complete decision record; returns {path, commit, commit_error}."""
+    _no_build(accio)
     number, title = _checked(accio, path)
     commit, why = storyfiles.commit(accio.parent, [str(path)], COMMIT_MESSAGE.format(number=number, title=title))
     return {"path": str(path), "commit": commit, "commit_error": why}

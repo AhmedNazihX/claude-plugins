@@ -98,6 +98,20 @@ class SortScriptsTest(unittest.TestCase):
         self.assertIn("cycle", result.stderr)
         self.assertEqual(git(self.repo, "log", "-1", "--format=%s"), "accio set up")
 
+    def test_S_025_1_board_print_shows_the_board_and_writes_nothing(self):
+        self.add("S-001", ["src/a.py"])
+        result = subprocess.run([sys.executable, "-I", str(BOARD), "board", "--print"], cwd=self.repo,
+                                stdin=subprocess.DEVNULL, capture_output=True, text=True, check=False)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("S-001 Story S-001", result.stdout)
+        self.assertFalse((self.accio / "board.md").exists())
+
+    def test_starting_a_build_clears_what_the_last_one_left_stuck(self):
+        run = self.accio / "run"
+        write(run / "stuck.json", '[{"agent_type": "accio:house-elf"}]')
+        runlock.take(run)
+        self.assertFalse((run / "stuck.json").exists())
+
     def test_record_takes_only_story_files_and_never_during_a_build(self):
         first = self.add("S-001", ["src/a.py"])
         write(self.repo / "src.py", "x = 1\n")

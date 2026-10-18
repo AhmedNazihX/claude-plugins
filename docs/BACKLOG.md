@@ -41,7 +41,7 @@ evals/                       scripts/publish.py
 | done | S-022 `owl` skill |
 | done | S-023 `sort` skill and `quill` |
 | todo | S-024 `wand` skill, `seeker`, `wandmaker` |
-| todo | S-025 `map` and `vow` skills |
+| done | S-025 `map` and `vow` skills |
 | todo | S-026 Skill evals and baseline cost |
 | conditional | S-027 `brew-by-hand` (only if S-001 says so) |
 
@@ -486,10 +486,16 @@ Context: DESIGN § 3.1, § 12.1; decision 011.
 - [ ] S-024/6 (no test) `wandmaker` answers the four depth questions for each option, and the evidence answer seeds the DoD lines (decision 011)
 
 ### S-025 · `map` and `vow` skills
-Deps: S-004, S-016 · Files: `skills/{map,vow}/SKILL.md`, `evals/{map,vow}/`
+Deps: S-004, S-016 · Files: `skills/{map,vow}/SKILL.md`, `skills/vow/references/`, `evals/{map,vow}/`, `bin/accio-vow`, `bin/accio_lib/vow.py`, `bin/accio-board` (`board --print`)
 Context: DESIGN § 3.7.
-- [ ] S-025/1 (no test) `map` shows the board from `accio-board` and points to `brew-by-hand` when the `Workflow` tool is missing from its tool list
-- [ ] S-025/2 (no test) `vow` writes `.accio/decisions/NNN-<slug>.md` in the `decisions.md` format
+- [x] S-025/1 (no test) `map` shows the board from `accio-board` and points to `brew-by-hand` when the `Workflow` tool is missing from its tool list
+- [x] S-025/2 (no test) `vow` writes `.accio/decisions/NNN-<slug>.md` in the `decisions.md` format
+Done: a code review and a skill review. Built before S-024, which records its decisions with `vow`. Neither skill
+changes anything during a build: `map` uses `accio-board board --print` (board.md is committed, so writing it
+mid-build would fail every story's main snapshot), and `accio-vow` refuses to name or record a decision while a
+build runs. A build's start clears `run/stuck.json`, so `map` shows only the current build's freezes. `vow` uses
+only what the conversation says, writes `not discussed` rather than guessing, records only a decision the user made,
+and keeps each cost on its own line with its source. Evals: map, map with workflows off, vow; all 1.00 locally.
 
 ### S-026 · Skill evals and baseline cost
 Deps: S-021, S-022, S-023, S-024, S-025 · Files: `evals/`, `.github/workflows/ci.yml`

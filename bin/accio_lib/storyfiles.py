@@ -151,7 +151,8 @@ def commit(root, files, message):
         return None, (added.stderr or added.stdout).strip() or "git add failed"
     head = _git(root, "rev-parse", "--verify", "--quiet", "HEAD").stdout.strip()
     if head and _git(root, "diff", "--cached", "--quiet", "HEAD", "--", *names).returncode == 0:
-        return head, None
+        last = _git(root, "log", "-1", "--format=%H", "--", *names).stdout.strip()
+        return last or head, None  # already committed: the commit that last changed them
     committed = _git(root, "commit", "-q", "-m", message, "--only", "--", *names)
     if committed.returncode != 0:
         _git(root, *(("reset", "-q", "--", *names) if head else ("rm", "-q", "--cached", "--", *names)))

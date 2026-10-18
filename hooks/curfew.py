@@ -24,7 +24,7 @@ sys.path.insert(0, str(BIN))
 from accio_lib import askrules, config, paths, policy, runlock  # noqa: E402
 
 AGENT_PREFIX = "accio:"
-STUCK_NAME = "stuck.json"
+STUCK_NAME = runlock.STUCK_NAME
 
 
 def _payload(raw):

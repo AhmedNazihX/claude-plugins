@@ -13,7 +13,8 @@ import time
 LOCK_NAME = "brew.lock"
 CLAIMS_NAME = "claims.json"
 ALLOW_ONCE_NAME = "allow-once.json"  # commands owl allowed once, per story, until its next build (S-022)
-STATUS_NAME = "status.json"  # the build's statuses (accio_lib.board writes it)
+STATUS_NAME = "status.json"
+STUCK_NAME = "stuck.json"  # curfew records an agent that reached a permission question  # the build's statuses (accio_lib.board writes it)
 GUARD_NAME = ".guard"
 STALE_SECONDS = 30 * 60
 
@@ -90,6 +91,7 @@ def take(run_dir):
             raise LockError(f"cannot write {path}: {error}") from error
         try:
             (run_dir / CLAIMS_NAME).unlink(missing_ok=True)
+            (run_dir / STUCK_NAME).unlink(missing_ok=True)  # map shows only what this build leaves stuck
             _expire_grants(run_dir)  # a crashed build's stories used theirs
         except OSError as error:
             path.unlink(missing_ok=True)

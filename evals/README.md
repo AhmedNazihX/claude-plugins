@@ -22,5 +22,7 @@ PATH="$(xcode-select -p)/usr/bin:$PATH" claude plugin eval . --tag prophecy --ta
   score's split flag (the safety net) rarely fires in a run; that path is in the skill and `tests/test_sort.py`.
 - Skills call accio's scripts as `${CLAUDE_PLUGIN_ROOT}/bin/<script>`: the plugin's `bin/` is not on `PATH` in eval
   runs.
+- Tags: `prophecy`, `owl`, `sort`, `map`, `vow`. The workflows-off cases have their own tags,
+  `prophecy-workflows-off` and `map-workflows-off`, run with `--disallow-tools Workflow`.
 - `prophecy/workflows-off` (S-021/6) has its own tag, because it needs the `Workflow` tool taken away for the whole
   run: add `--tag prophecy-workflows-off --disallow-tools Workflow` instead of `--tag prophecy`.
