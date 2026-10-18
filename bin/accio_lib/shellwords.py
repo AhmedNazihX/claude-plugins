@@ -52,8 +52,11 @@ def _ansi_escape(command, index):
     char = command[index]
     if char in ANSI_SIMPLE:
         return ANSI_SIMPLE[char], index + 1
-    if char == "c" and index + 1 < len(command):
-        return chr(ord(command[index + 1]) & 0x1F), index + 2
+    if char == "c" and index + 1 < len(command):  # control-x; `\c?` is DEL, and `\c\\` takes both backslashes
+        target, end = command[index + 1], index + 2
+        if target == "\\" and command.startswith("\\", end):
+            end += 1
+        return ("\x7f" if target == "?" else chr(ord(target.upper()) & 0x1F)), end
     if char in OCTAL:
         end = index
         while end < len(command) and end < index + 3 and command[end] in OCTAL:
@@ -66,7 +69,10 @@ def _ansi_escape(command, index):
                 end += 1
             if end == index + 1:
                 return "\\" + char, index + 1
-            return chr(int(command[index + 1:end], base)), end
+            value = int(command[index + 1:end], base)
+            if value > 0x10FFFF or 0xD800 <= value <= 0xDFFF:  # no such character: bash keeps the escape as written
+                return "\\" + command[index:end], end
+            return chr(value), end
     return "\\" + char, index + 1
 
 

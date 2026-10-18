@@ -75,6 +75,13 @@ class ProtegoTest(unittest.TestCase):
             with self.subTest(command):
                 self.assert_blocked(command, "rm -rf")
 
+    def test_an_unexpected_error_blocks_the_command(self):
+        result = self.check("rm -rf build", raw=json.dumps({"hook_event_name": "PreToolUse", "tool_name": "Bash",
+                                                             "tool_input": {"command": ["not", "a", "string"]},
+                                                             "cwd": str(self.repo)}))
+        self.assertIn(result.returncode, (0, 2))  # malformed input: no crash either way
+        self.assert_blocked(r"rm -rf $'\UFFFFFFFF' ..", "rm -rf")
+
     def test_S_013_1_hook_bypasses_are_blocked(self):
         for command in ("git commit --no-verify -m x", "git commit -n -m x", "git commit -anm x",
                         "git push --no-verify origin feature", "git merge --no-verify feature",

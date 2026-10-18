@@ -420,8 +420,11 @@ def main():
     command, cwd = _command_and_cwd(sys.stdin.read())
     if command is None or paths.accio_dir(cwd) is None:
         return 0
-    root = paths.main_root(cwd)
-    reason = check_command(command, cwd, Scope(root, generic=not dcg_is_active(root)))
+    try:
+        root = paths.main_root(cwd)
+        reason = check_command(command, cwd, Scope(root, generic=not dcg_is_active(root)))
+    except Exception as error:  # noqa: BLE001  (in an accio repo a guard that fails blocks, never lets it through)
+        reason = f"couldn't check this command ({type(error).__name__}), so it is blocked"
     if reason:
         print(f"protego: {reason}", file=sys.stderr)
         return BLOCK_EXIT
