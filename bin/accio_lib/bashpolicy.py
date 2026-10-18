@@ -280,18 +280,18 @@ def resolve(word, cwd):
 
 
 def _may_name_git(word):
-    """True when a part of the word is or could glob to `.git` (a pattern matches a leading dot only when it
-    starts with one, so `*` and `?x` never do)."""
-    return any(part.startswith(".") and fnmatch.fnmatchcase(".git", part) for part in word.split("/"))
+    """True when a part of the word is or could glob to `.git`, in any case (macOS file systems ignore case; a
+    pattern matches a leading dot only when it starts with one, so `*` and `?x` never do)."""
+    return any(part.startswith(".") and fnmatch.fnmatchcase(".git", part.lower()) for part in word.split("/"))
 
 
 def in_worktree(path, worktree):
-    """True when `path` is inside the worktree and not in or at its `.git`."""
+    """True when `path` is inside the worktree and not in or at its `.git` (in any case)."""
     if path is None:
         return False
     try:
         real = pathlib.Path(os.path.realpath(worktree))
-        return path.is_relative_to(real) and ".git" not in path.relative_to(real).parts
+        return path.is_relative_to(real) and ".git" not in (part.lower() for part in path.relative_to(real).parts)
     except (OSError, ValueError):
         return False
 

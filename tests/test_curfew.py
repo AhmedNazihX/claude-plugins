@@ -237,7 +237,7 @@ class FlagsAndFormsTest(CurfewTestBase):
                  "sort --compress-program=./x -S1M a": "sort", "file --comp x": "file", "uniq - out.txt": "uniq",
                  "uniq -- a.txt -out.txt": "uniq",
                  f"git diff --out={push_ok}": "--output", "echo x > .git": ".git", "mv a.py .git": ".git",
-                 "rm .git": ".git", "mkdir -p .git/hooks": ".git", "rm -rf .gi?": ".gi?", "cp a.py .g*/x": ".g*",
+                 "rm .git": ".git", "mkdir -p .git/hooks": ".git", "rm -rf .gi?": ".gi?", "cp a.py .g*/x": ".g*", "echo x > .GIT": ".GIT", "rm -rf .Gi?": ".Gi?",
                  "git commit -n -m x": "verify", "git commit --no-verif -m x": "verify", "git commit -anm x": "verify",
                  "git rebase --no-verify": "rebase"}
         for command, word in cases.items():
@@ -264,6 +264,7 @@ class FlagsAndFormsTest(CurfewTestBase):
 
     def test_S_015_4_the_worktrees_git_link_is_out_of_reach(self):
         self.assert_denied("Write", {"file_path": str(self.worktree / ".git"), "content": "gitdir: x"}, ".git")
+        self.assert_denied("Write", {"file_path": str(self.worktree / ".Git"), "content": "gitdir: x"}, ".git")
         self.assert_allowed("Write", {"file_path": str(self.worktree / ".gitignore"), "content": "x"})
 
     def test_prefects_git_has_no_network_options(self):
