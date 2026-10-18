@@ -33,10 +33,10 @@ def _eol(lines):
     return "\r\n" if lines and lines[0].endswith("\r\n") else "\n"
 
 
-def with_fields(path, changes, text=None):
+def with_fields(path, changes):
     """The story file's text with frontmatter values replaced (or added); comments and line endings are kept."""
-    lines = (text if text is not None else "".join(_lines(path))).splitlines(keepends=True)
-    where = story.key_lines(path) if text is None else _key_lines(lines)
+    lines = _lines(path)
+    where = story.key_lines(path)
     for key, value in changes.items():
         if key in where:
             match = VALUE_LINE.match(lines[where[key] - 1])
@@ -70,7 +70,9 @@ def with_section(text, heading, body, append=False):
         ending = "" if not lines or lines[-1].endswith(("\n", "\r")) else eol
         return f"{text}{ending}{title}{eol}{body.rstrip()}{eol}"
     end = next((index for index in range(start + 1, len(lines)) if re.match(r"^#{1,2}\s", lines[index])), len(lines))
-    kept = [line for line in lines[start + 1:end] if line.strip()] if append else []
+    kept = lines[start + 1:end] if append else []
+    while kept and not kept[-1].strip():
+        kept = kept[:-1]
     block = "".join(kept) + "".join(f"{line}{eol}" for line in body.rstrip().splitlines())
     return "".join(lines[:start + 1]) + block + "".join(lines[end:])
 

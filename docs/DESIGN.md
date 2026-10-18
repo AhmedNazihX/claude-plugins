@@ -588,7 +588,7 @@ workflow launch: the first `/accio:brew` asks once, and "don't ask again" covers
 | `run/ledger.tsv` | `accio-ledger` (from `prefect`; `headmaster` only reads it) | never |
 | `run/<ID>/main-snapshot.json` | `accio-check <ID> snapshot` (from `portkey`, once per brief; `accio-brief` clears it); `prefect` compares after the story (status, mode and content of each changed, untracked or ignored path; HEAD; `origin/<base>`) | never |
 | `run/brew.lock` | `accio-board lock` / `unlock` (from `portkey`), refreshed by `accio-board move` | never |
-| `run/allow-once.json` | `accio-owl close` (commands allowed for the next build only); watched by `accio-check`'s snapshot | never; removed when that build unlocks |
+| `run/allow-once.json` | `accio-owl close` (commands allowed once, per story, for its next build only); claimed by the build that starts next; watched by `accio-check`'s snapshot | never; removed when that build unlocks |
 | `run/claims.json` | `curfew` (when `house-elf` runs `accio-claim`) | never; cleared when a run starts |
 | `run/stuck.json` | `curfew` (a permission question reached an accio agent: it froze) | never |
 | `run/<ID>/brief.md`, `report.md`, `findings-*.md` | `accio-brief`; `house-elf`; each reviewer | never |

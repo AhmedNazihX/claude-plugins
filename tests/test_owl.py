@@ -3,6 +3,7 @@
 The skill's DoD lines are checked by hand and by its evals; these tests pin the effects the skill leans on.
 """
 import json
+import os
 import pathlib
 import subprocess
 import sys
@@ -163,12 +164,24 @@ class OwlTest(unittest.TestCase):
         self.assertEqual(self.meta("S-002")["status"], "review")
 
     def test_S_022_7_allow_from_now_on_goes_to_agent_allow_and_allow_once_to_the_next_build_only(self):
-        self.close_all("--allow", "npm run e2e", "--allow", "make lint", "--allow-once", "docker compose up")
+        answers = ("--accept", "S-001", "--accept", "S-002", "--reject", "S-004", "no", "--drop", "S-007", "gone")
+        self.owl("close", *answers, "--allow", "S-003", "npm run e2e", "--allow", "S-003", "make lint",
+                 "--allow-once", "S-003", "docker compose up", "--merged", "S-001", "--merged", "S-002")
         config = json.loads((self.accio / "config.json").read_text())
         self.assertEqual(config["agent_allow"], ["make lint", "npm run e2e"])
-        self.assertEqual(json.loads((self.run_dir / "allow-once.json").read_text()), ["docker compose up"])
+        self.assertEqual(json.loads((self.run_dir / "allow-once.json").read_text()),
+                         {"stories": {"S-003": ["docker compose up"]}})
         subprocess.run([sys.executable, "-I", str(BOARD), "lock"], cwd=self.repo, check=True, capture_output=True)
+        self.assertEqual(json.loads((self.run_dir / "allow-once.json").read_text())["stories"],
+                         {"S-003": ["docker compose up"]})
         subprocess.run([sys.executable, "-I", str(BOARD), "unlock"], cwd=self.repo, check=True, capture_output=True)
+        self.assertFalse((self.run_dir / "allow-once.json").exists())
+
+    def test_S_022_7_a_build_that_crashed_used_up_its_allow_once(self):
+        write(self.run_dir / "allow-once.json", json.dumps({"stories": {"S-003": ["docker compose up"]}}))
+        runlock.take(self.run_dir)  # the build the grant was for starts and claims it
+        os.utime(runlock.lock_path(self.run_dir), (1_600_000_000, 1_600_000_000))  # ...and crashes
+        runlock.take(self.run_dir)  # the next build replaces the stale lock
         self.assertFalse((self.run_dir / "allow-once.json").exists())
 
     def test_S_022_1_an_unanswered_blocked_story_keeps_its_question_in_the_story_file(self):
@@ -187,9 +200,87 @@ class OwlTest(unittest.TestCase):
         self.assertEqual(self.meta("S-004")["status"], "ready")  # the story file: nothing was written
         self.assertTrue((self.run_dir / "status.json").exists())
 
+    BASIC = ("--accept", "S-001", "--accept", "S-002", "--reject", "S-004", "no", "--drop", "S-007", "gone")
+
+    def test_a_reason_that_would_break_the_story_file_is_refused(self):
+        for bad in ("gone\nstatus: done", "a\rb", "x\x1by"):
+            with self.subTest(bad):
+                result = self.owl("close", "--accept", "S-001", "--accept", "S-002", "--reject", "S-004", "no",
+                                  "--drop", "S-007", bad, "--merged", "S-001", "--merged", "S-002", check=False)
+                self.assertEqual(result.returncode, 1)
+                self.assertIn("one line", result.stderr)
+        self.assertEqual(self.meta("S-007")["status"], "ready")
+
+    def test_headings_in_answers_and_questions_stay_inside_their_section(self):
+        write(self.run_dir / "questions" / "S-003.md", "Which?\n## Options\n- A\n## Definition of Done\n- B\n")
+        self.owl("close", *self.BASIC, "--answer", "S-003", "A.\n## Not a heading", "--merged", "S-001",
+                 "--merged", "S-002")
+        parsed = story.parse(self.accio / "stories" / "S-003.md")
+        blocked = story.section(parsed, "Blocked question")
+        self.assertIn("Options", blocked)
+        self.assertIn("Not a heading", blocked)
+        self.assertEqual([line.id for line in parsed.dod], ["S-003/1"])
+
+    def test_an_answer_is_kept_even_when_the_question_file_is_missing(self):
+        (self.run_dir / "questions" / "S-003.md").unlink()
+        self.owl("close", *self.BASIC, "--answer", "S-003", "Email only", "--merged", "S-001", "--merged", "S-002")
+        self.assertIn("Answer: Email only", self.section("S-003", "Blocked question"))
+        self.assertIn("no question file", self.section("S-003", "Blocked question"))
+
+    def test_a_merged_story_needs_its_parents_merged_or_done(self):
+        answers = ("--accept", "S-001", "--accept", "S-002", "--accept", "S-004", "--accept", "S-006",
+                   "--drop", "S-007", "gone")
+        result = self.owl("close", *answers, "--merged", "S-006", "--culprit", "S-004", "fails", check=False)
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("S-006 is built on S-004", result.stderr)
+        self.owl("close", *answers, "--merged", "S-001", "--merged", "S-002", "--culprit", "S-004", "fails")
+        self.assertEqual((self.meta("S-002")["status"], self.meta("S-006")["status"]), ("done", "ready"))
+
+    def test_close_runs_only_on_the_base_branch(self):
+        git(self.repo, "switch", "-q", "-c", "feature")
+        result = self.owl("close", *self.BASIC, "--merged", "S-001", "--merged", "S-002", check=False)
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("not main", result.stderr)
+
+    def test_a_dropped_worktree_with_local_files_is_kept_and_named(self):
+        write(self.worktree / ".gitignore", ".env\n")
+        git(self.worktree, "add", ".gitignore")
+        git(self.worktree, "commit", "-q", "-m", "ignore env")
+        write(self.worktree / ".env", "KEY=1\n")
+        reply = self.owl("close", *self.BASIC, "--merged", "S-001", "--merged", "S-002")
+        self.assertTrue((self.worktree / ".env").exists())
+        self.assertEqual(len(reply["leftovers"]), 1)
+        self.assertIn(".env", reply["leftovers"][0])
+
+    def test_stale_question_files_go_with_dropped_and_sent_back_stories(self):
+        write(self.run_dir / "questions" / "S-007.md", "Old question?\n")
+        overrides = json.loads((self.run_dir / "status.json").read_text())
+        write(self.run_dir / "status.json", json.dumps({**overrides, "S-006": "blocked"}))
+        write(self.run_dir / "questions" / "S-006.md", "Child question?\n")
+        self.owl("close", *self.BASIC, "--merged", "S-001", "--merged", "S-002")
+        self.assertFalse((self.run_dir / "questions" / "S-007.md").exists())
+        self.assertFalse((self.run_dir / "questions" / "S-006.md").exists())
+        self.assertEqual(self.section("S-006", "Blocked question"), "")  # moot: its parent was rejected
+
+    def test_a_story_a_crash_left_in_doing_stays_in_doing_for_the_next_build(self):
+        overrides = json.loads((self.run_dir / "status.json").read_text())
+        write(self.run_dir / "status.json", json.dumps({**overrides, "S-005": "doing"}))
+        self.owl("close", *self.BASIC, "--merged", "S-001", "--merged", "S-002")
+        self.assertEqual(json.loads((self.run_dir / "status.json").read_text()), {"S-005": "doing"})
+
+    def test_an_allowed_command_answers_its_story_and_must_parse(self):
+        self.owl("close", *self.BASIC, "--allow", "S-003", "npm run e2e", "--merged", "S-001", "--merged", "S-002")
+        self.assertEqual(self.meta("S-003")["status"], "ready")
+        self.assertIn("Allowed from now on: npm run e2e", self.section("S-003", "Blocked question"))
+        bad = self.owl("check", "--accept", "S-001", "--accept", "S-002", "--reject", "S-004", "no", "--drop",
+                       "S-007", "gone", "--allow-once", "S-003", "echo 'unbalanced", check=False)
+        self.assertEqual(bad.returncode, 1)
+        self.assertIn("can't be read as a command", bad.stderr)
+
     def test_close_checks_the_answers_too_and_refuses_during_a_build(self):
         result = self.owl("close", "--accept", "S-002", "--merged", "S-002", check=False)
         self.assertEqual(result.returncode, 1)
+        self.assertIn("S-002 is built on S-001", result.stderr)
         runlock.take(self.run_dir)
         result = self.owl("close", *self.ANSWERS[:4], check=False)
         self.assertEqual(result.returncode, 1)

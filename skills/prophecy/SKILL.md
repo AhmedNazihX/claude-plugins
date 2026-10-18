@@ -62,7 +62,7 @@ On "go":
    one `--also` per story file you edited in step 4. It sets the stories to Ready, returns any other Ready story to
    Backlog (`returned`: tell the user), writes the story, iteration and board files, all or nothing, and commits
    exactly those plus the `--also` files. If it refuses (`accio-board: …`):
-   - a build is running: say to plan after it ends, and stop
+   - a build is running, or the last one isn't reviewed: say so (review it with `/accio:owl` first), and stop
    - it cannot write: show the error and stop; nothing was changed, don't retry
    - a story can't go: say which and why, from the message, and ask for go again; never change the set yourself
    - a bad `--also`: you passed a file that isn't a story file; fix the list and run it again

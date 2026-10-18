@@ -341,6 +341,11 @@ def _hook_problems(path, lines, calls, hook):
 
 def verify(root, script):
     """(problems, fixes): problems need the user; fixes are what verify wrote (a missing or stale helper)."""
+    active = active_folder(root)
+    if active.exists() and not active.is_dir():
+        return ((f"git's hooks are switched off: core.hooksPath points to {active}, which isn't a folder, so accio's "
+                 "commit and push checks never run. Unset it (`git config --unset core.hooksPath`) and run "
+                 "`accio-hooks install`, or carry on without them."),), ()
     found = layout(root)
     fixes = [fix for fix in (_write_helper(root, script),) if fix]
     if found.is_manager:

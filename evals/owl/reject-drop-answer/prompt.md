@@ -8,4 +8,4 @@ allowed_tools: [Read, Glob, Skill]
 ---
 
 Review the build: reject S-001 because the email text is wrong (S-002 can go back with it), drop S-004 because we
-don't need photos, and S-003: 5 tries per hour. Don't push.
+don't need photos, and S-003: 5 tries per hour. If the git hooks are off, carry on without them. Don't push.

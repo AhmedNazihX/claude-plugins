@@ -34,6 +34,11 @@ class StoryFilesTest(unittest.TestCase):
         self.assertIn("## Review notes\n- only note\n## Blocked question\n", replaced)
         self.assertTrue(replaced.startswith(TEXT.split("## Review notes")[0]))
 
+    def test_appending_keeps_the_blank_lines_between_earlier_notes(self):
+        text = TEXT.replace("- old note\n", "First paragraph.\n\nSecond paragraph.\n\n")
+        appended = storyfiles.with_section(text, "Review notes", "- new note", append=True)
+        self.assertIn("First paragraph.\n\nSecond paragraph.\n- new note\n## Blocked question", appended)
+
     def test_a_missing_section_goes_at_the_end_and_crlf_files_stay_crlf(self):
         crlf = TEXT.replace("\n", "\r\n")
         text = storyfiles.with_section(crlf.replace("## Blocked question\r\n", ""), "Blocked question", "Why?")

@@ -303,6 +303,14 @@ class PlanTest(unittest.TestCase):
         self.assertEqual({path.name: path.read_text() for path in (self.accio / "stories").iterdir()}, before)
         self.assertFalse((self.accio / "iterations").exists())
 
+    def test_go_refuses_until_the_last_build_is_reviewed(self):
+        self.add("S-001")
+        self.add("S-002")
+        write(self.accio / "run" / "status.json", json.dumps({"S-002": "review"}))
+        result = self.board("go", "S-001", check=False)
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("/accio:owl", result.stderr)
+
     def test_go_refuses_during_a_build(self):
         self.add("S-001")
         self.board("lock")

@@ -12,8 +12,9 @@
   `iterations/<N>.md` and `board.md`, all or nothing, then commits exactly those files plus the story files the
   skill edited (`--also`), with `git commit --only`, so nothing else the user staged goes in (each listed file goes
   in whole, hand edits included). Files that already match HEAD need no commit. A commit git refuses (a hook, no
-  repo) leaves the plan written, unstaged, and says why. It refuses while a build holds the run lock: then
-  run/status.json, not the story file, holds the status.
+  repo) leaves the plan written, unstaged, and says why. It refuses while a build holds the run lock (then
+  run/status.json, not the story file, holds the status), and until owl has reviewed the last build, so that
+  iteration's outcome goes into its own file.
 - Values are changed in place: a line's trailing comment, the file's line endings and its mode are kept.
 """
 import pathlib
@@ -173,6 +174,10 @@ def go(accio, settings, chosen, tracks, also=()):
     commit, commit_error}."""
     if runlock.is_held(board.run_dir(accio)):
         raise PlanError("a build is running (run/brew.lock); plan the next iteration after it ends")
+    unreviewed = sorted(sid for sid, value in board.read_overrides(accio).items() if value in ("review", "blocked"))
+    if unreviewed:
+        raise PlanError(f"the last build isn't reviewed yet ({', '.join(unreviewed)}); run /accio:owl first, which "
+                        "closes that iteration")
     edited = _story_files(accio, also)
     stories = board.load_stories(accio)
     status = board.statuses(stories, board.read_overrides(accio))

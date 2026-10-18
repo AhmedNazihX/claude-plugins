@@ -9,12 +9,12 @@ import sys
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 
-from accio_lib import board, config, cost, paths, runs, summary  # noqa: E402
+from accio_lib import board, config, cost, paths, plan, runlock, runs, summary  # noqa: E402
 
 
 def _planned_at(accio):
     """When the newest iteration file was written (0 when there is none)."""
-    return max((path.stat().st_mtime for path in (accio / "iterations").glob("*.md")), default=0.0)
+    return max((path.stat().st_mtime for _, path in plan.iterations(accio)), default=0.0)
 
 
 def main(argv=None):
@@ -27,6 +27,8 @@ def main(argv=None):
         accio = paths.accio_dir()
         if accio is None:
             raise board.BoardError("no .accio/ folder in this repo; run accio's setup first")
+        if runlock.is_held(accio / "run"):
+            raise board.BoardError("a build is running (run/brew.lock); review it after it ends")
         stories = board.load_stories(accio)
         status = board.statuses(stories, board.read_overrides(accio))
         shown = [sid for sid in stories if status[sid] in ("review", "blocked")]

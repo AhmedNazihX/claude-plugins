@@ -86,9 +86,27 @@ def take(run_dir):
         try:
             path.write_text(f"{os.getpid()}\n", encoding="utf-8")
             (run_dir / CLAIMS_NAME).unlink(missing_ok=True)
+            _claim_allow_once(run_dir)
         except OSError as error:
             raise LockError(f"cannot write {path}: {error}") from error
     return note
+
+
+def _claim_allow_once(run_dir):
+    """owl's one-build grants go to the build that starts next: it marks them as its own. A grant an earlier build
+    already marked (it crashed before `release`) is used up, so it goes."""
+    path = run_dir / ALLOW_ONCE_NAME
+    try:
+        grants = json.loads(path.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        return
+    except (OSError, UnicodeDecodeError, ValueError):
+        path.unlink(missing_ok=True)
+        return
+    if not isinstance(grants, dict) or grants.get("claimed"):
+        path.unlink(missing_ok=True)
+        return
+    path.write_text(json.dumps({**grants, "claimed": True}) + "\n", encoding="utf-8")
 
 
 def refresh(run_dir):

@@ -90,11 +90,14 @@ def _claims(run_dir):
             if isinstance(held, dict) and isinstance(held.get("story"), str) and isinstance(held.get("worktree"), str)}
 
 
-def _settings(accio, run_dir):
-    """config.json, with the commands owl allowed for this build only added to `agent_allow` (S-022)."""
+def _settings(accio, run_dir, story_id):
+    """config.json, with the commands owl allowed once for this agent's story added to `agent_allow` (S-022): a grant
+    is for one story's next build, not for every story in it."""
     settings = config.load(accio)
-    once = _read_json(run_dir / runlock.ALLOW_ONCE_NAME, [])
-    extra = [command for command in once if isinstance(command, str)] if isinstance(once, list) else []
+    once = _read_json(run_dir / runlock.ALLOW_ONCE_NAME, {})
+    stories = once.get("stories", {}) if isinstance(once, dict) else {}
+    commands = stories.get(story_id, []) if isinstance(stories, dict) and story_id else []
+    extra = [command for command in commands if isinstance(command, str)] if isinstance(commands, list) else []
     return {**settings, "agent_allow": [*settings.get("agent_allow", []), *extra]}
 
 
@@ -105,9 +108,11 @@ def _statuses(run_dir):
 
 def _pre_tool_use(payload, root, accio):
     run_dir = accio / "run"
-    context = policy.Context(root=root, accio=accio, bin_dir=BIN, config=_settings(accio, run_dir),
-                             claims=_claims(run_dir), statuses=_statuses(run_dir))
     agent, agent_id = payload["agent_type"][len(AGENT_PREFIX):], str(payload.get("agent_id", ""))
+    claims = _claims(run_dir)
+    context = policy.Context(root=root, accio=accio, bin_dir=BIN,
+                             config=_settings(accio, run_dir, claims.get(agent_id, {}).get("story")),
+                             claims=claims, statuses=_statuses(run_dir))
     tool = payload.get("tool_name") if isinstance(payload.get("tool_name"), str) else ""
     decision = policy.decide(agent, agent_id, tool, payload["tool_input"], context)
     if not decision.allow:
