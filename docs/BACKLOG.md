@@ -32,7 +32,7 @@ evals/                       scripts/publish.py
 | done | S-014 `fidelius` |
 | done | S-015 `curfew`: permission policy and worktree claims |
 | done | S-016 `session-start` |
-| todo | S-028 `doc-size` and `librarian` |
+| done | S-028 `doc-size` and `librarian` |
 | todo | S-017 Build agents: `portkey`, `house-elf`, `prefect` |
 | todo | S-018 Review agents and findings template |
 | todo | S-019 `brew.js`: load, prepare, implement, check, outcome |
@@ -320,13 +320,16 @@ Follow-up (automated review after merge): no text from the repo's files reaches 
 named by kind and count, and `/accio:map` or `accio-hooks verify` show the details.
 
 ### S-028 · `doc-size` and `librarian`
-Deps: S-013 · Files: `hooks/doc_size.py`, `hooks/hooks.json`, `agents/librarian.md`, `tests/test_doc_size.py`
+Deps: S-013 · Files: `hooks/doc_size.py`, `hooks/hooks.json`, `agents/librarian.md`, `bin/accio_lib/paths.py`, `hooks/fidelius.py`, `tests/test_doc_size.py`
 Context: DESIGN § 4.2, § 4.4; `analysis.md` § 3.1 (long docs read whole). Built here, after
 S-016, but numbered last because it was added later.
-- [ ] S-028/1 WHEN Read targets a `.md` file over 40 KB with no offset or limit THE SYSTEM SHALL exit 2 and point to `librarian` or to reading by section
-- [ ] S-028/2 WHEN the read has an offset or limit, or the file is 40 KB or less THE SYSTEM SHALL allow it
-- [ ] S-028/3 WHEN the repo has no `.accio/` THE SYSTEM SHALL exit 0 silently
-- [ ] S-028/4 (no test) `librarian` runs on Haiku with Read and Grep only, and returns quotes with `file:line`
+- [x] S-028/1 WHEN Read targets a Markdown file (`.md`, `.markdown`, `.mdx`) over 40 KB without a limit of at most 400 lines THE SYSTEM SHALL exit 2 and point to `librarian` or to reading by section
+- [x] S-028/2 WHEN the read has a limit of at most 400 lines, or the file is 40 KB or less THE SYSTEM SHALL allow it (review: an offset alone or a large limit still loads the whole file)
+- [x] S-028/3 WHEN the repo has no `.accio/` THE SYSTEM SHALL exit 0 silently
+- [x] S-028/4 (no test) `librarian` runs on Haiku with Read and Grep only, and returns quotes with `file:line`
+Done: one review round. A section read needs a limit of at most 400 lines (an offset alone or a large limit still
+loads the whole file); `.markdown` and `.mdx` count. The repo lookup fidelius used is shared as
+`paths.guarding_accio_dir`.
 
 ### S-017 · Build agents: `portkey`, `house-elf`, `prefect`
 Deps: S-007, S-006, S-015 · Files: `agents/{portkey,house-elf,prefect}.md`, `bin/accio_lib/checks.py`, `tests/test_checks.py`

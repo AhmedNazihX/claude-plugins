@@ -10,6 +10,10 @@
         "hooks": [{ "type": "command", "command": "python3 -I \"${CLAUDE_PLUGIN_ROOT}/hooks/fidelius.py\"" }]
       },
       {
+        "matcher": "Read",
+        "hooks": [{ "type": "command", "command": "python3 -I \"${CLAUDE_PLUGIN_ROOT}/hooks/doc_size.py\"" }]
+      },
+      {
         "matcher": "*",
         "hooks": [{ "type": "command", "command": "python3 -I \"${CLAUDE_PLUGIN_ROOT}/hooks/curfew.py\"" }]
       }

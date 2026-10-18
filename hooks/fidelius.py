@@ -110,7 +110,7 @@ def is_private_env_file(target):
         return False
     if not secret_scan.is_secret_file(real.name) or TEMPLATE_WORDS & set(NAME_PARTS.split(real.name.lower())):
         return False
-    folder = _existing_folder(real)
+    folder = paths.existing_folder(real)
     try:
         result = subprocess.run(["git", "-C", str(folder), "check-ignore", "-q", "--", os.path.relpath(real, folder)],
                                 capture_output=True, check=False)
@@ -133,27 +133,9 @@ def check(payload):
     return secret_scan.describe(os.path.basename(target) or "this file", findings) if findings else None
 
 
-def _existing_folder(path):
-    folder = pathlib.Path(path).parent
-    while not folder.is_dir() and folder != folder.parent:
-        folder = folder.parent
-    return folder
-
-
 def is_guarded(payload):
     """True when the session's folder or the file's folder is in a repo with `.accio/`."""
-    cwd = payload.get("cwd")
-    starts = [cwd if isinstance(cwd, str) and os.path.isdir(cwd) else os.getcwd()]
-    target = target_path(payload["tool_input"])
-    if os.path.isabs(target):
-        starts.append(_existing_folder(target))
-    for start in starts:
-        try:
-            if paths.accio_dir(start) is not None:
-                return True
-        except (ValueError, OSError):
-            continue
-    return False
+    return paths.guarding_accio_dir(payload.get("cwd"), target_path(payload["tool_input"])) is not None
 
 
 def _payload(raw):

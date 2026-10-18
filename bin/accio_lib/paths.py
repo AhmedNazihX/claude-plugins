@@ -5,6 +5,7 @@ folder. Submodules and `--separate-git-dir` checkouts resolve through their own 
 worktree of a `--separate-git-dir` repo, because git doesn't record that repo's main checkout (setup warns, S-012).
 Any failure gives None, so hooks can exit silently and never crash.
 """
+import os
 import pathlib
 import subprocess
 
@@ -45,3 +46,26 @@ def accio_dir(start="."):
         return None
     candidate = root / ACCIO_DIR_NAME
     return candidate if candidate.is_dir() else None
+
+
+def existing_folder(path):
+    folder = pathlib.Path(path).parent
+    while not folder.is_dir() and folder != folder.parent:
+        folder = folder.parent
+    return folder
+
+
+def guarding_accio_dir(cwd, target=""):
+    """The `.accio/` that turns a Claude hook on: the session folder's (the hook's own folder when `cwd` is missing),
+    else the file's (its nearest existing folder), so a call aimed into an accio repo is guarded from anywhere."""
+    starts = [cwd if isinstance(cwd, str) and os.path.isdir(cwd) else os.getcwd()]
+    if isinstance(target, str) and os.path.isabs(target):
+        starts.append(existing_folder(target))
+    for start in starts:
+        try:
+            found = accio_dir(start)
+        except (ValueError, OSError):
+            continue
+        if found is not None:
+            return found
+    return None
