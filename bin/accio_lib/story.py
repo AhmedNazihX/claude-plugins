@@ -171,6 +171,11 @@ def _read(path):
         raise StoryError(f"{path}:1: cannot read the story file: {error}") from error
 
 
+def key_lines(path):
+    """The line number of each frontmatter key (1-based), for a writer that changes values in place."""
+    return _frontmatter(path, _read(path))[1]
+
+
 def parse(path):
     """Parse one story file; raises StoryError naming the file and line."""
     lines = _read(path)

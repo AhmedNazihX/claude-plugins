@@ -112,7 +112,7 @@ def ready_batch(stories, status, stack_depth):
 
     batch = [sid for sid in stories if status[sid] == "ready" and level(sid) is not None]
     batch.sort(key=lambda sid: (levels[sid], sid))
-    return tuple(_item(stories[sid], status, levels[sid]) for sid in batch)
+    return tuple(item(stories[sid], status, levels[sid]) for sid in batch)
 
 
 def _git_ok(cwd, *args):
@@ -138,12 +138,12 @@ def resume_point(main, accio, story_id, base_branch):
 
 def resumed(stories, status, main, accio, base_branch):
     """The stories a crash left in *Doing*, each with where it resumes and its worktree, ahead of the ready ones."""
-    return tuple({**_item(stories[sid], status, 1), "resume": resume_point(main, accio, sid, base_branch),
+    return tuple({**item(stories[sid], status, 1), "resume": resume_point(main, accio, sid, base_branch),
                   "worktree": str(paths.worktree_root(main) / sid)}
                  for sid in sorted(stories) if status[sid] == "doing")
 
 
-def _item(parsed, status, level):
+def item(parsed, status, level):
     deps = list(parsed.meta.get("deps", ()))
     return {"id": parsed.meta["id"], "title": parsed.meta["title"], "track": parsed.meta["track"],
             "deps": deps, "parents": [dep for dep in deps if status[dep] != "done"], "level": level}

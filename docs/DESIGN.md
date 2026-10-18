@@ -116,7 +116,7 @@ and missing deps. Its findings are fixed in the same skill run. Unless something
 only the summary.
 
 ### 3.3 Iteration planning: `prophecy` (checkpoint 1)
-1. **Propose the batch:** up to 8 stories, pulled in dependency and value order, with their tracks. A story is
+1. **Propose the batch:** up to 8 stories (`accio-board plan`), pulled in dependency order, with their tracks. A story is
    eligible when its deps are done, **or** when its parent is in the same batch and the chain stays within 2 levels
    (§ 3.4, stacking). `dropped` stories are never proposed unless the user asks.
 2. **Grill the open questions** for the batch: unclear DoDs, missing decisions, and stories whose dep was dropped
@@ -124,7 +124,8 @@ only the summary.
    are bundled into one confirmation.
 3. **Wait for "go".** The user can override any track or drop any story.
 
-Once the user says go, the stories move to *Ready*, and the plugin tells the user to type `/accio:brew`. That
+Once the user says go, `accio-board go` moves the stories to *Ready* in their story files (outside a build the
+story file holds the status), and the plugin tells the user to type `/accio:brew`. That
 name belongs to the **workflow itself** (`workflows/brew.js`); there is no `brew` skill (decision 009). The user
 types it, which is the documented opt-in. The iteration is written to `.accio/iterations/<N>.md`. If the
 `Workflow` tool is missing from `prophecy`'s own tool list, workflows are off: it says so in plain words and points
@@ -579,7 +580,7 @@ workflow launch: the first `/accio:brew` asks once, and "don't ask again" covers
 | File | Written by | When committed |
 |---|---|---|
 | `design.md`, `decisions/` | `wand`, `vow` (main chat) | at once |
-| `stories/<ID>.md` | `quill` (in `sort`); `owl` (status, review notes, answers, drops) | in `sort`; once per iteration at `owl` |
+| `stories/<ID>.md` | `quill` (in `sort`); `prophecy` (status `ready`, track overrides and drops, through `accio-board go` and Edit); `owl` (status, review notes, answers, drops) | in `sort`; at `prophecy`; once per iteration at `owl` |
 | `iterations/<N>.md` | `prophecy` (plan), `owl` (outcome) | at `prophecy` and at `owl` |
 | `board.md` | `accio-board` only | together with the stories |
 | `run/status.json` | `accio-board move` (from `portkey`/`prefect`) | never (runtime); `owl` folds it into the story files |
