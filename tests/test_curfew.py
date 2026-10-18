@@ -166,6 +166,11 @@ class HouseElfWritesTest(CurfewTestBase):
                 with self.subTest(path=path, tool=tool):
                     self.assertEqual(self.write_to(path, tool)["permissionDecision"], "allow")
 
+    def test_S_015_4_in_its_run_folder_house_elf_writes_only_its_report(self):
+        for name in ("findings-examiner.md", "base", "brief.md"):
+            with self.subTest(name):
+                self.assertEqual(self.write_to(self.run_dir / "S-001" / name)["permissionDecision"], "deny")
+
     def test_S_015_4_writes_anywhere_else_are_denied_and_name_the_folder(self):
         outside = self.worktree.parent / "outside.txt"
         (self.worktree / "link").symlink_to(self.repo)
@@ -200,7 +205,8 @@ class HouseElfBashTest(CurfewTestBase):
 
     def test_S_015_6_unreadable_or_unlisted_commands_are_denied_with_the_reason(self):
         cases = {"echo $(cat x)": "$(", "echo `id`": "backtick", "sh -c 'ls'": "sh -c", "eval ls": "eval",
-                 "bash -c ls": "bash -c", "bash tests/run.sh && bash -c 'cat x'": "bash -c", "curl https://example.com": "curl", "git push": "push",
+                 "bash -c ls": "bash -c", "bash tests/run.sh && bash -c 'cat x'": "bash -c",
+                 "curl https://example.com": "curl", "git push": "push",
                  "make deploy": "make", "npm test & sleep 1": "&", "echo x > ../outside.txt": "outside.txt",
                  f"cp src/a.py {self.repo}/a.py": "cp", "git --git-dir=/x status": "--git-dir"}
         for command, word in cases.items():
@@ -216,19 +222,24 @@ class FlagsAndFormsTest(CurfewTestBase):
 
     def test_S_015_6_flags_that_write_or_run_code_are_denied(self):
         push_ok = self.run_dir / "push-ok"
-        cases = {f"sort -o {push_ok} /dev/null": "sort", f"sort -ro {push_ok} a": "sort", "uniq in.txt ../out.txt": "uniq",
+        cases = {f"sort -o {push_ok} /dev/null": "sort", f"sort -ro {push_ok} a": "sort",
+                 "uniq in.txt ../out.txt": "uniq",
                  f"tree -o {push_ok}": "tree", "rg --pre ./x pattern": "rg", "file -C -m x": "file",
                  "python3 -c 'print(1)'": "python3 -c", f"cp -t {self.repo} src/a.py": "-t",
-                 f"cp --target-directory={self.repo} src/a.py": "--target-directory", "GIT_DIR=/x git status": "GIT_DIR",
+                 f"cp --target-directory={self.repo} src/a.py": "--target-directory",
+                 "GIT_DIR=/x git status": "GIT_DIR",
                  "PATH=/tmp ls": "PATH", "git config alias.p push": "config", "git branch -f main HEAD": "branch",
                  "git update-ref refs/heads/main HEAD": "update-ref", f"git diff --output={push_ok}": "--output",
                  "git grep -O x": "-O", "git send-pack origin": "send-pack", "git rebase main": "rebase",
                  "find . -name '*.pyc' -delete": "find", f"git -C {self.repo} status": "-C", "git push": "push",
                  "eval ls": "eval", "source venv/bin/activate": "source", 'git grep -O"touch /x;true" foo': "-O",
                  "git grep -iO x": "-O", "git grep --open x": "-O", f"sort --out={push_ok} a": "sort",
-                 "sort --compress-program=./x -S1M a": "sort", "file --comp x": "file", "uniq - out.txt": "uniq", "uniq -- a.txt -out.txt": "uniq",
+                 "sort --compress-program=./x -S1M a": "sort", "file --comp x": "file", "uniq - out.txt": "uniq",
+                 "uniq -- a.txt -out.txt": "uniq",
                  f"git diff --out={push_ok}": "--output", "echo x > .git": ".git", "mv a.py .git": ".git",
-                 "rm .git": ".git", "mkdir -p .git/hooks": ".git"}
+                 "rm .git": ".git", "mkdir -p .git/hooks": ".git", "rm -rf .gi?": ".gi?", "cp a.py .g*/x": ".g*",
+                 "git commit -n -m x": "verify", "git commit --no-verif -m x": "verify", "git commit -anm x": "verify",
+                 "git rebase --no-verify": "rebase"}
         for command, word in cases.items():
             with self.subTest(command):
                 self.assert_denied("Bash", self.in_worktree(command), word)
@@ -237,7 +248,8 @@ class FlagsAndFormsTest(CurfewTestBase):
     def test_S_015_5_ordinary_forms_of_those_programs_still_pass(self):
         for command in ("uniq in.txt", "sort -r a.txt", "cp -r src lib", "mv -f a.py b.py", "rm -rf build",
                         "git branch --show-current", "git rebase --continue", "python3 -m unittest -v tests.test_x",
-                        "make build", "git commit -q -m 'x'", "git diff --stat", "cp -- -odd.txt b.txt"):
+                        "make build", "git commit -q -m 'x'", "git diff --stat", "cp -- -odd.txt b.txt",
+                        "rm -rf *", "rm -f src/*.pyc", "git commit -am 'x'", "git commit -mnew"):
             with self.subTest(command):
                 self.assert_allowed("Bash", self.in_worktree(command))
 
@@ -281,6 +293,18 @@ class OtherAgentsTest(CurfewTestBase):
         self.assert_allowed("Bash", self.bash(f"{board} ready --json"), agent="accio:portkey")
         self.assert_denied("Bash", self.bash("ls"), "portkey", agent="accio:portkey")
         self.assert_denied("Bash", self.bash("/tmp/accio-board ready"), "portkey", agent="accio:portkey")
+        script = lambda name: shlex.quote(str(ROOT / "bin" / name))
+        cases = (("portkey", "accio-hooks verify", True), ("portkey", "accio-board unlock", True),
+                 ("portkey", "accio-brief S-001", True), ("portkey", "accio-hooks uninstall", False),
+                 ("portkey", "accio-ledger clear S-001", False), ("prefect", "accio-ledger record S-001", True),
+                 ("prefect", "accio-board move S-001 review", True), ("prefect", "accio-board unlock", False),
+                 ("prefect", "accio-hooks uninstall", False), ("headmaster", "accio-ledger check S-001", True),
+                 ("headmaster", "accio-ledger clear S-001", False))
+        for agent, command, allowed in cases:
+            with self.subTest(agent=agent, command=command):
+                name, _, rest = command.partition(" ")
+                verdict, _ = self.decision("Bash", self.bash(f"{script(name)} {rest}"), agent=f"accio:{agent}")
+                self.assertEqual(verdict, "allow" if allowed else "deny")
         self.assert_allowed("Bash", self.in_worktree("python3 -m unittest"), agent="accio:prefect")
         self.assert_allowed("Bash", self.bash(f"git -C {shlex.quote(str(self.worktree))} diff --stat"),
                             agent="accio:prefect")

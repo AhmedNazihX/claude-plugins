@@ -300,6 +300,10 @@ lose their writing flags in any getopt abbreviation; file tools take plain flags
 `accio-brief`. **Limit (DESIGN § 6):** it stops mistakes, not a determined agent (a check runs code the agent
 wrote); the push token gap moves to S-022. Open notes: `make build -f other.mk` passes as a prefix; `git -p`
 pages through `core.pager`.
+Follow-up (automated review after merge): a path part that could glob to `.git` (`.gi?`) is denied; `git commit
+-n`/`--no-verify` is denied; portkey, prefect and headmaster run only the accio scripts and subcommands their step
+needs (no `accio-hooks uninstall`, `accio-board unlock` for prefect, `accio-ledger clear`); in `run/<ID>/`,
+house-elf writes only `report.md`.
 
 ### S-016 · `session-start`
 Deps: S-004, S-012 · Files: `hooks/session_start.py`, `hooks/hooks.json`, `tests/test_session_start.py`

@@ -20,6 +20,7 @@ This stops mistakes, not a determined agent: a listed check runs test files the 
 hooks, the main snapshot and the remote check (DESIGN § 6).
 """
 import dataclasses
+import fnmatch
 import os
 import pathlib
 import re
@@ -45,20 +46,22 @@ READ_ONLY_GIT = frozenset({"status", "diff", "log", "show", "rev-parse", "merge-
 GIT_FLAGS = frozenset({"--no-pager", "-p", "-P", "--paginate"})
 LISTING_BRANCH_ARGS = frozenset({"--show-current", "--list", "-a", "-r", "-v", "-vv"})
 REBASE_STEPS = frozenset({"--continue", "--abort", "--skip"})
+COMMIT_VALUE_FLAGS = "mFcCtS"  # short commit flags that take the rest of the word as their value
 GLOB_CHARS = frozenset("*?[")
 
 
 @dataclasses.dataclass(frozen=True)
 class Judge:
     """What one agent may run. `prefixes` are listed commands (word tuples); `git` is its subcommand list;
-    `files` lets file tools act inside `worktree`; `scripts` are accio's script names, found in `bin_dir`;
+    `files` lets file tools act inside `worktree`; `scripts` maps accio's scripts (found in `bin_dir`) to the
+    subcommands it may run (None: any);
     `may_cd` lets the command move between folders (prefect runs checks in a worktree)."""
     agent: str
     prefixes: tuple = ()
     read_only: bool = False
     files: bool = False
     git: frozenset = frozenset()
-    scripts: frozenset = frozenset()
+    scripts: dict = dataclasses.field(default_factory=dict)
     bin_dir: pathlib.Path = None
     worktree: pathlib.Path = None
     may_cd: bool = False
@@ -107,7 +110,7 @@ def _judge_segment(words, judge):
 
 def _judge_program(words, judge):
     program = words[0]
-    if _is_listed(words, judge) or _is_script(program, judge) or (program == "cd" and judge.may_cd):
+    if _is_listed(words, judge) or _is_script(words, judge) or (program == "cd" and judge.may_cd):
         return None
     if program == "git" and judge.git:
         return _git(words, judge)
@@ -122,11 +125,14 @@ def _is_listed(words, judge):
     return any(tuple(words[:len(prefix)]) == prefix for prefix in judge.prefixes)
 
 
-def _is_script(word, judge):
-    name = os.path.basename(word)
+def _is_script(words, judge):
+    name = os.path.basename(words[0])
     if name not in judge.scripts:
         return False
-    return word == name or os.path.realpath(word) == os.path.realpath(judge.bin_dir / name)
+    if words[0] != name and os.path.realpath(words[0]) != os.path.realpath(judge.bin_dir / name):
+        return False
+    allowed = judge.scripts[name]
+    return allowed is None or (len(words) > 1 and words[1] in allowed)
 
 
 def program_part(words):
@@ -143,8 +149,17 @@ def _abbreviates(word, names):
     return name.startswith("--") and len(name) > 2 and any(full.startswith(name) for full in names)
 
 
-def _has_short_flag(words, letter):
-    return any(word.startswith("-") and not word.startswith("--") and letter in word[1:] for word in words)
+def _has_short_flag(words, letter, takes_value=""):
+    """True when a short-flag word holds `letter`, before any flag in `takes_value` (the rest is that value)."""
+    for word in words:
+        if not word.startswith("-") or word.startswith("--"):
+            continue
+        for flag in word[1:]:
+            if flag == letter:
+                return True
+            if flag in takes_value:
+                break
+    return False
 
 
 def _operands(words):
@@ -175,7 +190,7 @@ def _file_program(words, worktree):
         elif word.startswith("-") and not after_options:
             if not PLAIN_FILE_FLAGS.match(word):
                 return f"`{program}` option `{word.split('=')[0]}` isn't allowed; use plain flags (-p -r -f -v -n -a)."
-        elif not in_worktree(resolve(word, worktree), worktree):
+        elif _may_name_git(word) or not in_worktree(resolve(word, worktree), worktree):
             return f"`{program}` may only touch files inside {worktree} (and never its .git), not {word}."
     return None
 
@@ -204,6 +219,9 @@ def _git_args(subcommand, args):
     if subcommand == "grep" and (_has_short_flag(args, "O")
                                  or any(_abbreviates(arg, ("--open-files-in-pager",)) for arg in args)):
         return "`git grep -O` runs a program; print the matches instead."
+    if subcommand == "commit" and (_has_short_flag(args, "n", COMMIT_VALUE_FLAGS)
+                                   or any(_abbreviates(arg, ("--no-verify",)) for arg in args)):
+        return "`git commit --no-verify` (-n) skips the secret scan; commit without it."
     if subcommand == "branch" and not set(args) <= LISTING_BRANCH_ARGS:
         return "`git branch` may only list branches here (--show-current, --list, -a, -r, -v)."
     if subcommand == "rebase" and not (len(args) == 1 and args[0] in REBASE_STEPS):
@@ -242,7 +260,7 @@ def _redirects(command, base):
         target = following.value
         if target == "/dev/null" or (token.value.endswith("&") and target.isdigit()):
             continue
-        if base is None or not in_worktree(resolve(target, base), base):
+        if base is None or _may_name_git(target) or not in_worktree(resolve(target, base), base):
             where = f"outside {base} (or into its .git)" if base else "where curfew can't see (start with cd)"
             return f"`{token.value} {target}` writes {where}."
     return None
@@ -259,6 +277,12 @@ def resolve(word, cwd):
         return pathlib.Path(os.path.realpath(os.path.join(cwd, expanded)))
     except (OSError, ValueError):
         return None
+
+
+def _may_name_git(word):
+    """True when a part of the word is or could glob to `.git` (a pattern matches a leading dot only when it
+    starts with one, so `*` and `?x` never do)."""
+    return any(part.startswith(".") and fnmatch.fnmatchcase(".git", part) for part in word.split("/"))
 
 
 def in_worktree(path, worktree):

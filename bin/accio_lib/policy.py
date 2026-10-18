@@ -5,11 +5,12 @@ every agent. Beyond that each agent has an exact list (AGENTS), and anything off
 in a build becomes a BLOCKED question at `owl`. No list lets an agent write `run/push-ok` or `run/brew.lock`.
 
 `house-elf` first runs `accio-claim <ID>` on its own (accio's own script, nothing else in the command) for a story
-in progress (`doing` in `run/status.json`). That links its `agent_id` to the story's worktree; a fresh house-elf
-for the same story (a fix round) takes the claim over. Until it claims, it may only read. After the claim it
-writes only inside its worktree or `.accio/run/<ID>/`, symlinks and `..` resolved, and its Bash commands follow
-`bashpolicy`: they start in the worktree, and run the checks, `agent_allow`, read-only tools, file tools in the
-worktree and a short list of git subcommands.
+in progress (`doing` in `run/status.json`) that no other agent holds. That links its `agent_id` to the story's
+worktree; the story's next `accio-brief` (a fix round) releases the claim. Until it claims, it may only read.
+After the claim it writes only inside its worktree (never its `.git`) and its `.accio/run/<ID>/report.md`,
+symlinks and `..` resolved, and its Bash commands follow `bashpolicy`: they start in the worktree, and run the
+checks, `agent_allow`, read-only tools, file tools in the worktree and a short list of git subcommands. The other
+agents run only the accio scripts and subcommands their step needs (SCRIPTS).
 """
 import dataclasses
 import fnmatch
@@ -23,6 +24,14 @@ READ_TOOLS = frozenset({"Read", "Grep", "Glob", "LS"})
 WRITE_TOOLS = frozenset({"Write", "Edit", "MultiEdit", "NotebookEdit"})
 WEB_TOOLS = frozenset({"WebSearch", "WebFetch"})
 CLAIM_SCRIPT = "accio-claim"
+REPORT_NAME = "report.md"
+BOARD_RUN = frozenset({"ready", "status", "lock", "unlock", "move"})
+LEDGER_USE = frozenset({"key", "check", "record"})
+SCRIPTS = {  # each Bash policy's accio scripts and the subcommands it may run (None: any)
+    "scripts": {"accio-board": BOARD_RUN, "accio-brief": None, "accio-hooks": frozenset({"verify"})},
+    "checks": {"accio-ledger": LEDGER_USE, "accio-board": frozenset({"move"})},
+    "ledger": {"accio-ledger": LEDGER_USE},
+}
 IN_PROGRESS = "doing"
 
 
@@ -111,7 +120,7 @@ def _house_elf(agent_id, tool, tool_input, ctx):
         return deny("house-elf first runs `accio-claim <ID>` (the command in its brief); until then it may only read.")
     worktree = pathlib.Path(claim["worktree"])
     if tool in WRITE_TOOLS:
-        return _house_elf_write(_target(tool_input), worktree, ctx.accio / "run" / claim["story"])
+        return _house_elf_write(_target(tool_input), worktree, ctx.accio / "run" / claim["story"] / REPORT_NAME)
     if tool == "Bash":
         return _verdict(bashpolicy.check(_command(tool_input), _house_elf_judge(worktree, ctx), start_in=worktree))
     return deny(f"{tool} isn't on accio:house-elf's list.")
@@ -146,10 +155,10 @@ def _claim(story_id, current, ctx):
     return Decision(True, claim=(story_id, str(worktree)))
 
 
-def _house_elf_write(target, worktree, run_folder):
-    if target and (bashpolicy.in_worktree(target, worktree) or _inside(target, run_folder)):
+def _house_elf_write(target, worktree, report):
+    if target and (bashpolicy.in_worktree(target, worktree) or target == pathlib.Path(os.path.realpath(report))):
         return allow()
-    return deny(f"house-elf writes only inside {worktree} (never its .git) or {run_folder}, not "
+    return deny(f"house-elf writes only inside {worktree} (never its .git) and its report {report}, not "
                 f"{target or 'this file'}.")
 
 
@@ -163,13 +172,10 @@ def _house_elf_judge(worktree, ctx):
 # --- the other agents' Bash ----------------------------------------------------------------------------------------
 
 def _other_judge(agent, kind, ctx):
-    scripts = frozenset(path.name for path in ctx.bin_dir.glob("accio-*"))
-    if kind == "scripts":
-        return bashpolicy.Judge(agent=agent, scripts=scripts, bin_dir=ctx.bin_dir)
-    if kind == "ledger":
-        return bashpolicy.Judge(agent=agent, scripts=frozenset({"accio-ledger"}), bin_dir=ctx.bin_dir)
+    if kind != "checks":
+        return bashpolicy.Judge(agent=agent, scripts=SCRIPTS[kind], bin_dir=ctx.bin_dir)
     return bashpolicy.Judge(agent=agent, prefixes=_check_prefixes(ctx), read_only=True, git=bashpolicy.READ_ONLY_GIT,
-                            scripts=scripts, bin_dir=ctx.bin_dir, may_cd=True)
+                            scripts=SCRIPTS[kind], bin_dir=ctx.bin_dir, may_cd=True)
 
 
 def _check_prefixes(ctx):
