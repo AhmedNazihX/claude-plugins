@@ -272,7 +272,7 @@ Context: DESIGN § 3.4 steps 0–3 and 7, § 4.2, § 7.1, § 12.5; decision 011.
 - [ ] S-017/5 (no test) each agent file sets the model from § 4.2, the tools from § 4.2 and the reply schema from § 12.5
 - [ ] S-017/6 WHEN `origin/<base>` moved during the story THE SYSTEM SHALL set `remote_moved` and the story goes to Blocked
 - [ ] S-017/7 (no test) `house-elf`'s prompt makes `accio-claim <ID>` its first command and states the `cd <worktree> &&` rule
-- [ ] S-017/8 WHEN a tagged test still passes with the story's non-test changes reverted in a scratch copy THE SYSTEM SHALL list its DoD line in `weak_tests` (decision 011)
+- [ ] S-017/8 WHEN the project's mutation tool (set in `config.json`), run on the story's changed lines only, leaves a mutant that no tagged test catches THE SYSTEM SHALL list it in `weak_tests`, and report "not audited" when no tool is set (decision 011)
 
 ### S-018 · Review agents and findings template
 Deps: S-017 · Files: `agents/{examiner,professor,auror,headmaster}.md`, `agents/references/findings-template.md`, `agents/references/checklists/`, `tests/test_agents.py`

@@ -138,7 +138,7 @@ This is the unattended part. The full spec is in `docs/research/build-engine.md`
 | 0 load | `portkey` | Haiku | `accio-board ready --json`, in dependency order; also recovers stories a crash left in *Doing* (§ 12.6); `accio-hooks verify`; takes the run lock with `accio-board lock` (§ 4.5) |
 | 1 prepare | `portkey` | Haiku | `accio-brief` creates or reuses the worktree and branch `story/<ID>` (§ 12.3), from base or from the parent's head when stacked, and writes `brief.md`, including review notes from a rejection |
 | 2 implement | `house-elf` | Sonnet; Opus if complex or risky | first runs `accio-claim <ID>` (§ 4.4); reads only the brief; starts each Bash command that touches files with `cd <worktree> &&` or uses `git -C <worktree>`; test-first; tags each test with its DoD line; checkpoint commits; `report.md`; returns a status |
-| 3 check | `prefect` | Haiku | the ledger skips an exact key that already passed (§ 12.4); checks scoped to the change; **boundary check:** a diff outside the story's `files` (plus tests) becomes a finding; **DoD tags:** every numbered line not marked `(no test)` has a tagged test; **main snapshot:** the main checkout's `git status` is unchanged; **remote check:** `origin/<base>` has not moved; **test audit:** a tagged test that still passes with the story's non-test changes reverted (in a scratch copy) is a weak test (decision 011) |
+| 3 check | `prefect` | Haiku | the ledger skips an exact key that already passed (§ 12.4); checks scoped to the change; **boundary check:** a diff outside the story's `files` (plus tests) becomes a finding; **DoD tags:** every numbered line not marked `(no test)` has a tagged test; **main snapshot:** the main checkout's `git status` is unchanged; **remote check:** `origin/<base>` has not moved; **test audit:** the project's mutation tool, limited to the story's changed lines; a mutant no tagged test catches marks a weak test, and no tool means "not audited" (decision 011) |
 | 4 review | `examiner` + `professor` (+ `auror` on risky paths); Quick track: 1 combined reviewer | Sonnet | read-only; review package as a file; confidence ≥ 80 |
 | 5 judge | `headmaster` | Sonnet | only when a finding conflicts with the story, or on NEEDS_CONTEXT; rules it, or marks the story needs-user |
 | 6 fix | a fresh `house-elf` | one tier up in round 2 | **≤ 2 rounds**; the re-review covers only the fix diff, and only the reviewers that raised findings run |
@@ -429,11 +429,12 @@ Messages show only a prefix of the secret.
   - a test written from each EARS line, carrying its tag (`S-012/1`)
   - `prefect` fails a numbered line that has no tagged test, with a grep and no model (decision 009)
   - `examiner` judges only whether each tagged test really checks its line
-  - **test audit (decision 011, moved from v2):** `prefect`'s script reverts the story's non-test changes in a
-    scratch copy and re-runs the tagged tests; one that still passes is listed in `weak_tests`, with no model
+  - **test audit (decision 011, moved from v2):** `prefect`'s script runs the project's own mutation tool on the
+    story's changed lines only; a mutant no tagged test catches is listed in `weak_tests`, with no model; a project
+    without a mutation tool is reported "not audited"
 - **Method checklists (decision 011):** the story's risk flag picks checklists for the reviewers (performance, data
   migration, auth and security, accessibility, …); each lists what an expert would run or inspect, not a persona.
-- A deeper audit that mutates single lines (rather than reverting the whole change) stays a **v2** candidate.
+- Building accio's own mutation operators for languages without a tool stays a **v2** candidate.
 
 ### 7.2 Report template (every user-facing message)
 ```

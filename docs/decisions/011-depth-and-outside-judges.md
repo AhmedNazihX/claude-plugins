@@ -7,11 +7,16 @@ Source: Felix Rieseberg, *How to be more ambitious: a tutorial for humans with m
 accio's principle P5: "Do not ask the model to judge itself", ideally a judge that is "a tool the model can run".
 
 ## Decision
-1. **A scripted test audit moves into v1** (it was a v2 candidate in DESIGN § 7.1). `prefect`'s check script
-   reverts the story's non-test changes in a scratch copy and re-runs the tagged tests. A tagged test that still
-   passes there proves nothing about the story and is listed in `weak_tests`; the story gets a finding. No model
-   is involved. Evidence: while building S-002..S-013 by hand, the same check (break the code, expect a test to
-   fail) caught tests that passed for the wrong reason in nearly every story.
+1. **A scripted test audit moves into v1** (it was a v2 candidate in DESIGN § 7.1). `prefect`'s check script runs
+   the project's own mutation tool (for example `mutmut` for Python, Stryker for JS/TS, `cargo-mutants` for Rust),
+   limited to the lines the story changed, and re-runs the tagged tests against each mutant. A mutant that no
+   tagged test catches points at a weak test and is listed in `weak_tests`; the story gets a finding. No model is
+   involved. A project with no mutation tool set up gets "not audited", and `examiner`'s judgement stands as
+   before. Evidence: while building S-002..S-013 by hand, breaking one line at a time caught tests that passed for
+   the wrong reason in nearly every story.
+   *Amended the same day (side-agent review, decided by the user):* the first version reverted the story's whole
+   change at once. That is too blunt: reverting a new file makes every test fail to load, which counts as
+   "failed", so it would have caught almost none of those weak tests.
 2. **`wandmaker` answers four depth questions for each option:** what would a top professional in this field do;
    what is the rawest material (data, logs, the real system) to work from; which methods and tools the best
    people use; and what, other than the model or the user, would show the result is right. The last answer seeds
@@ -29,8 +34,8 @@ accio's principle P5: "Do not ask the model to judge itself", ideally a judge th
 - New-knowledge research and simulations: accio builds software stories; the nearest fit is `pensieve` (v2).
 
 ## Cost
-- Test audit: one more run of the tagged tests per story, on a scratch copy (time, no tokens); about one story's
-  worth of work inside S-017.
+- Test audit: minutes of extra check time per story, one tagged-test run per mutant on the changed lines (time,
+  no tokens); about one story's worth of work inside S-017; needs a mutation tool per language.
 - Depth questions: a few thousand more Opus tokens per design; no new questions to the user.
 - Checklists: near zero (text inside the existing reviewers).
 - Outcome question: one more `wand` interview question, inside a step that already asks questions.
