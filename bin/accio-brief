@@ -12,7 +12,7 @@ import sys
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 
-from accio_lib import brief, config, globs, paths, story  # noqa: E402
+from accio_lib import brief, config, globs, paths, runlock, story  # noqa: E402
 
 
 def run(args):
@@ -30,6 +30,7 @@ def run(args):
     settings = config.load(accio)
     onto = brief.resolve_onto(main, settings["base_branch"], args.parent)
     run_dir = accio / "run" / args.id
+    runlock.release_claim(accio / "run", args.id)  # the house-elf of this brief claims afresh (S-015)
     if args.fix:
         worktree = paths.worktree_root(main) / args.id
         if not brief.has_worktree(main, args.id):
@@ -53,7 +54,7 @@ def main(argv=None):
     args = parser.parse_args(argv)
     try:
         print(json.dumps(run(args)))
-    except (brief.BriefError, story.StoryError, config.ConfigError, globs.GlobError) as error:
+    except (brief.BriefError, story.StoryError, config.ConfigError, globs.GlobError, runlock.LockError) as error:
         print(f"accio-brief: {error}", file=sys.stderr)
         return 1
     return 0

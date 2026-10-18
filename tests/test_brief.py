@@ -125,6 +125,13 @@ class BriefTest(unittest.TestCase):
         self.assertIn("uncommitted", pathlib.Path(reply["brief"]).read_text(encoding="utf-8"))
 
     # S-007/4
+    def test_S_015_3_a_new_brief_releases_the_storys_claim(self):
+        claims = {"a1": {"story": "S-001", "worktree": "x"}, "a2": {"story": "S-002", "worktree": "y"}}
+        write(self.accio / "run" / "claims.json", json.dumps(claims))
+        self.brief("S-001")
+        left = json.loads((self.accio / "run" / "claims.json").read_text(encoding="utf-8"))
+        self.assertEqual(sorted(left), ["a2"])
+
     def test_S_007_4_the_brief_holds_everything_the_implementer_needs(self):
         self.add_story("S-001", notes="The link must expire in 15 minutes, not 30.")
         reply = self.brief("S-001")

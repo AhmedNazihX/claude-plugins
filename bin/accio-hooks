@@ -15,7 +15,7 @@ import sys
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 
-from accio_lib import config, githooks, paths, pushguard  # noqa: E402
+from accio_lib import askrules, config, githooks, paths, pushguard  # noqa: E402
 
 SCRIPT = pathlib.Path(__file__).resolve()
 
@@ -35,6 +35,7 @@ def _setup(command):
         notes, problems = githooks.uninstall(root) or ("accio-hooks: no accio lines found",), ()
     else:
         problems, notes = githooks.verify(root, SCRIPT)
+        notes = (*notes, *_ask_rule_notes(root))
     _print(notes)
     _print(problems)
     return 1 if problems else 0
@@ -46,6 +47,13 @@ def _common_dir(cwd):
 
 def _has_accio(root):
     return root is not None and (root / paths.ACCIO_DIR_NAME).is_dir()
+
+
+def _ask_rule_notes(root):
+    """Settings `ask` rules a build stops on: curfew denies a matching call rather than let it freeze (S-015)."""
+    return tuple(f"accio-hooks: {rule.source} asks before `{rule.text}`. In a build, accio's agents stop (BLOCKED) on a "
+                 "matching call instead of waiting on the question; remove the rule to let builds run it."
+                 for rule in askrules.ask_rules(root, pathlib.Path.home()))
 
 
 def _root(root_arg):

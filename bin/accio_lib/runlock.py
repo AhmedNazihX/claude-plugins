@@ -6,6 +6,7 @@ hook reads the same rule. Up to three stories move at once, so `take` and every 
 """
 import contextlib
 import fcntl
+import json
 import os
 import time
 
@@ -52,6 +53,26 @@ def is_held(run_dir, now=None):
     """True while a build holds a fresh lock."""
     path = lock_path(run_dir)
     return path.exists() and not is_stale(path, now)
+
+
+def release_claim(run_dir, story_id):
+    """Drop every claim on a story, so the house-elf of its next brief (a fix round) can claim it (S-015)."""
+    path = run_dir / CLAIMS_NAME
+    with guard(run_dir):
+        try:
+            claims = json.loads(path.read_text(encoding="utf-8"))
+        except FileNotFoundError:
+            return
+        except (OSError, UnicodeDecodeError, json.JSONDecodeError) as error:
+            raise LockError(f"cannot read {path}: {error}") from error
+        kept = {agent: held for agent, held in claims.items()
+                if not (isinstance(held, dict) and held.get("story") == story_id)} if isinstance(claims, dict) else {}
+        try:
+            temporary = path.with_name(f".{path.name}.tmp")
+            temporary.write_text(json.dumps(kept, indent=2) + "\n", encoding="utf-8")
+            os.replace(temporary, path)
+        except OSError as error:
+            raise LockError(f"cannot write {path}: {error}") from error
 
 
 def take(run_dir):

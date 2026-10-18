@@ -1,0 +1,35 @@
+#!/usr/bin/env python3
+"""accio-claim <ID>: house-elf's first command (DESIGN § 4.4; decision 010).
+
+Prints the story's worktree. `curfew` sees this command and records the claim (the agent → that worktree), so
+from then on the agent may write there and nowhere else.
+"""
+import argparse
+import pathlib
+import sys
+
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+
+from accio_lib import paths, story  # noqa: E402
+
+
+def main(argv=None):
+    parser = argparse.ArgumentParser(prog="accio-claim", description=__doc__,
+                                     formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("story_id", help="the story ID from your brief, e.g. S-001")
+    args = parser.parse_args(argv)
+    root = paths.main_root()
+    if root is None or paths.accio_dir() is None:
+        print("accio-claim: no .accio/ folder in this repo", file=sys.stderr)
+        return 1
+    worktree = paths.worktree_root(root) / args.story_id
+    if not story.STORY_ID.match(args.story_id) or not worktree.is_dir():
+        print(f"accio-claim: no worktree for {args.story_id} at {worktree}; claim the ID from your brief",
+              file=sys.stderr)
+        return 1
+    print(worktree)
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

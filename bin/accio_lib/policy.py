@@ -1,0 +1,210 @@
+"""curfew's policy: what each accio agent may do (DESIGN § 4.4, § 6; decision 010; spike S-015).
+
+Every call by an accio agent gets an answer, so none waits on a permission question. Read tools are allowed for
+every agent. Beyond that each agent has an exact list (AGENTS), and anything off it is denied with the reason, which
+in a build becomes a BLOCKED question at `owl`. No list lets an agent write `run/push-ok` or `run/brew.lock`.
+
+`house-elf` first runs `accio-claim <ID>` on its own (accio's own script, nothing else in the command) for a story
+in progress (`doing` in `run/status.json`). That links its `agent_id` to the story's worktree; a fresh house-elf
+for the same story (a fix round) takes the claim over. Until it claims, it may only read. After the claim it
+writes only inside its worktree or `.accio/run/<ID>/`, symlinks and `..` resolved, and its Bash commands follow
+`bashpolicy`: they start in the worktree, and run the checks, `agent_allow`, read-only tools, file tools in the
+worktree and a short list of git subcommands.
+"""
+import dataclasses
+import fnmatch
+import os
+import pathlib
+import shlex
+
+from accio_lib import bashpolicy, paths, shellwords, story
+
+READ_TOOLS = frozenset({"Read", "Grep", "Glob", "LS"})
+WRITE_TOOLS = frozenset({"Write", "Edit", "MultiEdit", "NotebookEdit"})
+WEB_TOOLS = frozenset({"WebSearch", "WebFetch"})
+CLAIM_SCRIPT = "accio-claim"
+IN_PROGRESS = "doing"
+
+
+@dataclasses.dataclass(frozen=True)
+class Lists:
+    """An agent's exact list: `writes` are globs under `.accio/`; `bash` names its command policy."""
+    web: bool = False
+    writes: tuple = ()
+    bash: str = ""  # "scripts" (portkey), "checks" (prefect), "ledger" (headmaster)
+
+
+AGENTS = {
+    "portkey": Lists(bash="scripts"),
+    "prefect": Lists(bash="checks"),
+    "examiner": Lists(writes=("run/*/findings-*.md",)),
+    "professor": Lists(writes=("run/*/findings-*.md",)),
+    "auror": Lists(writes=("run/*/findings-*.md",)),
+    "headmaster": Lists(writes=("run/questions/*.md",), bash="ledger"),
+    "seeker": Lists(web=True),
+    "wandmaker": Lists(),
+    "quill": Lists(writes=("stories/*.md",)),
+    "librarian": Lists(),
+}
+
+
+@dataclasses.dataclass(frozen=True)
+class Context:
+    root: pathlib.Path      # the main checkout
+    accio: pathlib.Path     # its .accio/
+    bin_dir: pathlib.Path   # accio's scripts
+    config: dict
+    claims: dict            # agent_id -> {"story", "worktree"}
+    statuses: dict          # story -> status, from run/status.json
+
+
+@dataclasses.dataclass(frozen=True)
+class Decision:
+    allow: bool
+    reason: str = ""
+    claim: tuple = None     # (story, worktree) when this call is a claim to record
+
+
+def allow():
+    return Decision(True)
+
+
+def deny(reason):
+    return Decision(False, reason)
+
+
+def decide(agent, agent_id, tool, tool_input, ctx):
+    """The answer for one call by `accio:<agent>`."""
+    if agent == "house-elf":
+        return _house_elf(agent_id, tool, tool_input, ctx)
+    lists = AGENTS.get(agent)
+    if lists is None:
+        return deny(f"accio:{agent} isn't one of accio's agents, so curfew allows it nothing.")
+    if tool in READ_TOOLS or (tool in WEB_TOOLS and lists.web):
+        return allow()
+    if tool in WRITE_TOOLS:
+        target = _target(tool_input)
+        if target and any(_under(target, ctx.accio, pattern) for pattern in lists.writes):
+            return allow()
+        where = ", ".join(f".accio/{pattern}" for pattern in lists.writes) or "nowhere"
+        return deny(f"accio:{agent} may write only to {where}, not {target or 'this file'}.")
+    if tool == "Bash" and lists.bash:
+        return _verdict(bashpolicy.check(_command(tool_input), _other_judge(agent, lists.bash, ctx)))
+    return deny(f"{tool} isn't on accio:{agent}'s list.")
+
+
+def _verdict(reason):
+    return deny(reason) if reason else allow()
+
+
+# --- house-elf ---------------------------------------------------------------------------------------------------
+
+def _house_elf(agent_id, tool, tool_input, ctx):
+    claim = ctx.claims.get(agent_id)
+    if tool == "Bash":
+        request = _claim_request(_command(tool_input), ctx)
+        if request is not None:
+            return _claim(request, claim, ctx)
+    if tool in READ_TOOLS:
+        return allow()
+    if claim is None:
+        return deny("house-elf first runs `accio-claim <ID>` (the command in its brief); until then it may only read.")
+    worktree = pathlib.Path(claim["worktree"])
+    if tool in WRITE_TOOLS:
+        return _house_elf_write(_target(tool_input), worktree, ctx.accio / "run" / claim["story"])
+    if tool == "Bash":
+        return _verdict(bashpolicy.check(_command(tool_input), _house_elf_judge(worktree, ctx), start_in=worktree))
+    return deny(f"{tool} isn't on accio:house-elf's list.")
+
+
+def _claim_request(command, ctx):
+    """The story ID when the command is accio's `accio-claim <ID>` and nothing else; "" for any other command that
+    runs a script of that name; None when it runs none."""
+    tokens = shellwords.tokens(command)
+    words = [token.value for token in tokens if token.kind == "word"]
+    if not words or os.path.basename(words[0]) != CLAIM_SCRIPT:
+        return None
+    is_ours = words[0] == CLAIM_SCRIPT or os.path.realpath(words[0]) == os.path.realpath(ctx.bin_dir / CLAIM_SCRIPT)
+    is_alone = len(tokens) == 2 and len(words) == 2
+    return words[1] if is_ours and is_alone else ""
+
+
+def _claim(story_id, current, ctx):
+    """A claim to record (curfew writes it under the run lock, replacing an earlier agent's claim on the story)."""
+    if not story_id:
+        return deny(f"run accio's own `{shlex.quote(str(ctx.bin_dir / CLAIM_SCRIPT))} <ID>` on its own, as the "
+                    "brief says.")
+    worktree = paths.worktree_root(ctx.root) / story_id
+    if not story.STORY_ID.match(story_id) or not worktree.is_dir():
+        return deny(f"there is no worktree for {story_id} at {worktree}; claim the story ID from your brief.")
+    status = ctx.statuses.get(story_id, "not in this run")
+    if status != IN_PROGRESS:
+        return deny(f"{story_id} isn't in progress (status: {status}, not {IN_PROGRESS}); claim the story from your "
+                    "brief.")
+    if current and current["story"] != story_id:
+        return deny(f"this agent already claimed {current['story']}.")
+    return Decision(True, claim=(story_id, str(worktree)))
+
+
+def _house_elf_write(target, worktree, run_folder):
+    if target and (bashpolicy.in_worktree(target, worktree) or _inside(target, run_folder)):
+        return allow()
+    return deny(f"house-elf writes only inside {worktree} (never its .git) or {run_folder}, not "
+                f"{target or 'this file'}.")
+
+
+def _house_elf_judge(worktree, ctx):
+    prefixes = (_check_prefixes(ctx)
+                + bashpolicy.command_prefixes(ctx.config.get("agent_allow", []), "agent_allow entry"))
+    return bashpolicy.Judge(agent="house-elf", prefixes=prefixes, read_only=True, files=True,
+                            git=bashpolicy.HOUSE_ELF_GIT, worktree=worktree)
+
+
+# --- the other agents' Bash ----------------------------------------------------------------------------------------
+
+def _other_judge(agent, kind, ctx):
+    scripts = frozenset(path.name for path in ctx.bin_dir.glob("accio-*"))
+    if kind == "scripts":
+        return bashpolicy.Judge(agent=agent, scripts=scripts, bin_dir=ctx.bin_dir)
+    if kind == "ledger":
+        return bashpolicy.Judge(agent=agent, scripts=frozenset({"accio-ledger"}), bin_dir=ctx.bin_dir)
+    return bashpolicy.Judge(agent=agent, prefixes=_check_prefixes(ctx), read_only=True, git=bashpolicy.READ_ONLY_GIT,
+                            scripts=scripts, bin_dir=ctx.bin_dir, may_cd=True)
+
+
+def _check_prefixes(ctx):
+    return bashpolicy.command_prefixes((check["command"] for check in ctx.config.get("checks", [])), "check")
+
+
+# --- paths ---------------------------------------------------------------------------------------------------------
+
+def _command(tool_input):
+    command = tool_input.get("command")
+    return command if isinstance(command, str) else ""
+
+
+def _target(tool_input):
+    for key in ("file_path", "notebook_path"):
+        value = tool_input.get(key)
+        if isinstance(value, str) and value:
+            try:
+                return pathlib.Path(os.path.realpath(value))
+            except (OSError, ValueError):
+                return None
+    return None
+
+
+def _inside(path, folder):
+    try:
+        return path.is_relative_to(pathlib.Path(os.path.realpath(folder)))
+    except (OSError, ValueError):
+        return False
+
+
+def _under(path, accio, pattern):
+    """True when `path` is a file under `.accio/` matching `pattern` part by part."""
+    real = pathlib.Path(os.path.realpath(accio))
+    if not path.is_relative_to(real):
+        return False
+    parts, wanted = path.relative_to(real).parts, pattern.split("/")
+    return len(parts) == len(wanted) and all(fnmatch.fnmatchcase(part, glob) for part, glob in zip(parts, wanted))

@@ -30,7 +30,7 @@ evals/                       scripts/publish.py
 | done | S-012 `accio-hooks`: install, chain, verify, `pre-push` |
 | done | S-013 `protego` |
 | done | S-014 `fidelius` |
-| todo | S-015 `curfew`: permission policy and worktree claims |
+| done | S-015 `curfew`: permission policy and worktree claims |
 | todo | S-016 `session-start` |
 | todo | S-028 `doc-size` and `librarian` |
 | todo | S-017 Build agents: `portkey`, `house-elf`, `prefect` |
@@ -227,8 +227,9 @@ named repo has no `.accio/` or is another git repo, the current one is used, and
 command starts (`&&`, `then`, a `case` branch; not `exit 1`, `exit $?` or `exec 1>&2`, which can't skip it), and in
 pre-push a lone `read` (also `IFS=… read`, `if read`) or `exec <` of git's ref list (not `read … < /dev/tty`);
 the helper prints the plugin path with `printf '%s'`, so a `$(…)` in it never runs.
-Open (design gap, for S-015/S-022): an agent could write `run/push-ok` or backdate `brew.lock` itself;
-curfew's write rules and `owl` must keep those files out of agents' reach. `base_branch` isn't checked with
+Open (design gap, for S-022): an agent could write `run/push-ok` or backdate `brew.lock` itself. curfew (S-015)
+keeps them out of agents' file tools and listed commands, but a listed check runs test code the agent wrote, so the
+token must also be useless to an agent (S-022 decides how). `base_branch` isn't checked with
 `git check-ref-format`.
 
 ### S-013 · `protego`
@@ -269,26 +270,36 @@ body under an old header is new) and is never taken for a documented example; a 
 byte; curly quotes are folded like the Edit tool; `replace_all` is simulated; a guarded check that crashes blocks.
 
 ### S-015 · `curfew`: permission policy and worktree claims
-Deps: S-003, S-013 · Files: `hooks/curfew.py`, `hooks/hooks.json`, `bin/accio-claim`, `bin/accio_lib/policy.py`, `tests/test_curfew.py`
+Deps: S-003, S-013 · Files: `hooks/curfew.py`, `hooks/hooks.json`, `bin/accio-claim`, `bin/accio_lib/policy.py`, `bin/accio_lib/bashpolicy.py`, `bin/accio_lib/askrules.py`, `bin/accio_lib/runlock.py`, `bin/accio-brief`, `bin/accio-hooks`, `tests/test_curfew.py`
 Context: DESIGN § 4.4, § 6; decision 010; `docs/research/spike-s001.md` findings 10, 14, 15. The brief writes the
 worktree path shell-quoted (`shlex.quote`), so the `cd <worktree> &&` check must accept that form.
 Note (2026-10-18, from S-012's stalled reviews): a background agent waits forever on a permission prompt, and
 another plugin's hook answering `ask` (git-guardrails asks before every `git push`) may win over curfew's `allow`.
 Find which decision wins when hooks disagree, and make sure no accio agent runs a command another installed hook
 asks about. Reuse `accio_lib.shellwords` / `shellpaths` (S-013).
-Docs (hooks.md, 2026-10-18): PreToolUse precedence is `deny > defer > ask > allow`, and the user's settings
-`ask`/`deny` rules apply whatever a hook answers. So any `ask` rule (the user's settings, another plugin) beats
-curfew's allow and freezes an unattended build. Decide how accio handles this, e.g. setup warns about `ask` rules
-that match commands accio's agents run.
-- [ ] S-015/1 WHEN the caller's `agent_type` is not `accio:*` THE SYSTEM SHALL give no permission decision
-- [ ] S-015/2 WHEN `accio:house-elf` has not claimed THE SYSTEM SHALL deny its Write/Edit and every Bash command except `accio-claim <ID>`
-- [ ] S-015/3 WHEN it runs `accio-claim <ID>` THE SYSTEM SHALL record its `agent_id` → that story's worktree in `run/claims.json`
-- [ ] S-015/4 WHEN a claimed agent writes outside its worktree (after resolving `..` and symlinks) THE SYSTEM SHALL deny it and name the allowed folder; `.accio/run/<ID>/` is allowed
-- [ ] S-015/5 WHEN every part of a Bash command (split at `&&`, `;`, `|`) is on the allow list or in `agent_allow`, and it starts with `cd <its worktree> &&` or uses `git -C <its worktree>` THE SYSTEM SHALL answer allow
-- [ ] S-015/6 WHEN a command holds `$(`, backticks, `sh -c` or `eval`, or a part off the list THE SYSTEM SHALL deny it with the reason
-- [ ] S-015/7 WHEN another accio agent calls a tool THE SYSTEM SHALL answer from that agent's exact list
-- [ ] S-015/8 WHEN the hook answers allow for Write or Edit inside a workflow agent THE SYSTEM SHALL let it run with no prompt (proves spike finding 14 beyond Bash)
-- [ ] S-015/9 WHEN the repo has no `.accio/` THE SYSTEM SHALL exit 0 silently
+Spike (2026-10-18, `docs/research/spike-s015-permissions.md`, user's choice B): inside a workflow agent another
+hook's `ask` fails fast with its reason (no freeze), but a settings `ask` rule freezes the agent, and a
+`PermissionRequest` answer is ignored there. So curfew denies calls that match a settings `ask` rule (deny beats
+ask), and uses `PermissionRequest` only to record what froze.
+- [x] S-015/1 WHEN the caller's `agent_type` is not `accio:*` THE SYSTEM SHALL give no permission decision
+- [x] S-015/2 WHEN `accio:house-elf` has not claimed THE SYSTEM SHALL deny its Write/Edit and every Bash command except `accio-claim <ID>`
+- [x] S-015/3 WHEN it runs `accio-claim <ID>` THE SYSTEM SHALL record its `agent_id` → that story's worktree in `run/claims.json`
+- [x] S-015/4 WHEN a claimed agent writes outside its worktree (after resolving `..` and symlinks) THE SYSTEM SHALL deny it and name the allowed folder; `.accio/run/<ID>/` is allowed
+- [x] S-015/5 WHEN every part of a Bash command (split at `&&`, `;`, `|`) is on the allow list or in `agent_allow`, and it starts with `cd <its worktree> &&` or uses `git -C <its worktree>` THE SYSTEM SHALL answer allow
+- [x] S-015/6 WHEN a command holds `$(`, backticks, `sh -c` or `eval`, or a part off the list THE SYSTEM SHALL deny it with the reason
+- [x] S-015/7 WHEN another accio agent calls a tool THE SYSTEM SHALL answer from that agent's exact list
+- [x] S-015/8 (no test) WHEN the hook answers allow for Write or Edit inside a workflow agent THE SYSTEM SHALL let it run with no prompt (proved by the S-015 spike, finding 5)
+- [x] S-015/9 WHEN the repo has no `.accio/` THE SYSTEM SHALL exit 0 silently
+- [x] S-015/10 WHEN an accio agent's call matches an `ask` rule in the user's, project's, local or managed settings THE SYSTEM SHALL deny it and name the rule, so the agent reports BLOCKED instead of freezing
+- [x] S-015/11 WHEN `PermissionRequest` fires for an `accio:*` agent THE SYSTEM SHALL record its agent, tool and command in `run/stuck.json`
+- [x] S-015/12 WHEN `accio-hooks verify` runs THE SYSTEM SHALL list the settings `ask` rules a build would stop on
+Done: three review rounds (code+security, then two scoped). curfew's lists live in `policy.py` (agents, claims,
+writes) and `bashpolicy.py` (commands): checks and `agent_allow` match as whole-command prefixes; read-only tools
+lose their writing flags in any getopt abbreviation; file tools take plain flags; git has an explicit list; no
+`NAME=value`, substitutions, `&` or `.git` paths. A claim needs a `doing` story and is released by its next
+`accio-brief`. **Limit (DESIGN § 6):** it stops mistakes, not a determined agent (a check runs code the agent
+wrote); the push token gap moves to S-022. Open notes: `make build -f other.mk` passes as a prefix; `git -p`
+pages through `core.pager`.
 
 ### S-016 · `session-start`
 Deps: S-004, S-012 · Files: `hooks/session_start.py`, `hooks/hooks.json`, `tests/test_session_start.py`
@@ -375,6 +386,9 @@ Context: DESIGN § 3.5, § 7.2, § 7.3.
 - [ ] S-022/5 (no test) runs `accio-merge`, writes the push token only after the user confirms, and makes one `chore(accio): iteration <N> review` commit
 - [ ] S-022/6 (no test) runs `accio-hooks verify` and raises a missing marker as a question
 - [ ] S-022/7 (no test) offers allow once / allow from now on / no for each command `curfew` denied; "from now on" adds it to `agent_allow`
+Note (S-015): a listed check runs code an agent wrote, so an agent can write `run/push-ok` despite curfew. The push
+token must be useless to it, e.g. the `pre-push` refuses the token while `brew.lock` is held and owl writes it only
+after the build ends, or the token names something an agent can't know in advance.
 
 ### S-023 · `sort` skill and `quill`
 Deps: S-005, S-018 · Files: `skills/sort/SKILL.md`, `agents/quill.md`, `evals/sort/`
