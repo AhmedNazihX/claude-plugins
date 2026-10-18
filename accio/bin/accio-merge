@@ -1,0 +1,38 @@
+#!/usr/bin/env python3
+"""accio-merge <iteration N> <ID> [<ID> ...]: merge the accepted stories at owl (DESIGN § 3.5).
+
+Prints JSON: {result: merged | checks_failed | conflict | needs_user, main, culprit, base_failing, failing,
+failure_output, question, merged, leftovers}. Main only ever moves by a fast-forward after every check passed.
+"""
+import argparse
+import json
+import pathlib
+import sys
+
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+
+from accio_lib import board, config, merge, paths, story  # noqa: E402
+
+
+def main(argv=None):
+    parser = argparse.ArgumentParser(prog="accio-merge", description=__doc__)
+    parser.add_argument("number", type=int)
+    parser.add_argument("ids", nargs="+")
+    args = parser.parse_args(argv)
+    try:
+        root, accio = paths.main_root(), paths.accio_dir()
+        if root is None or accio is None:
+            raise merge.MergeError("no .accio/ folder in this repo; run accio's setup first")
+        bad = [story_id for story_id in args.ids if not story.STORY_ID.match(story_id)]
+        if bad or args.number < 1:
+            raise merge.MergeError(f"usage: accio-merge <N ≥ 1> <S-012 ...>; bad: {', '.join(bad) or args.number}")
+        reply = merge.merge(root, accio, args.number, tuple(dict.fromkeys(args.ids)), config.load(accio))
+    except (merge.MergeError, board.BoardError, config.ConfigError) as error:
+        print(f"accio-merge: {error}", file=sys.stderr)
+        return 1
+    print(json.dumps(reply, indent=2))
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

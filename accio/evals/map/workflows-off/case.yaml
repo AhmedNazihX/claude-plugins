@@ -1,0 +1,4 @@
+schema_version: "1.1"
+name: map-workflows-off
+context:
+  scaffold_script: stories.sh

@@ -1,0 +1,107 @@
+#!/usr/bin/env python3
+"""accio-hooks: accio's native git hooks (DESIGN § 4.5).
+
+  install                          add accio's pre-commit and pre-push hooks, chaining into husky; for lefthook or
+                                   the pre-commit framework, print a snippet and edit nothing
+  verify                           report a missing or unrunnable hook, an inactive hooks folder or an early exit
+                                   before accio's lines (and rewrite a stale path)
+  uninstall                        remove only accio's marked lines
+  run <hook> --root <repo> [...]   what the installed hooks call; silent when <repo> has no .accio/
+"""
+import argparse
+import os
+import pathlib
+import sys
+
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+
+from accio_lib import askrules, config, githooks, paths, pushguard  # noqa: E402
+
+SCRIPT = pathlib.Path(__file__).resolve()
+
+
+def _print(lines, stream=sys.stdout):
+    for line in lines:
+        print(line, file=stream)
+
+
+def _setup(command):
+    root = paths.main_root()
+    if root is None or paths.accio_dir() is None:
+        raise githooks.HooksError("no .accio/ folder in this repo; run accio's setup first")
+    if command == "install":
+        notes, problems = githooks.install(root, SCRIPT)
+    elif command == "uninstall":
+        notes, problems = githooks.uninstall(root) or ("accio-hooks: no accio lines found",), ()
+    else:
+        problems, notes = githooks.verify(root, SCRIPT)
+        notes = (*notes, *_ask_rule_notes(root))
+    _print(notes)
+    _print(problems)
+    return 1 if problems else 0
+
+
+def _common_dir(cwd):
+    return githooks.git_out(cwd, "rev-parse", "--path-format=absolute", "--git-common-dir")
+
+
+def _has_accio(root):
+    return root is not None and (root / paths.ACCIO_DIR_NAME).is_dir()
+
+
+def _ask_rule_notes(root):
+    """Settings `ask` rules a build stops on: curfew denies a matching call rather than let it freeze (S-015)."""
+    return tuple(f"accio-hooks: {rule.source} asks before `{rule.text}`. In a build, accio's agents stop (BLOCKED) on a "
+                 "matching call instead of waiting on the question; remove the rule to let builds run it."
+                 for rule in askrules.ask_rules(root, pathlib.Path.home()))
+
+
+def _root(root_arg):
+    """The repo from the hook line, never from where git was pointed (`--work-tree` keeps the same git dir, so it
+    can't move the guards). When the named repo has no `.accio/` (moved) or is another git repo (this one is a copy),
+    the current repo is used if it has `.accio/`, so a moved or copied repo keeps its own guards; `verify` then
+    writes the new path."""
+    named = pathlib.Path(root_arg) if root_arg else None
+    current = paths.main_root()
+    is_other_repo = named is None or not named.is_dir() or _common_dir(named) != _common_dir(pathlib.Path.cwd())
+    if _has_accio(current) and (not _has_accio(named) or is_other_repo):
+        stale = (f"accio: its hooks still name {named}; run `accio-hooks verify` to update them.",) if named else ()
+        return current, stale
+    return (named, ()) if _has_accio(named) else (None, ())
+
+
+def _run(hook, root_arg):
+    root, notes = _root(root_arg)
+    if root is None:
+        return 0
+    _print(notes, sys.stderr)
+    accio = root / paths.ACCIO_DIR_NAME
+    if hook == "pre-commit":
+        messages = pushguard.run_pre_commit(pathlib.Path.cwd())
+        _print(messages, sys.stderr)
+        return 1 if messages else 0
+    pushes = pushguard.parse_pushes(sys.stdin.read())
+    allowed, messages = pushguard.check_push(root, accio, pathlib.Path.cwd(), pushes, os.environ)
+    _print(messages, sys.stderr)
+    return 0 if allowed else 1
+
+
+def main(argv=None):
+    parser = argparse.ArgumentParser(prog="accio-hooks", description=__doc__,
+                                     formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("command", choices=("install", "verify", "uninstall", "run"))
+    parser.add_argument("hook", nargs="?", choices=githooks.HOOKS)
+    parser.add_argument("--root", help="the repo the hook belongs to (written into the hook by install)")
+    parser.add_argument("hook_args", nargs="*", help="what git passes to the hook (unused)")
+    args, _ = parser.parse_known_args(argv)
+    if (args.command == "run") != (args.hook is not None):
+        parser.error("give a hook name with `run`, and only with `run`")
+    try:
+        return _run(args.hook, args.root) if args.command == "run" else _setup(args.command)
+    except (githooks.HooksError, config.ConfigError) as error:
+        print(f"accio-hooks: {error}", file=sys.stderr)
+        return 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())

@@ -1,0 +1,37 @@
+#!/usr/bin/env python3
+"""accio-vow: decision records for the vow skill (DESIGN § 3.7).
+
+  next "<title>"      print the path and number for a new record: .accio/decisions/NNN-<slug>.md
+  record <file>       check the record (its number, its sections) and commit it alone
+"""
+import argparse
+import json
+import pathlib
+import sys
+
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+
+from accio_lib import paths, vow  # noqa: E402
+
+
+def main(argv=None):
+    parser = argparse.ArgumentParser(prog="accio-vow", description=__doc__,
+                                     formatter_class=argparse.RawDescriptionHelpFormatter)
+    commands = parser.add_subparsers(dest="command", required=True)
+    commands.add_parser("next").add_argument("title")
+    commands.add_parser("record").add_argument("file", type=pathlib.Path)
+    args = parser.parse_args(argv)
+    try:
+        accio = paths.accio_dir()
+        if accio is None:
+            raise vow.VowError("no .accio/ folder in this repo; run accio's setup first")
+        reply = vow.next_record(accio, args.title) if args.command == "next" else vow.record(accio, args.file)
+    except vow.VowError as error:
+        print(f"accio-vow: {error}", file=sys.stderr)
+        return 1
+    print(json.dumps(reply, indent=2))
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
