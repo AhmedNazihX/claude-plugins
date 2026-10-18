@@ -501,7 +501,6 @@ class PrePushTest(HooksTestBase):
         self.assertEqual(self.remote_main(), sha)
 
     def test_S_012_9_the_token_allows_one_push_of_its_sha_and_is_used_up(self):
-        self.lock()
         sha = self.new_commit()
         self.token(sha)
         self.assertEqual(self.push("main", claude=True).returncode, 0)
@@ -510,8 +509,25 @@ class PrePushTest(HooksTestBase):
         self.new_commit("second.txt")
         self.assertNotEqual(self.push("main", claude=True).returncode, 0)
 
-    def test_S_012_9_a_token_for_another_sha_is_not_valid(self):
+    def test_S_022_5_a_token_never_overrides_a_live_build(self):
+        # S-015's note: a check runs code an agent wrote, so an agent could write run/push-ok mid-build
         self.lock()
+        sha = self.new_commit()
+        self.token(sha)
+        for claude in (False, True):
+            result = self.push("main", claude=claude)
+            self.assertNotEqual(result.returncode, 0, claude)
+            self.assertIn("build is running", result.stderr)
+        self.assertTrue((self.run_dir / pushguard.TOKEN_NAME).exists())
+
+    def test_S_022_5_a_token_never_lets_a_story_worktree_push_to_base(self):
+        worktree = self.story_worktree()
+        self.token(self.new_commit(cwd=worktree))
+        result = self.push("story/S-001:main", cwd=worktree)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("story worktree", result.stderr)
+
+    def test_S_012_9_a_token_for_another_sha_is_not_valid(self):
         old = self.new_commit()
         self.new_commit("second.txt")
         self.token(old)

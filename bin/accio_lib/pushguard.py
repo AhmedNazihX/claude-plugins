@@ -1,9 +1,11 @@
 """The guards accio's git hooks run (DESIGN § 4.5, § 6; decisions 004, 009): the staged-secret check and the push
 guard.
 
-`pre-push` blocks force-pushes and deleting base for everyone. A push to base without the `owl` token is blocked
-by where and when (decision 009): during a build (a fresh `run/brew.lock`), from a story worktree, or when
-`CLAUDECODE=1`. The token (`run/push-ok`, the confirmed sha) allows one fast-forward push of that sha, then goes.
+`pre-push` blocks force-pushes and deleting base for everyone. A push to base is blocked by where and when
+(decision 009): during a build (a fresh `run/brew.lock`) and from a story worktree, always; when `CLAUDECODE=1`,
+unless the `owl` token (`run/push-ok`, the confirmed sha) names it, which allows one fast-forward push of that sha,
+then goes. A token never opens a build or a story worktree: a check runs code an agent wrote, so an agent could
+write the token mid-build (S-015, S-022).
 The refs come only from git's own list on stdin; when another hook already read it and a guard applies, the push
 is blocked rather than guessed at. A story worktree is told by its git dir, so pointing git at another work tree
 doesn't hide it.
@@ -74,22 +76,23 @@ def in_story_worktree(root, cwd):
 
 
 def _guards(root, accio, cwd, environ, base):
-    """(why a tokenless push to base is blocked, notes)."""
+    """(why a push to base is blocked whatever the token, why a tokenless one is, notes)."""
     run_dir = accio / "run"
     lock = runlock.lock_path(run_dir)
     notes = ((f"accio: {lock} hasn't been refreshed for {LOCK_MINUTES} min, so it's treated as stale (a build that "
               "stopped) and no build counts as running."),) if runlock.is_stale(lock) else ()
-    reasons = []
+    always = []
     if runlock.is_held(run_dir):
-        reasons.append(f"a build is running ({lock} was refreshed in the last {LOCK_MINUTES} min), so pushes to "
+        always.append(f"a build is running ({lock} was refreshed in the last {LOCK_MINUTES} min), so pushes to "
                        f"{base} wait for your confirmation at `owl`")
     if in_story_worktree(root, cwd):
-        reasons.append(f"this is a story worktree, and pushes to {base} never come from one (stories reach {base} "
+        always.append(f"this is a story worktree, and pushes to {base} never come from one (stories reach {base} "
                        "through `owl`)")
+    unconfirmed = []
     if environ.get("CLAUDECODE") == "1":
-        reasons.append(f"Claude is pushing (CLAUDECODE=1) to {base} without your confirmation at `owl`. To push "
-                       "yourself, run `git push` in your own terminal")
-    return tuple(reasons), notes
+        unconfirmed.append(f"Claude is pushing (CLAUDECODE=1) to {base} without your confirmation at `owl`. To push "
+                           "yourself, run `git push` in your own terminal")
+    return tuple(always), tuple(unconfirmed), notes
 
 
 def _token(run_dir):
@@ -123,7 +126,8 @@ def check_push(root, accio, cwd, pushes, environ):
     """(allowed, messages). Uses up the token when it is what lets the push through."""
     base = config.load(accio)["base_branch"]
     base_ref = f"refs/heads/{base}"
-    reasons, notes = _guards(root, accio, cwd, environ, base)
+    always, unconfirmed, notes = _guards(root, accio, cwd, environ, base)
+    reasons = always + unconfirmed
     if not pushes:
         if not reasons:
             return True, notes
@@ -135,6 +139,8 @@ def check_push(root, accio, cwd, pushes, environ):
     to_base = [push for push in pushes if push.remote_ref == base_ref and not ZERO_SHA.match(push.local_sha)]
     if not to_base or not reasons:
         return True, notes
+    if always:
+        return False, notes + tuple(f"accio: {reason}." for reason in always)
     token = _token(accio / "run")
     if token and all(push.local_sha == token for push in to_base):
         _use_token(accio / "run")

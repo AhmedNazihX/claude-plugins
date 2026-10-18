@@ -197,6 +197,13 @@ class HouseElfBashTest(CurfewTestBase):
                 self.assert_allowed("Bash", self.in_worktree(command))
         self.assert_allowed("Bash", self.bash(f"git -C {shlex.quote(str(self.worktree))} log --oneline -3"))
 
+    def test_S_022_7_a_command_owl_allowed_once_is_allowed_for_this_build_only(self):
+        self.assert_denied("Bash", self.in_worktree("docker compose up -d"), "docker")
+        (self.run_dir / runlock.ALLOW_ONCE_NAME).write_text(json.dumps(["docker compose up"]))
+        self.assert_allowed("Bash", self.in_worktree("docker compose up -d"))
+        runlock.release(self.run_dir)
+        self.assert_denied("Bash", self.in_worktree("docker compose up -d"), "docker")
+
     def test_S_015_5_a_command_must_start_in_the_worktree(self):
         for command in ("git status", f"cd {self.repo} && git status", f"git -C {self.repo} status",
                         f"cd {self.worktree} && cd {self.repo} && ls", f"cd {self.worktree}; ls"):

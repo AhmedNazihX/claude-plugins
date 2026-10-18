@@ -16,13 +16,10 @@
   run/status.json, not the story file, holds the status.
 - Values are changed in place: a line's trailing comment, the file's line endings and its mode are kept.
 """
-import os
 import pathlib
 import re
-import subprocess
-import tempfile
 
-from accio_lib import board, runlock, story
+from accio_lib import board, runlock, story, storyfiles
 
 CANDIDATE = ("backlog", "ready")
 ITERATIONS = "iterations"
@@ -30,8 +27,6 @@ ITERATION_FILE = re.compile(r"^(\d+)\.md$")
 ITERATION_ROW = re.compile(r"^\| (S-\d{3,}) \|", re.MULTILINE)
 OUTCOME_PLACEHOLDER = "Written by `/accio:owl`."
 TWO_PARENTS = "it stacks on 2 stories of this iteration; it can go in the next one"
-VALUE_LINE = re.compile(r"^(?P<key>[^:#]+:[ \t]*)(?P<value>.*?)(?P<comment>[ \t]+#[ \t].*?)?(?P<eol>\r?\n)?$", re.DOTALL)
-DEFAULT_MODE = 0o644
 COMMIT_MESSAGE = "chore(accio): plan iteration {number}"
 
 
@@ -107,14 +102,14 @@ def propose(stories, status, settings, candidates=None):
             "dropped_deps": dropped, "waiting": waiting}
 
 
-def _iterations(accio):
+def iterations(accio):
     return sorted((int(match.group(1)), path) for path in (accio / ITERATIONS).glob("*.md")
                   if (match := ITERATION_FILE.match(path.name)))
 
 
 def open_iteration(accio, status):
     """The newest iteration when it is planned but not built: no outcome yet, and every story still Ready."""
-    found = _iterations(accio)
+    found = iterations(accio)
     if not found:
         return None
     number, path = found[-1]
@@ -129,7 +124,7 @@ def open_iteration(accio, status):
 
 
 def next_iteration(accio):
-    return max((number for number, _ in _iterations(accio)), default=0) + 1
+    return max((number for number, _ in iterations(accio)), default=0) + 1
 
 
 def _checked(stories, status, settings, chosen, tracks):
@@ -153,75 +148,6 @@ def _checked(stories, status, settings, chosen, tracks):
     return plan["proposed"]
 
 
-def _with_fields(path, changes):
-    """The story file's text with some frontmatter values replaced; comments and line endings are kept."""
-    with open(path, encoding="utf-8", newline="") as stream:
-        lines = stream.read().splitlines(keepends=True)
-    for key, line_number in story.key_lines(path).items():
-        if key in changes:
-            match = VALUE_LINE.match(lines[line_number - 1])
-            lines[line_number - 1] = f"{match['key']}{changes[key]}{match['comment'] or ''}{match['eol'] or ''}"
-    return "".join(lines)
-
-
-def _read_bytes(target):
-    try:
-        with open(target, "rb") as stream:
-            return stream.read()
-    except FileNotFoundError:
-        return None
-
-
-def _stage(target, text):
-    """A temp file beside `target` holding `text`, with the target's mode (or DEFAULT_MODE for a new file)."""
-    handle, temporary = tempfile.mkstemp(dir=os.path.dirname(target), prefix=".accio-")
-    try:
-        with os.fdopen(handle, "w", encoding="utf-8", newline="") as stream:
-            stream.write(text)
-        os.chmod(temporary, os.stat(target).st_mode & 0o777 if os.path.exists(target) else DEFAULT_MODE)
-    except OSError:
-        os.unlink(temporary)
-        raise
-    return temporary
-
-
-def _restore(swapped, originals):
-    """Put back what was swapped in; returns the files that couldn't be put back."""
-    failed = []
-    for target in swapped:
-        try:
-            if originals[target] is None:
-                os.unlink(target)
-            else:
-                with open(target, "wb") as stream:
-                    stream.write(originals[target])
-        except OSError:
-            failed.append(target)
-    return failed
-
-
-def _write_all(texts):
-    """Write every file or none: each is staged beside its target first, then all are swapped in."""
-    targets = {os.path.realpath(path): text for path, text in texts.items()}
-    staged, swapped = {}, []
-    try:
-        originals = {target: _read_bytes(target) for target in targets}
-        for target, text in targets.items():
-            staged[target] = _stage(target, text)
-        for target, temporary in staged.items():
-            os.replace(temporary, target)
-            swapped.append(target)
-    except OSError as error:
-        for target, temporary in staged.items():
-            if target not in swapped and os.path.exists(temporary):
-                os.unlink(temporary)
-        failed = _restore(swapped, originals)
-        if failed:
-            raise PlanError(f"cannot write the iteration ({error}), and these files couldn't be put back: "
-                            f"{', '.join(failed)}; `git checkout -- <file>` restores them") from error
-        raise PlanError(f"cannot write the iteration ({error}); nothing was changed") from error
-
-
 def _iteration_text(number, items, tracks):
     rows = [f"| {item['id']} | {item['title'].replace('|', chr(92) + '|')} | {tracks.get(item['id'], item['track'])} "
             f"| {', '.join(item['parents']) or '—'} |" for item in items]
@@ -242,30 +168,6 @@ def _story_files(accio, also):
     return checked
 
 
-def _git(root, *args):
-    try:
-        return subprocess.run(["git", *args], cwd=root, capture_output=True, text=True, check=False)
-    except OSError as error:
-        return subprocess.CompletedProcess(args, 1, "", f"git could not run: {error}")
-
-
-def _commit(root, files, number):
-    """Commit exactly `files`; returns (commit id, None) or (None, git's reason). Unchanged files need no commit; a
-    refused commit is unstaged again, so the user's next commit doesn't take the plan by surprise."""
-    names = [os.path.relpath(os.path.realpath(path), os.path.realpath(root)) for path in files]
-    added = _git(root, "add", "--", *names)
-    if added.returncode != 0:
-        return None, (added.stderr or added.stdout).strip() or "git add failed"
-    head = _git(root, "rev-parse", "--verify", "--quiet", "HEAD").stdout.strip()
-    if head and _git(root, "diff", "--cached", "--quiet", "HEAD", "--", *names).returncode == 0:
-        return head, None
-    committed = _git(root, "commit", "-q", "-m", COMMIT_MESSAGE.format(number=number), "--only", "--", *names)
-    if committed.returncode != 0:
-        _git(root, *(("reset", "-q", "--", *names) if head else ("rm", "-q", "--cached", "--", *names)))
-        return None, (committed.stderr or committed.stdout).strip() or "git commit failed"
-    return _git(root, "rev-parse", "HEAD").stdout.strip(), None
-
-
 def go(accio, settings, chosen, tracks, also=()):
     """Make `chosen` exactly the next iteration and commit it; returns {iteration, path, stories, returned, files,
     commit, commit_error}."""
@@ -281,7 +183,7 @@ def go(accio, settings, chosen, tracks, also=()):
                **{sid: {"status": "backlog"} for sid in returned}}
     number = open_iteration(accio, status) or next_iteration(accio)
     iteration = accio / ITERATIONS / f"{number}.md"
-    texts = {stories[sid].path: _with_fields(stories[sid].path, change) for sid, change in changes.items()}
+    texts = {stories[sid].path: storyfiles.with_fields(stories[sid].path, change) for sid, change in changes.items()}
     texts[iteration] = _iteration_text(number, items, tracks)
     texts[accio / board.BOARD_NAME] = board.render(
         stories, {**status, **{sid: change["status"] for sid, change in changes.items()}})
@@ -289,9 +191,12 @@ def go(accio, settings, chosen, tracks, also=()):
         iteration.parent.mkdir(parents=True, exist_ok=True)
     except OSError as error:
         raise PlanError(f"cannot create {iteration.parent} ({error}); nothing was changed") from error
-    _write_all(texts)
+    try:
+        storyfiles.write_all(texts, "the iteration")
+    except storyfiles.WriteError as error:
+        raise PlanError(str(error)) from error
     files = list(dict.fromkeys([*map(str, texts), *map(str, edited)]))
-    commit, why = _commit(accio.parent, files, number)
+    commit, why = storyfiles.commit(accio.parent, files, COMMIT_MESSAGE.format(number=number))
     return {"iteration": number, "path": str(iteration), "stories": ids, "returned": returned, "files": files,
             "commit": commit, "commit_error": why}
 

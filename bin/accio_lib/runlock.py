@@ -12,6 +12,7 @@ import time
 
 LOCK_NAME = "brew.lock"
 CLAIMS_NAME = "claims.json"
+ALLOW_ONCE_NAME = "allow-once.json"  # commands owl allowed for the next build only (S-022)
 GUARD_NAME = ".guard"
 STALE_SECONDS = 30 * 60
 
@@ -99,7 +100,9 @@ def refresh(run_dir):
 
 
 def release(run_dir):
-    try:
-        lock_path(run_dir).unlink(missing_ok=True)
-    except OSError as error:
-        raise LockError(f"cannot remove {lock_path(run_dir)}: {error}") from error
+    """End the build: remove the lock, and with it the commands owl allowed for this one build only."""
+    for path in (run_dir / ALLOW_ONCE_NAME, lock_path(run_dir)):
+        try:
+            path.unlink(missing_ok=True)
+        except OSError as error:
+            raise LockError(f"cannot remove {path}: {error}") from error

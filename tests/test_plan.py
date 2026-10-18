@@ -13,7 +13,7 @@ import unittest
 
 from support import ROOT, git, init_repo, write
 
-from accio_lib import plan, story
+from accio_lib import story, storyfiles
 
 BOARD = ROOT / "bin" / "accio-board"
 
@@ -188,7 +188,7 @@ class PlanTest(unittest.TestCase):
     def test_a_failed_write_leaves_no_temp_file(self):
         self.add("S-001")
         self.add("S-002")
-        real_chmod, calls = plan.os.chmod, []
+        real_chmod, calls = storyfiles.os.chmod, []
 
         def failing_chmod(path, mode):
             calls.append(path)
@@ -196,12 +196,12 @@ class PlanTest(unittest.TestCase):
                 raise OSError("disk full")
             real_chmod(path, mode)
 
-        plan.os.chmod = failing_chmod
+        storyfiles.os.chmod = failing_chmod
         try:
-            with self.assertRaises(plan.PlanError):
-                plan._write_all({self.accio / "stories" / "S-001.md": "a", self.accio / "stories" / "S-002.md": "b"})
+            with self.assertRaises(storyfiles.WriteError):
+                storyfiles.write_all({self.accio / "stories" / "S-001.md": "a", self.accio / "stories" / "S-002.md": "b"})
         finally:
-            plan.os.chmod = real_chmod
+            storyfiles.os.chmod = real_chmod
         self.assertEqual(sorted(path.name for path in (self.accio / "stories").iterdir()), ["S-001.md", "S-002.md"])
 
     def test_S_021_4_also_takes_only_story_files(self):

@@ -1,17 +1,27 @@
 #!/usr/bin/env python3
-"""accio-summary --run <transcript-dir> [--run ...]: write .accio/run/owl.md for the review (DESIGN § 3.5)."""
+"""accio-summary --run <transcript-dir> [--run ...] | --latest: write .accio/run/owl.md for the review (DESIGN § 3.5).
+
+--latest takes the brew runs since the newest iteration was planned (accio_lib.runs); with none, costs are unknown.
+"""
 import argparse
 import pathlib
 import sys
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 
-from accio_lib import board, config, cost, paths, summary  # noqa: E402
+from accio_lib import board, config, cost, paths, runs, summary  # noqa: E402
+
+
+def _planned_at(accio):
+    """When the newest iteration file was written (0 when there is none)."""
+    return max((path.stat().st_mtime for path in (accio / "iterations").glob("*.md")), default=0.0)
 
 
 def main(argv=None):
     parser = argparse.ArgumentParser(prog="accio-summary", description=__doc__)
-    parser.add_argument("--run", action="append", type=pathlib.Path, required=True)
+    source = parser.add_mutually_exclusive_group(required=True)
+    source.add_argument("--run", action="append", type=pathlib.Path)
+    source.add_argument("--latest", action="store_true")
     args = parser.parse_args(argv)
     try:
         accio = paths.accio_dir()
@@ -21,7 +31,8 @@ def main(argv=None):
         status = board.statuses(stories, board.read_overrides(accio))
         shown = [sid for sid in stories if status[sid] in ("review", "blocked")]
         budgets = config.load(accio)["budgets"]
-        costs = cost.report(args.run, {sid: cost.budget_for(stories[sid], budgets) for sid in shown})["stories"]
+        run_dirs = args.run or runs.brew_runs(accio.parent, since=_planned_at(accio))
+        costs = cost.report(run_dirs, {sid: cost.budget_for(stories[sid], budgets) for sid in shown})["stories"]
         target = accio / "run" / "owl.md"
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text(summary.render(stories, status, accio / "run", costs), encoding="utf-8")
