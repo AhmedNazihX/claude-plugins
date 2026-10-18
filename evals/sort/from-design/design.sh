@@ -19,8 +19,13 @@ know because support tickets about lost passwords drop.
 2. **Link expiry.** A reset link works once and only for 30 minutes (src/reset.py).
 3. **Rate limit.** At most 5 reset requests per email address per hour (src/ratelimit.py).
 
+## Out of scope
+- The page where the user sets the new password: it exists already.
+
 ## Decisions
 - Email only, no SMS.
+- A rate-limited request gets the same reply as a normal one and sends no email, so nobody can tell which addresses
+  have an account.
 DESIGN
 git add -A
 git -c user.name=eval -c user.email=eval@example.com commit -q -m "design"

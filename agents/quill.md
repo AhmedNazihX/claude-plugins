@@ -48,6 +48,8 @@ the design section it comes from.
 - `files`: every file the story may change, its tests included; keep a story to a handful of files.
 - `risk`: a word for what makes it risky (auth, payment, migration, performance, ui …), or leave the key out:
   any value, `none` included, counts as a risk.
+- Turn each part's "Checked by" (and the design's Evidence) into its DoD lines: they say what a test must show.
+- Stories from a design note (a later `## <Feature>` section) copy that note's `### Outcome`, not the first one.
 - If the design states no outcome, write "After this ships: not stated in the design" and add a question (below).
 - Small and independent beats big: a story a person could review in one sitting.
 

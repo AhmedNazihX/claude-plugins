@@ -14,7 +14,6 @@ from accio_lib import runlock, storyfiles
 DECISIONS = "decisions"
 RECORD_FILE = re.compile(r"^(\d{3,})-[a-z0-9-]+\.md$")
 NUMBERED = re.compile(r"^(\d+)\D")
-FENCE = re.compile(r"^\s*(```|~~~)")
 FALLBACK_SLUG = "decision"
 SLUG_CHARS = 60
 SECTIONS = ("## What was decided", "## Options", "## Decision", "## Why")
@@ -47,28 +46,6 @@ def next_record(accio, title):
     return {"number": number, "path": str(folder / f"{number:03d}-{slug(title)}.md")}
 
 
-def _outside_fences(text):
-    kept, fenced = [], False
-    for line in text.splitlines():
-        if FENCE.match(line):
-            fenced = not fenced
-        elif not fenced:
-            kept.append(line)
-    return kept
-
-
-def _sections(lines):
-    """{`## heading`: its body text} for the record's `##` sections, outside code blocks."""
-    found, current = {}, None
-    for line in lines:
-        if line.startswith("## "):
-            current = line.rstrip()
-            found.setdefault(current, "")
-        elif current:
-            found[current] += line.strip()
-    return found
-
-
 def _checked(accio, path):
     if path.resolve().parent != (accio / DECISIONS).resolve() or not RECORD_FILE.match(path.name):
         raise VowError(f"a decision record is .accio/decisions/NNN-<slug>.md, not {path}")
@@ -84,7 +61,7 @@ def _checked(accio, path):
     heading = re.match(rf"^# {number} — (.+)$", text.split("\n", 1)[0].rstrip("\r"))
     if not heading:
         raise VowError(f"{path.name} must start with the heading `# {number} — <title>`")
-    found = _sections(_outside_fences(text))
+    found = storyfiles.sections(text)
     missing = [section for section in SECTIONS if section not in found]
     if missing:
         raise VowError(f"{path.name} lacks {', '.join(missing)}; a decision record needs {', '.join(SECTIONS)}")

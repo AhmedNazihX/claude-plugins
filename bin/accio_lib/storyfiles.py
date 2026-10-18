@@ -60,6 +60,26 @@ def _key_lines(lines):
     return found
 
 
+FENCE = re.compile(r"^\s*(```|~~~)")
+
+
+def sections(text):
+    """{`## heading`: its body text, stripped} for a Markdown file's `##` sections; a code block's lines don't count."""
+    found, current, fenced = {}, None, False
+    for line in text.splitlines():
+        if FENCE.match(line):
+            fenced = not fenced
+            continue
+        if fenced:
+            continue
+        if line.startswith("## "):
+            current = line.rstrip()
+            found.setdefault(current, "")
+        elif current:
+            found[current] += line.strip()
+    return found
+
+
 def with_section(text, heading, body, append=False):
     """`text` with the body of `## <heading>` replaced (or appended to); a missing section is added at the end."""
     lines = text.splitlines(keepends=True)
@@ -89,7 +109,8 @@ def _stage(target, text):
     """A temp file beside `target` holding `text`, with the target's mode (or DEFAULT_MODE for a new file)."""
     handle, temporary = tempfile.mkstemp(dir=os.path.dirname(target), prefix=".accio-")
     try:
-        with os.fdopen(handle, "w", encoding="utf-8", newline="") as stream:
+        with (os.fdopen(handle, "wb") if isinstance(text, bytes)
+              else os.fdopen(handle, "w", encoding="utf-8", newline="")) as stream:
             stream.write(text)
         os.chmod(temporary, os.stat(target).st_mode & 0o777 if os.path.exists(target) else DEFAULT_MODE)
     except OSError:

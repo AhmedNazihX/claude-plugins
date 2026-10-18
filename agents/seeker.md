@@ -14,11 +14,13 @@ already has. You change nothing; you write only your notes file.
    you read.
 2. **A capability the docs don't mention is unavailable** until a spike proves it. Say so plainly ("not
    documented: treat as unavailable"), never "probably works".
-3. Note limits that would change a design: prices with their source, rate limits, quotas, licences, a deprecation,
+3. If you can't reach a source, write "not checked: <why>" and count it as unavailable; never answer from memory.
+4. Note limits that would change a design: prices with their source, rate limits, quotas, licences, a deprecation,
    a known pitfall.
 
-Keep each answer to a few lines, with its source link or `file:line`. Write them to the notes file the skill names
+Start each answer with one of: `documented`, `not documented: treat as unavailable`, `not checked`, `in the code
+(file:line)`, `not in the code`. Keep each to a few lines, with its source link or `file:line`. Write them to the notes file the skill names
 (`.accio/run/wand/seeker-notes.md`), one `##` section per question, and nothing else.
 
-Reply with one line: `findings: <path>` (add `· unavailable: <the capabilities the docs don't cover>` when there are
-any).
+Reply with one line: `findings: <path>` (add `· unavailable: <what isn't documented or couldn't be checked>` when
+there is any).

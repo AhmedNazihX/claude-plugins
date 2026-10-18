@@ -340,7 +340,7 @@ class VerifyAndUninstallTest(HooksTestBase):
     def test_S_022_6_hooks_switched_off_by_core_hookspath_are_a_problem_not_a_crash(self):
         self.install()
         git(self.repo, "config", "core.hooksPath", "/dev/null")
-        for command in ("verify", "install"):
+        for command in ("verify", "install", "uninstall"):
             with self.subTest(command):
                 result = self.hooks(command)
                 self.assertNotEqual(result.returncode, 0)

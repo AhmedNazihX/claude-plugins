@@ -1,7 +1,8 @@
 # Design template
 
-`.accio/design.md` is one page that grows by sections. `accio-board record-design` refuses it without
-`## Outcome`. `sort`'s quill reads it to write stories: keep each part concrete (who, what, which files).
+`.accio/design.md` is one page that grows by sections. `accio-board record-design` refuses it without an
+`## Outcome` that has real text. `sort`'s quill reads it to write stories: keep each part concrete (who, what, which
+files, how it is checked).
 
 ```markdown
 # Design: <name>
@@ -17,21 +18,23 @@ After this ships, <what should be true>, and we'd know because <a measurable sig
 
 ## Out of scope
 - <what we won't do now>
+- <a requirement nobody owned> (no owner)
 
 ## Design
 <the chosen option in plain words: the parts, how they talk, where the data lives; the decisions by number,
-e.g. "Postgres (decision 003)">
+e.g. "SMTP through our relay (decision 003)">
 
 ## What we build
-1. **<part>.** <what it does, for whom>. Files: <paths it will add or change>.
+1. **<part>.** <what it does, for whom>. Files: <paths it will add or change>. Needs: <earlier parts, or none>.
+   Risk: <auth, payment, migration … or none>. Checked by: <a test, a measurement or a command that shows it works>.
 
 ## Evidence
-<wandmaker's fourth depth answer: what, other than a model or the user, shows it is right (a test, a measurement, a
-check a tool runs). This seeds the stories' DoD lines.>
+<the chosen option's fourth depth answer: what, other than a model or the user, shows the whole thing is right.
+Each part's "Checked by" comes from it.>
 
 ## Open questions
-<anything left to a spike or to later; "none" when nothing is open>
+<spikes and anything left for later; "none" when nothing is open>
 ```
 
-A **design note** for a later feature is one `## <Feature>` section with the same parts as subsections (`###`),
-added at the end. Never rewrite the rest of the file.
+A **design note** for a later feature is one `## <Feature>` section added at the end, with the same parts as `###`
+subsections, its own `### Outcome` first. Stories from a note copy that note's outcome. Never rewrite the rest.

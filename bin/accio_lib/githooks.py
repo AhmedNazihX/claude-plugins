@@ -384,6 +384,9 @@ def _missing(found, root, hook, path):
 
 
 def uninstall(root):
+    off = _switched_off(root)
+    if off:
+        raise HooksError(off)
     found = layout(root)
     folders = _known_folders(found, root)
     names = (*HOOKS, PRE_PUSH_LEGACY)

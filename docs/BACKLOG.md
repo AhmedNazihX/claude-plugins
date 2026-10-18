@@ -40,7 +40,7 @@ evals/                       scripts/publish.py
 | done | S-021 `prophecy` skill |
 | done | S-022 `owl` skill |
 | done | S-023 `sort` skill and `quill` |
-| todo | S-024 `wand` skill, `seeker`, `wandmaker` |
+| done | S-024 `wand` skill, `seeker`, `wandmaker` |
 | done | S-025 `map` and `vow` skills |
 | todo | S-026 Skill evals and baseline cost |
 | conditional | S-027 `brew-by-hand` (only if S-001 says so) |
@@ -476,14 +476,21 @@ flag (the safety net) rarely fires in a run.
 (`docs/research/platform-facts.md`).
 
 ### S-024 · `wand` skill, `seeker`, `wandmaker`
-Deps: S-012, S-025 · Files: `skills/wand/SKILL.md`, `skills/wand/references/`, `agents/{seeker,wandmaker}.md`, `evals/wand/`
+Deps: S-012, S-025 · Files: `skills/wand/SKILL.md`, `skills/wand/references/`, `agents/{seeker,wandmaker}.md`, `evals/wand/`, `bin/accio-board` (`init`, `record-design`), `bin/accio_lib/design.py`, `agents/quill.md` (Checked by → DoD)
 Context: DESIGN § 3.1, § 12.1; decision 011.
-- [ ] S-024/1 (no test) interviews one question at a time and deletes a requirement without an owner
-- [ ] S-024/2 (no test) `seeker` returns `findings: <path>` and treats an undocumented capability as unavailable
-- [ ] S-024/3 (no test) `wandmaker` returns 2–3 options with trade-offs and "what breaks first"
-- [ ] S-024/4 (no test) writes `.accio/design.md`, records each decision with `vow`, and runs `accio-hooks install` on first use
-- [ ] S-024/5 (no test) the interview asks "after this ships, what should be true, and how would you know?" (decision 011)
-- [ ] S-024/6 (no test) `wandmaker` answers the four depth questions for each option, and the evidence answer seeds the DoD lines (decision 011)
+- [x] S-024/1 (no test) interviews one question at a time and deletes a requirement without an owner
+- [x] S-024/2 (no test) `seeker` returns `findings: <path>` and treats an undocumented capability as unavailable
+- [x] S-024/3 (no test) `wandmaker` returns 2–3 options with trade-offs and "what breaks first"
+- [x] S-024/4 (no test) writes `.accio/design.md`, records each decision with `vow`, and runs `accio-hooks install` on first use
+- [x] S-024/5 (no test) the interview asks "after this ships, what should be true, and how would you know?" (decision 011)
+- [x] S-024/6 (no test) `wandmaker` answers the four depth questions for each option, and the evidence answer seeds the DoD lines (decision 011)
+Done: a code review, a skill review, an automated security review and a focused re-review. `accio-board init`
+sets accio up (idempotent; asks git whether `.accio/run/` is ignored; keeps `.gitignore`'s bytes and line endings;
+never writes through a link leading outside the repo); `record-design` needs a real `## Outcome` and commits the
+setup files only while the setup is uncommitted. wand records decisions before the design so it cites their
+numbers, and each part's "Checked by" (from wandmaker's fourth depth answer) becomes quill's DoD lines. seeker marks
+what it couldn't check and never answers from memory. Evals: 5 cases, all 1.00 locally (about $0.7 a full run;
+options uses Opus).
 
 ### S-025 · `map` and `vow` skills
 Deps: S-004, S-016 · Files: `skills/{map,vow}/SKILL.md`, `skills/vow/references/`, `evals/{map,vow}/`, `bin/accio-vow`, `bin/accio_lib/vow.py`, `bin/accio-board` (`board --print`)
