@@ -158,6 +158,21 @@ class CostTest(unittest.TestCase):
         self.assertIsNone(report["stories"]["S-001"]["tokens"])
         self.assertTrue(report["partial"])
 
+    def test_budgets_count_fresh_tokens_only_and_cache_reads_are_shown_apart(self):
+        # user decision 2026-10-18 (option A): cache reads re-read the saved conversation each step, so they track
+        # step count, not new work; a normal story would otherwise always look 2x over budget
+        add_agent(self.run, "a1", "S-001 implement", [usage(inp=20, create=30, read=5000, out=40)])
+        add_agent(self.run, "a2", "S-002 implement", [usage(inp=50, create=60, read=10, out=50)])
+        report = cost.report([self.run], {"S-001": 100, "S-002": 100})
+        stories = report["stories"]
+        self.assertEqual((stories["S-001"]["fresh"], stories["S-001"]["tokens"]), (90, 5090))
+        self.assertEqual((stories["S-001"]["over"], stories["S-001"]["stop"]), (False, False))
+        self.assertEqual((stories["S-002"]["over"], stories["S-002"]["stop"]), (True, False))
+        self.assertEqual(report["total"], 5260)
+        text = cost.describe({**report, "stories": {"S-001": {**stories["S-001"], "fresh": 90_000,
+                                                              "tokens": 5_090_000, "budget": 400_000}}})
+        self.assertIn("S-001  90k of 400k (5090k with cache reads)", text)
+
 
 class CostCliTest(unittest.TestCase):
     def setUp(self):

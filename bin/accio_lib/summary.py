@@ -73,8 +73,10 @@ def _read(path):
 def _cost(entry):
     if entry is None or entry.get("tokens") is None:
         return "cost unknown"
-    flag = " (over budget)" if entry.get("over") else ""
-    return f"{entry['tokens'] // 1000}k tokens{flag}"
+    fresh = entry.get("fresh", entry["tokens"])
+    cached = entry["tokens"] - fresh
+    extra = (" (over budget)" if entry.get("over") else "") + (f" (+{cached // 1000}k cache reads)" if cached else "")
+    return f"{fresh // 1000}k tokens{extra}"
 
 
 def _heading(parsed, state, cost_entry):

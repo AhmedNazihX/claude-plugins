@@ -7,7 +7,8 @@ label brew gave it. A label that starts with a story id (`S-012 implement`) coun
 Claude Code writes one transcript line per content block, and every line of one API response repeats its usage,
 so usage is counted once per (message.id, requestId), keeping the last line (it holds the final output count).
 A story's tokens are all four usage fields (input, cache creation, cache reads, output); the breakdown is kept so
-budgets can be tuned. A story with any unreadable agent is "unknown" (None), never a partial number; an unreadable
+budgets can be tuned. Budgets count only fresh tokens (all but cache reads): a cache read re-reads the agent's saved
+conversation on every step, so it tracks the number of steps, not new work (the user's choice, 2026-10-18). A story with any unreadable agent is "unknown" (None), never a partial number; an unreadable
 agent that belongs to no requested story makes the iteration total partial.
 """
 import json
@@ -137,15 +138,20 @@ def budget_for(parsed, budgets):
     return parsed.meta.get("budget_tokens", budgets["quick" if parsed.meta["track"] == "quick" else "story"])
 
 
+def fresh_tokens(entry):
+    """The tokens a budget counts: all but cache reads; None when the story is unknown."""
+    return None if entry["tokens"] is None else entry["tokens"] - entry["breakdown"]["cache_read"]
+
+
 def report(run_dirs, budgets):
     """Per-story tokens against budgets, the iteration total, and whether anything is unknown."""
     totals = story_tokens(run_dirs, tuple(budgets))
     stories = {}
     for story_id, budget in budgets.items():
-        tokens = totals[story_id]["tokens"]
-        stories[story_id] = {**totals[story_id], "budget": budget,
-                             "over": tokens is not None and tokens > budget,
-                             "stop": tokens is not None and tokens >= STOP_FACTOR * budget}
+        fresh = fresh_tokens(totals[story_id])
+        stories[story_id] = {**totals[story_id], "fresh": fresh, "budget": budget,
+                             "over": fresh is not None and fresh > budget,
+                             "stop": fresh is not None and fresh >= STOP_FACTOR * budget}
     known = [entry["tokens"] for entry in stories.values() if entry["tokens"] is not None]
     partial = len(known) < len(stories) or totals["_unattributed_unknown"]
     return {"stories": stories, "unattributed": totals["_unattributed"],
@@ -159,6 +165,7 @@ def describe(result):
             lines.append(f"{story_id}  unknown (a transcript is missing or unreadable)")
             continue
         flag = "  STOPPED: 2x budget" if entry["stop"] else ("  over budget" if entry["over"] else "")
-        lines.append(f"{story_id}  {entry['tokens'] // 1000}k of {entry['budget'] // 1000}k{flag}")
+        lines.append(f"{story_id}  {entry['fresh'] // 1000}k of {entry['budget'] // 1000}k "
+                     f"({entry['tokens'] // 1000}k with cache reads){flag}")
     total = f"Total {result['total'] // 1000}k tokens" + (" (partial: something was unreadable)" if result["partial"] else "")
     return "\n".join([*lines, total])

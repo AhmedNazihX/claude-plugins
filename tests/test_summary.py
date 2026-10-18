@@ -159,6 +159,12 @@ class SummaryTest(unittest.TestCase):
         for _, label in summary.REPORT_SECTIONS:
             self.assertIn(f"- {label}: word", part)
 
+    def test_owl_shows_fresh_tokens_with_cache_reads_apart(self):
+        self.assertEqual(summary._cost({"tokens": 2_400_000, "fresh": 300_000, "over": False}),
+                         "300k tokens (+2100k cache reads)")
+        self.assertEqual(summary._cost({"tokens": 212_000, "fresh": 212_000, "over": True}),
+                         "212k tokens (over budget)")
+
     def test_the_story_budget_decides_over_budget(self):
         self.add("S-001", "review", extra="budget_tokens: 100000\n")
         self.assertIn("212k tokens (over budget)", self.block(self.run_summary(), "S-001"))
