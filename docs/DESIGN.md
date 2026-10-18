@@ -324,6 +324,7 @@ script's absolute path.
 | `accio-check` | `snapshot` of the main checkout before a story; then the checks scoped to the diff, the boundary and DoD-tag checks, and the snapshot and remote comparison, as `prefect`'s reply (§ 12.5) |
 | `accio-hooks` | install (with chaining), `verify`, `run <hook>`, uninstall |
 | `accio-summary` | reports and cost data → `run/owl.md` for the review; `--latest` finds this repo's brew runs since the iteration was planned |
+| `accio-vow` | `next` (the next decision record's number and path), `record` (check its number and sections, commit it alone) |
 | `accio-owl` | owl's batch answer: `check` it, `close` the iteration after `accio-merge` (story files, outcome, board, `agent_allow`, one commit), `push-ok` (the token, never during a build) |
 
 ### 4.7 Output style (v1.1)
