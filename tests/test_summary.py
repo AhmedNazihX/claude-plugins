@@ -45,7 +45,7 @@ class SummaryTest(unittest.TestCase):
         self.add("S-002", "blocked")
         self.add("S-003", "review", deps=("S-001",))
         self.add("S-004", "done")
-        write(self.accio / "run" / "S-001" / "report.md", REPORT)
+        write(self.accio / "run" / "S-001" / "build-report.md", REPORT)
         write(self.accio / "run" / "questions" / "S-002.md", "Should the link expire after 15 or 30 minutes?\n")
         agent(self.transcripts, "a1", "S-001 implement", 212_000)
         agent(self.transcripts, "a2", "S-003 implement", 90_000)
@@ -73,7 +73,7 @@ class SummaryTest(unittest.TestCase):
         return f"### {story_id} " + text.split(f"### {story_id} ", 1)[1].split("\n\n", 1)[0]
 
     def write_report(self, story_id, text):
-        write(self.accio / "run" / story_id / "report.md", text)
+        write(self.accio / "run" / story_id / "build-report.md", text)
 
     def test_S_010_1_each_ready_story_gets_change_try_risk_and_cost(self):
         part = self.block(self.run_summary(), "S-001")
@@ -116,7 +116,7 @@ class SummaryTest(unittest.TestCase):
         self.assertIn("Risks: (missing from the report)", self.block(self.run_summary(), "S-001"))
 
     def test_S_010_1_an_unreadable_report_says_unreadable_not_missing(self):
-        (self.accio / "run" / "S-001" / "report.md").write_bytes(b"## What changed\n\xff\xfe bad bytes\n")
+        (self.accio / "run" / "S-001" / "build-report.md").write_bytes(b"## What changed\n\xff\xfe bad bytes\n")
         part = self.block(self.run_summary(), "S-001")
         self.assertIn("report unreadable", part)
         self.assertNotIn("no report written", part)

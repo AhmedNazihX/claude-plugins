@@ -138,7 +138,7 @@ This is the unattended part. The full spec is in `docs/research/build-engine.md`
 |---|---|---|---|
 | 0 load | `portkey` | Haiku | `accio-board ready --json`, in dependency order; also recovers stories a crash left in *Doing* (§ 12.6); `accio-hooks verify`; takes the run lock with `accio-board lock` (§ 4.5) |
 | 1 prepare | `portkey` | Haiku | `accio-brief` creates or reuses the worktree and branch `story/<ID>` (§ 12.3), from base or from the parent's head when stacked, and writes `brief.md`, including review notes from a rejection |
-| 2 implement | `house-elf` | Sonnet; Opus if complex or risky | first runs `accio-claim <ID>` (§ 4.4); reads only the brief; starts each Bash command that touches files with `cd <worktree> &&` or uses `git -C <worktree>`; test-first; tags each test with its DoD line; checkpoint commits; `report.md`; returns a status |
+| 2 implement | `house-elf` | Sonnet; Opus if complex or risky | first runs `accio-claim <ID>` (§ 4.4); reads only the brief; starts each Bash command that touches files with `cd <worktree> &&` or uses `git -C <worktree>`; test-first; tags each test with its DoD line; checkpoint commits; `build-report.md`; returns a status |
 | 3 check | `prefect` | Haiku | the ledger skips an exact key that already passed (§ 12.4); checks scoped to the change; **boundary check:** a diff outside the story's `files` (plus tests) becomes a finding; **DoD tags:** every numbered line not marked `(no test)` has a tagged test; **main snapshot:** the main checkout's `git status` is unchanged; **remote check:** `origin/<base>` has not moved; **test audit:** the project's mutation tool, limited to the story's changed lines; a mutant no tagged test catches marks a weak test, and no tool means "not audited" (decision 011) |
 | 4 review | `examiner` + `professor` (+ `auror` when the diff under review touches a risky path, or the story's `risk` names security); Quick track: `examiner` alone, also reviewing quality | Sonnet | read-only; `accio-brief <ID> --review` (from `portkey`) writes the review package and diff as files; confidence ≥ 80 |
 | 5 judge | `headmaster` | Sonnet | on NEEDS_CONTEXT from any `house-elf`, which includes a fix it refuses because the finding conflicts with the story; a ruling gets one more try (and the re-review sees it), a question marks the story needs-user; it never writes the ledger |
@@ -591,7 +591,7 @@ workflow launch: the first `/accio:brew` asks once, and "don't ask again" covers
 | `run/allow-once.json` | `accio-owl close` (commands allowed once, per story, until that story is next built); watched by `accio-check`'s snapshot | never; a story's grant goes when a build that touched it unlocks, or the next one starts after a crash |
 | `run/claims.json` | `curfew` (when `house-elf` runs `accio-claim`) | never; cleared when a run starts |
 | `run/stuck.json` | `curfew` (a permission question reached an accio agent: it froze) | never |
-| `run/<ID>/brief.md`, `report.md`, `findings-*.md` | `accio-brief`; `house-elf`; each reviewer | never |
+| `run/<ID>/brief.md`, `build-report.md`, `*-findings.md` | `accio-brief`; `house-elf`; each reviewer | never |
 | `run/questions/<ID>.md` | `headmaster` (needs-user), `prefect` (a Blocked outcome), or an agent's `needs override` | never; answers go into the story at `owl` |
 
 **During a build, status lives only in `run/status.json`.** Nothing commits to main while a build runs.

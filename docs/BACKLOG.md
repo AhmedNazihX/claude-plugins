@@ -303,7 +303,7 @@ pages through `core.pager`.
 Follow-up (automated review after merge): a path part that could glob to `.git` (`.gi?`) is denied; `git commit
 -n`/`--no-verify` is denied; portkey, prefect and headmaster run only the accio scripts and subcommands their step
 needs (no `accio-hooks uninstall`, `accio-board unlock` for prefect, `accio-ledger clear`); in `run/<ID>/`,
-house-elf writes only `report.md`.
+house-elf writes only `build-report.md`.
 
 ### S-016 · `session-start`
 Deps: S-004, S-012 · Files: `hooks/session_start.py`, `hooks/hooks.json`, `bin/accio_lib/githooks.py`, `tests/test_session_start.py`

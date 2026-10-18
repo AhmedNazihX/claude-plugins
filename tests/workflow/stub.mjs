@@ -56,7 +56,7 @@ export function happy(stories, overrides = {}) {
     if (override) return override(call, id)
     if (step === 'load') return { locked: true, stories }
     if (step === 'prepare') return { worktree: `/wt/${id}`, brief: `/run/${id}/brief.md`, base: 'abc' }
-    if (step === 'implement' || step === 'fix') return { status: 'DONE', head: 'def', report: `/run/${id}/report.md` }
+    if (step === 'implement' || step === 'fix') return { status: 'DONE', head: 'def', report: `/run/${id}/build-report.md` }
     if (step === 'check') return { pass: true, skipped: false, failing: [] }
     if (step === 'package') return { package: `/run/${id}/review-package.md`, head: 'h0', risky: false }
     if (REVIEWERS.includes(step)) return pass(id, step)
@@ -68,7 +68,7 @@ export function happy(stories, overrides = {}) {
 
 const REVIEWERS = ['examiner', 'professor', 'auror']
 const counts = (major) => ({ critical: 0, major, minor: 0 })
-export const pass = (id, reviewer) => ({ verdict: 'pass', counts: counts(0), path: `/run/${id}/findings-${reviewer}.md` })
-export const fail = (id, reviewer) => ({ verdict: 'fail', counts: counts(1), path: `/run/${id}/findings-${reviewer}.md` })
+export const pass = (id, reviewer) => ({ verdict: 'pass', counts: counts(0), path: `/run/${id}/${reviewer}-findings.md` })
+export const fail = (id, reviewer) => ({ verdict: 'fail', counts: counts(1), path: `/run/${id}/${reviewer}-findings.md` })
 
 export const story = (id, extra = {}) => ({ id, title: `Story ${id}`, track: 'story', parents: [], resume: null, ...extra })

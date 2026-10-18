@@ -49,6 +49,13 @@ Cost controls: `--max-cost-usd`, `--runs`, `--threshold`. Each case runs in an i
     `background`, `experimental`.
   - Plugin agents ignore `hooks`, `mcpServers` and `permissionMode`.
 
+## Subagent writes (found 2026-10-18, S-023)
+- **Claude Code refuses a subagent's Write to a "report" file.** A file whose name matches
+  `^(REPORT|SUMMARY|FINDINGS|ANALYSIS).*\.md$`, in any case, gets `Subagents should return findings as text, not
+  write report files.` (2.1.302; the event is `tengu_subagent_md_report_blocked`). accio's agent-written files are
+  named so they don't match: `build-report.md`, `<reviewer>-findings.md`, `quill-summary.md`. A test in
+  `tests/test_agents.py` keeps it that way.
+
 ## Plugin components ([docs](https://code.claude.com/docs/en/plugins/components))
 - **Supported:** skills, agents, hooks, commands, output styles, workflows, `.mcp.json`, `.lsp.json`, monitors,
   `bin/` (on the Bash PATH), themes, `userConfig`.

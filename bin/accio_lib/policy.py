@@ -7,7 +7,7 @@ in a build becomes a BLOCKED question at `owl`. No list lets an agent write `run
 `house-elf` first runs `accio-claim <ID>` on its own (accio's own script, nothing else in the command) for a story
 in progress (`doing` in `run/status.json`) that no other agent holds. That links its `agent_id` to the story's
 worktree; the story's next `accio-brief` (a fix round) releases the claim. Until it claims, it may only read.
-After the claim it writes only inside its worktree (never its `.git`) and its `.accio/run/<ID>/report.md`,
+After the claim it writes only inside its worktree (never its `.git`) and its `.accio/run/<ID>/build-report.md`,
 symlinks and `..` resolved, and its Bash commands follow `bashpolicy`: they start in the worktree, and run the
 checks, `agent_allow`, read-only tools, file tools in the worktree and a short list of git subcommands. The other
 agents run only the accio scripts and subcommands their step needs (SCRIPTS).
@@ -25,7 +25,7 @@ READ_TOOLS = frozenset({"Read", "Grep", "Glob", "LS"})
 WRITE_TOOLS = frozenset({"Write", "Edit", "MultiEdit", "NotebookEdit"})
 WEB_TOOLS = frozenset({"WebSearch", "WebFetch"})
 CLAIM_SCRIPT = "accio-claim"
-REPORT_NAME = "report.md"
+REPORT_NAME = "build-report.md"
 BOARD_RUN = frozenset({"ready", "status", "lock", "unlock", "move", "refresh"})
 LEDGER_USE = frozenset({"key", "check", "record"})
 SCRIPTS = {  # each Bash policy's accio scripts and the subcommands it may run (None: any)
@@ -49,13 +49,13 @@ class Lists:
 AGENTS = {
     "portkey": Lists(bash="scripts"),
     "prefect": Lists(writes=("run/questions/*.md",), bash="checks"),
-    "examiner": Lists(writes=("run/*/findings-*.md",)),
-    "professor": Lists(writes=("run/*/findings-*.md",)),
-    "auror": Lists(writes=("run/*/findings-*.md",)),
+    "examiner": Lists(writes=("run/*/*-findings.md",)),
+    "professor": Lists(writes=("run/*/*-findings.md",)),
+    "auror": Lists(writes=("run/*/*-findings.md",)),
     "headmaster": Lists(writes=("run/questions/*.md",), bash="ledger"),
     "seeker": Lists(web=True),
     "wandmaker": Lists(),
-    "quill": Lists(writes=("stories/*.md",)),
+    "quill": Lists(writes=("stories/S-*.md", "run/sort/*.md")),
     "librarian": Lists(),
 }
 

@@ -20,6 +20,12 @@ Then apply the checklists the package names, if any.
 **On the Quick track** (the workflow says so) there is no separate quality reviewer: after the DoD, also review the
 diff as `professor` does (correctness bugs with a concrete failing input, errors handled silently).
 
+**Backlog check** (the sort skill asks for it, naming the story files and a findings path): no diff and no tests
+yet. Check each story for what would make it hard to build or judge: not atomic (two features, or more than a few
+files), a DoD line that isn't one checkable behaviour in EARS form or should be `(no test)`, a missing or wrong
+dependency on another story, files outside what the story describes, and a Context without the design's outcome.
+Same rules and template; the verdict is fail when any major finding stands.
+
 **In a fix round** (the package says so and gives your earlier findings): judge only the fix diff. Mark each of your
 earlier findings `resolved` or keep it `open`, with the same id, and raise a new finding only for a problem the fix
 itself caused. Never review the whole story again.
@@ -30,7 +36,7 @@ itself caused. Never review the whole story again.
 - A finding counts only with confidence ≥ 80. Below that, leave it out.
 - Ignore what a linter, a formatter or the project's checks already catch, style preferences, and anything outside
   the story's DoD.
-- Write your findings to the path the package gives (`.accio/run/<ID>/findings-examiner.md`), in the format of
+- Write your findings to the path the package gives (`.accio/run/<ID>/examiner-findings.md`), in the format of
   the findings template the package names (`references/findings-template.md`). That is the only file you may write.
 
 Reply with JSON only: `{"verdict": "pass" | "fail", "counts": {"critical": n, "major": n, "minor": n}, "path":

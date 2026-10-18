@@ -20,7 +20,7 @@ test('S-020/1 findings that remain after 2 fix rounds block the story; a third r
     'fix-brief r1', 'fix r1', 'check r1', 'package r1', 'examiner r1',
     'fix-brief r2', 'fix r2', 'check r2', 'package r2', 'examiner r2', 'outcome'])
   assert.match(result, /S-001 Story S-001\s+BLOCKED\s+1 question for you/)
-  assert.match(prompt(calls, 'S-001 outcome'), /BLOCKED[\s\S]*after 2 fix rounds[\s\S]*findings-examiner\.md/)
+  assert.match(prompt(calls, 'S-001 outcome'), /BLOCKED[\s\S]*after 2 fix rounds[\s\S]*examiner-findings\.md/)
 })
 
 test('S-020/1 a fix round that clears the findings makes the story READY', async () => {
@@ -43,7 +43,7 @@ test('S-020/2 a fix round re-runs only the reviewers that raised findings, on th
   assert.deepEqual(steps(calls, 'S-001').filter((step) => step.endsWith(' r1')),
     ['fix-brief r1', 'fix r1', 'check r1', 'package r1', 'examiner r1', 'auror r1'])
   assert.match(prompt(calls, 'S-001 fix-brief r1'),
-    /accio-brief S-001 --fix \/run\/S-001\/findings-examiner\.md --fix \/run\/S-001\/findings-auror\.md/)
+    /accio-brief S-001 --fix \/run\/S-001\/examiner-findings\.md --fix \/run\/S-001\/auror-findings\.md/)
   assert.match(prompt(calls, 'S-001 package'), /accio-brief S-001 --review`/)
   assert.match(prompt(calls, 'S-001 package r1'), /accio-brief S-001 --review --since h0`/)
   for (const label of ['S-001 examiner r1', 'S-001 auror r1']) {
@@ -67,11 +67,11 @@ test('S-020/5 a fix diff that touches a risky path brings auror into the re-revi
 test('S-020/3 an implementer that returns NEEDS_CONTEXT goes to headmaster, and builds again with the ruling', async () => {
   let builds = 0
   const { result, calls } = await runWorkflow('brew', happy([story('S-001')], {
-    implement: async () => ({ status: (builds += 1) === 1 ? 'NEEDS_CONTEXT' : 'DONE', report: '/run/S-001/report.md' }),
+    implement: async () => ({ status: (builds += 1) === 1 ? 'NEEDS_CONTEXT' : 'DONE', report: '/run/S-001/build-report.md' }),
   }))
   assert.deepEqual(steps(calls, 'S-001').slice(0, 4), ['prepare', 'implement', 'judge', 'implement'])
   assert.equal(calls.find((call) => call.label === 'S-001 judge').opts.agentType, 'accio:headmaster')
-  assert.match(prompt(calls, 'S-001 judge'), /NEEDS_CONTEXT[\s\S]*\/run\/S-001\/report\.md/)
+  assert.match(prompt(calls, 'S-001 judge'), /NEEDS_CONTEXT[\s\S]*\/run\/S-001\/build-report\.md/)
   assert.match(calls.filter((call) => call.label === 'S-001 implement')[1].prompt, /The story is right; the finding goes\./)
   assert.match(result, /READY/)
 })
@@ -80,11 +80,11 @@ test('S-020/3 a finding that conflicts with the story goes to headmaster, and th
   let fixes = 0
   const { result, calls } = await runWorkflow('brew', happy([story('S-001')], {
     'S-001 examiner': async (call, id) => fail(id, 'examiner'),
-    fix: async () => ({ status: (fixes += 1) === 1 ? 'NEEDS_CONTEXT' : 'DONE', report: '/run/S-001/report.md' }),
+    fix: async () => ({ status: (fixes += 1) === 1 ? 'NEEDS_CONTEXT' : 'DONE', report: '/run/S-001/build-report.md' }),
   }))
   assert.deepEqual(steps(calls, 'S-001').slice(6, 12),
     ['fix-brief r1', 'fix r1', 'judge r1', 'fix r1', 'check r1', 'package r1'])
-  assert.match(prompt(calls, 'S-001 judge r1'), /findings-examiner\.md/)
+  assert.match(prompt(calls, 'S-001 judge r1'), /examiner-findings\.md/)
   assert.match(calls.find((call) => call.label === 'S-001 fix r1').prompt, /conflicts with the story[\s\S]*NEEDS_CONTEXT/)
   for (const call of calls.filter((each) => each.label === 'S-001 fix r1').slice(1).concat(
     calls.filter((each) => each.label === 'S-001 examiner r1'))) {
@@ -95,7 +95,7 @@ test('S-020/3 a finding that conflicts with the story goes to headmaster, and th
 
 test('S-020/3 a second NEEDS_CONTEXT after a ruling blocks the story instead of judging again', async () => {
   const { result, calls } = await runWorkflow('brew', happy([story('S-001')], {
-    implement: async () => ({ status: 'NEEDS_CONTEXT', report: '/run/S-001/report.md' }),
+    implement: async () => ({ status: 'NEEDS_CONTEXT', report: '/run/S-001/build-report.md' }),
   }))
   assert.deepEqual(steps(calls, 'S-001'), ['prepare', 'implement', 'judge', 'implement', 'outcome'])
   assert.match(prompt(calls, 'S-001 outcome'), /BLOCKED[\s\S]*still needs context/)
@@ -105,7 +105,7 @@ test('S-020/3 a second NEEDS_CONTEXT after a ruling blocks the story instead of 
 test('S-020/3 a ruling holds for the rest of the story: the reviewers and every later fixer get it', async () => {
   let builds = 0
   const { calls } = await runWorkflow('brew', happy([story('S-001')], {
-    implement: async () => ({ status: (builds += 1) === 1 ? 'NEEDS_CONTEXT' : 'DONE', report: '/run/S-001/report.md' }),
+    implement: async () => ({ status: (builds += 1) === 1 ? 'NEEDS_CONTEXT' : 'DONE', report: '/run/S-001/build-report.md' }),
     examiner: async (call, id) => fail(id, 'examiner'),
   }))
   assert.deepEqual(labels(calls).filter((each) => each.includes('judge')), ['S-001 judge'])
@@ -116,7 +116,7 @@ test('S-020/3 a ruling holds for the rest of the story: the reviewers and every 
 
 test('S-020/4 a question with no question file is written by prefect instead', async () => {
   const { calls } = await runWorkflow('brew', happy([story('S-001')], {
-    implement: async () => ({ status: 'NEEDS_CONTEXT', report: '/run/S-001/report.md' }),
+    implement: async () => ({ status: 'NEEDS_CONTEXT', report: '/run/S-001/build-report.md' }),
     judge: async () => ({ kind: 'question', text: 'Email or SMS for the reset?', path: null }),
   }))
   assert.match(prompt(calls, 'S-001 outcome'), /write this question: Email or SMS for the reset\?/)
@@ -124,7 +124,7 @@ test('S-020/4 a question with no question file is written by prefect instead', a
 
 test('S-020/4 a question from headmaster blocks the story with its question file, written once', async () => {
   const { result, calls } = await runWorkflow('brew', happy([story('S-001')], {
-    implement: async () => ({ status: 'NEEDS_CONTEXT', report: '/run/S-001/report.md' }),
+    implement: async () => ({ status: 'NEEDS_CONTEXT', report: '/run/S-001/build-report.md' }),
     judge: async () => ({ kind: 'question', text: 'Email or SMS for the reset?', path: '.accio/run/questions/S-001.md' }),
   }))
   assert.deepEqual(steps(calls, 'S-001'), ['prepare', 'implement', 'judge', 'outcome'])
@@ -183,7 +183,7 @@ test('S-020/6 each fix round uses a fresh house-elf, one tier up in round 2', as
 test('S-020 every agent of a story is labelled with its id first, for accio-cost', async () => {
   const { calls } = await runWorkflow('brew', happy([story('S-001')], {
     examiner: async (call, id) => fail(id, 'examiner'),
-    fix: async () => ({ status: 'NEEDS_CONTEXT', report: '/run/S-001/report.md' }),
+    fix: async () => ({ status: 'NEEDS_CONTEXT', report: '/run/S-001/build-report.md' }),
   }))
   for (const call of calls.filter((each) => !['load', 'unlock'].includes(each.label))) {
     assert.match(call.label, /^S-001 /)

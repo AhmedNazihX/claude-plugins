@@ -13,7 +13,7 @@ story() {  # id title deps
 }
 report() {  # id changed try risks
   mkdir -p ".accio/run/$1"
-  printf '## What changed\n%s\n## How to try it\n%s\n## Risks\n%s\n' "$2" "$3" "$4" > ".accio/run/$1/report.md"
+  printf '## What changed\n%s\n## How to try it\n%s\n## Risks\n%s\n' "$2" "$3" "$4" > ".accio/run/$1/build-report.md"
 }
 story S-001 "Password reset email" ""
 story S-002 "Reset token expiry" "S-001"

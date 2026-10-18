@@ -1,7 +1,7 @@
 """run/owl.md, the one file `owl` reads (DESIGN § 3.5, § 7.2): at most 150 tokens per story.
 
 For each story the build finished (status `review`): what changed, how to try it, its risks and its token cost,
-taken from the sections of `run/<ID>/report.md` that the brief and the fix brief ask house-elf to write. A stacked
+taken from the sections of `run/<ID>/build-report.md` that the brief and the fix brief ask house-elf to write. A stacked
 child names the parents to accept with it, and the ones that keep it from being accepted yet. For each blocked
 story: its one question from `run/questions/<ID>.md`.
 """
@@ -138,7 +138,7 @@ def render(stories, status, run_dir, costs):
     for story_id in sorted(stories):
         parsed, entry = stories[story_id], costs.get(story_id)
         if status[story_id] == "review":
-            blocks.append(ready_block(parsed, status, _read(run_dir / story_id / "report.md"), entry))
+            blocks.append(ready_block(parsed, status, _read(run_dir / story_id / "build-report.md"), entry))
         elif status[story_id] == "blocked":
             blocks.append(blocked_block(parsed, _read(run_dir / "questions" / f"{story_id}.md"), entry))
     body = "\n\n".join(blocks) or "Nothing is ready or blocked."

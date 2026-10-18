@@ -83,7 +83,7 @@ def package(accio, parsed, worktree, settings, since=None):
     text = _render(parsed, accio, worktree, {
         "head": head, "origin": origin, "diff": diff, "is_fix": bool(since),
         "shortstat": _git(worktree, "diff", "--shortstat", origin, head).strip() or "no changes",
-        "risky_files": risky_files, "checklists": picked, "findings": run_dir / "findings-<reviewer>.md"})
+        "risky_files": risky_files, "checklists": picked, "findings": run_dir / "<reviewer>-findings.md"})
     target = brief.write_file(run_dir / PACKAGE_NAME, text)
     return {"package": str(target), "diff": str(diff), "head": head, "risky": bool(risky_files) or SECURITY in picked}
 

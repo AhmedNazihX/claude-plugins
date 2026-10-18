@@ -160,7 +160,7 @@ def common(parsed, worktree, accio):
     return {"story_id": story_id, "title": parsed.meta["title"], "worktree": worktree,
             "worktree_q": shlex.quote(str(worktree)), "branch": branch_name(story_id),
             "claim_command": f"{shlex.quote(str(BIN / 'accio-claim'))} {story_id}",
-            "report": accio / "run" / story_id / "report.md", "report_sections": summary.report_sections()}
+            "report": accio / "run" / story_id / "build-report.md", "report_sections": summary.report_sections()}
 
 
 def dod_lines(parsed):

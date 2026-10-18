@@ -23,7 +23,7 @@ itself caused. Never review the whole story again.
   gets the attacker or breaks.
 - Ignore what a dependency scanner, a secret scanner or the project's checks already catch, theoretical issues
   with no path from an input, and code the story didn't change.
-- Write your findings to the path the package gives (`.accio/run/<ID>/findings-auror.md`), in the format of
+- Write your findings to the path the package gives (`.accio/run/<ID>/auror-findings.md`), in the format of
   the findings template the package names (`references/findings-template.md`). That is the only file you may write.
 
 Reply with JSON only: `{"verdict": "pass" | "fail", "counts": {"critical": n, "major": n, "minor": n}, "path":

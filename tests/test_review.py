@@ -72,7 +72,7 @@ class ReviewPackageTest(unittest.TestCase):
         self.assertIn("+value = 2", diff.read_text(encoding="utf-8"))
         self.assertIn(str(diff), text)
         self.assertIn("S-001/1 WHEN a user asks for a reset", text)
-        self.assertIn(str(self.accio / "run" / "S-001" / "findings-<reviewer>.md"), text)
+        self.assertIn(str(self.accio / "run" / "S-001" / "<reviewer>-findings.md"), text)
         self.assertIn(str(ROOT / "references" / "findings-template.md"), text)
         self.assertIn("Checklists: none", text)
         self.assertNotIn("fix round", text.lower())
@@ -180,7 +180,7 @@ class ReviewPackageTest(unittest.TestCase):
     def test_S_020_3_the_fix_brief_says_a_conflicting_finding_goes_back_as_NEEDS_CONTEXT(self):
         self.story()
         self.brief()
-        findings = self.base / "findings-examiner.md"
+        findings = self.base / "examiner-findings.md"
         write(findings, "- id: examiner-1\n  claim: wants SMS too\n")
         text = pathlib.Path(self.brief("--fix", str(findings))["brief"]).read_text(encoding="utf-8")
         self.assertIn("conflicts with the story", text)

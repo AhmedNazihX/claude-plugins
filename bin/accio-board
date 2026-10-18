@@ -12,6 +12,7 @@
   go <ID>... [--track <ID>=<track>] [--also <story file>]   make them exactly the next iteration: status
                         ready in the story files, iterations/<N>.md and board.md, committed with any --also
                         story files (prophecy, on "go")
+  record <story file>...  after sort: check every story, regenerate board.md and commit those stories with it
   lock / unlock         take or release the build's run lock
   refresh               mark the running build as alive (every brew step calls it)
 """
@@ -22,7 +23,7 @@ import sys
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 
-from accio_lib import board, config, paths, plan, runlock, story  # noqa: E402
+from accio_lib import backlog, board, config, paths, plan, runlock, story  # noqa: E402
 
 
 def _accio():
@@ -76,6 +77,10 @@ def cmd_go(args, accio):
     print(json.dumps(plan.go(accio, config.load(accio), args.ids, tracks, args.also), indent=2))
 
 
+def cmd_record(args, accio):
+    print(json.dumps(backlog.record(accio, args.files), indent=2))
+
+
 def cmd_board(_args, accio):
     stories, status = _loaded(accio)
     path = accio / board.BOARD_NAME
@@ -124,6 +129,9 @@ def parser():
     go.add_argument("--track", action="append", default=[])
     go.add_argument("--also", action="append", default=[], help="a story file the skill edited, to commit too")
     go.set_defaults(run=cmd_go)
+    record = commands.add_parser("record")
+    record.add_argument("files", nargs="+")
+    record.set_defaults(run=cmd_record)
     for name, run in (("board", cmd_board), ("status", cmd_status), ("lock", cmd_lock), ("unlock", cmd_unlock),
                       ("refresh", cmd_refresh)):
         commands.add_parser(name).set_defaults(run=run)
@@ -134,7 +142,8 @@ def main(argv=None):
     args = parser().parse_args(argv)
     try:
         args.run(args, _accio())
-    except (board.BoardError, config.ConfigError, runlock.LockError, plan.PlanError, story.StoryError) as error:
+    except (board.BoardError, config.ConfigError, runlock.LockError, plan.PlanError, story.StoryError,
+            backlog.BacklogError) as error:
         print(f"accio-board: {error}", file=sys.stderr)
         return 1
     return 0

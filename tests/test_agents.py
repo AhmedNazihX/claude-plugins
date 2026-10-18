@@ -2,6 +2,7 @@
 decision 011); and, for every accio agent, that its tools match what curfew lets it do (S-015)."""
 import importlib.util
 import pathlib
+import re
 import unittest
 
 from support import ROOT
@@ -42,7 +43,7 @@ class ReviewAgentsTest(unittest.TestCase):
         for name in REVIEWERS:
             with self.subTest(name):
                 _, body = front_and_body(name)
-                for words in ("confidence ≥ 80", f"findings-{name}.md", "In a fix round", "only the fix diff",
+                for words in ("confidence ≥ 80", f"{name}-findings.md", "In a fix round", "only the fix diff",
                               "same id"):
                     self.assertIn(words, body)
 
@@ -79,6 +80,25 @@ class BrewRolesTest(unittest.TestCase):
         for name in ("house-elf", *REVIEWERS, "headmaster"):
             with self.subTest(name):
                 self.assertGreater(int(front_and_body(name)[0].get("maxTurns", "0")), 0)
+
+
+class SubagentFileNamesTest(unittest.TestCase):
+    """Claude Code (2.1.302) refuses a subagent's Write to a file named `^(REPORT|SUMMARY|FINDINGS|ANALYSIS).*\.md$`,
+    in any case ("Subagents should return findings as text"), so no file an accio agent writes may be named so."""
+
+    BLOCKED = re.compile(r"^(report|summary|findings|analysis).*\.md$", re.IGNORECASE)
+    READ_ONLY = {"findings-template.md"}  # agents read it; only writes are refused
+
+    def test_S_023_no_file_an_agent_writes_has_a_name_claude_code_refuses(self):
+        sources = [*AGENTS.glob("*.md"), *(ROOT / "skills").rglob("*.md"), *(ROOT / "bin" / "accio_lib").glob("*.py"),
+                   *(ROOT / "bin" / "accio_lib" / "templates").glob("*"), ROOT / "workflows" / "brew.js"]
+        found = []
+        for source in sources:
+            for name in re.findall(r"[\w.<>*${}/-]+\.md\b", source.read_text(encoding="utf-8")):
+                base = name.rsplit("/", 1)[-1]
+                if self.BLOCKED.match(base) and base not in self.READ_ONLY:
+                    found.append(f"{source.relative_to(ROOT)}: {name}")
+        self.assertEqual(found, [])
 
 
 class AgentsMatchCurfewTest(unittest.TestCase):

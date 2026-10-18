@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
-"""accio-score <story-file> [--json]: the story's complexity score, track and split flag (DESIGN § 3.2)."""
+"""accio-score <story-file> [--json]: the story's complexity score, track and split flag (DESIGN § 3.2).
+
+accio-score --apply [--json] <story-file> ...: score each story and write its track into its file (sort); every
+file is read and scored before any is written, so one bad file changes nothing. Prints one result per story.
+"""
 import argparse
 import json
 import pathlib
@@ -7,25 +11,48 @@ import sys
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 
-from accio_lib import config, globs, paths, score, story  # noqa: E402
+from accio_lib import config, globs, paths, score, story, storyfiles  # noqa: E402
+
+
+def _assess(path):
+    parsed = story.parse(path)
+    accio = paths.accio_dir(path.resolve().parent)
+    risky_paths = (config.load(accio) if accio else config.DEFAULTS)["risky_paths"]
+    try:
+        return parsed, score.assess(parsed.meta.get("files", ()), parsed.meta.get("risk"), risky_paths)
+    except globs.GlobError as error:
+        raise story.StoryError(f"{path}: {error}") from error
+
+
+def _apply(files):
+    results = []
+    texts = {}
+    for path in files:
+        parsed, result = _assess(path)
+        texts[path] = storyfiles.with_fields(path, {"track": result["track"]})
+        results.append({"id": parsed.meta["id"], "path": str(path), **result})
+    storyfiles.write_all(texts, "the tracks")
+    return results
 
 
 def main(argv=None):
-    parser = argparse.ArgumentParser(prog="accio-score", description=__doc__)
-    parser.add_argument("story", type=pathlib.Path)
+    parser = argparse.ArgumentParser(prog="accio-score", description=__doc__,
+                                     formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("story", type=pathlib.Path, nargs="+")
     parser.add_argument("--json", action="store_true")
+    parser.add_argument("--apply", action="store_true")
     args = parser.parse_args(argv)
+    if len(args.story) > 1 and not args.apply:
+        parser.error("several story files go with --apply")
     try:
-        parsed = story.parse(args.story)
-        accio = paths.accio_dir(args.story.resolve().parent)
-        risky_paths = (config.load(accio) if accio else config.DEFAULTS)["risky_paths"]
-    except (story.StoryError, config.ConfigError) as error:
+        if args.apply:
+            results = _apply(args.story)
+            print(json.dumps(results, indent=2) if args.json else "\n\n".join(
+                f"{item['id']}\n{score.describe(item)}" for item in results))
+            return 0
+        _, result = _assess(args.story[0])
+    except (story.StoryError, config.ConfigError, storyfiles.WriteError) as error:
         print(f"accio-score: {error}", file=sys.stderr)
-        return 1
-    try:
-        result = score.assess(parsed.meta.get("files", ()), parsed.meta.get("risk"), risky_paths)
-    except globs.GlobError as error:
-        print(f"accio-score: {args.story}: {error}", file=sys.stderr)
         return 1
     print(json.dumps(result, indent=2) if args.json else score.describe(result))
     return 0

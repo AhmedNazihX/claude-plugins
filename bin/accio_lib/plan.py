@@ -157,14 +157,14 @@ def _iteration_text(number, items, tracks):
             f"\n\n## Outcome\n\n{OUTCOME_PLACEHOLDER}\n")
 
 
-def _story_files(accio, also):
-    """The `--also` paths, each an existing story file under .accio/stories/."""
+def story_files(accio, also, what="--also"):
+    """The given paths, each an existing story file under .accio/stories/ (`--also`, `record`)."""
     folder = board.stories_dir(accio).resolve()
     checked = []
     for given in also:
         path = pathlib.Path(given).resolve()
         if path.parent != folder or not board.STORY_FILE.match(path.name) or not path.is_file():
-            raise PlanError(f"--also takes story files in {folder}, got {given}")
+            raise PlanError(f"{what} takes story files in {folder}, not {given}")
         checked.append(path)
     return checked
 
@@ -178,7 +178,7 @@ def go(accio, settings, chosen, tracks, also=()):
     if unreviewed:
         raise PlanError(f"the last build isn't reviewed yet ({', '.join(unreviewed)}); run /accio:owl first, which "
                         "closes that iteration")
-    edited = _story_files(accio, also)
+    edited = story_files(accio, also)
     stories = board.load_stories(accio)
     status = board.statuses(stories, board.read_overrides(accio))
     items = _checked(stories, status, settings, list(dict.fromkeys(chosen)), tracks)

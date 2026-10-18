@@ -136,7 +136,7 @@ class SnapshotTest(CheckTestBase):
         commit_all(self.repo, "run folder not ignored")
         self.check("S-001", "snapshot")
         self.change({"src/a.py": "value = 2\n", "tests/test_a.py": "# S-001/1 S-001/3\n"})
-        write(self.accio / "run" / "S-001" / "report.md", "done\n")
+        write(self.accio / "run" / "S-001" / "build-report.md", "done\n")
         self.assertEqual(self.check("S-001")["main_changed"], [])
 
     def test_S_017_4_ignored_files_staged_changes_and_modes_count(self):

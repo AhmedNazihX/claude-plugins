@@ -161,13 +161,13 @@ class HouseElfWritesTest(CurfewTestBase):
         return self.hook(tool, {key: str(path), "content": "x", "old_string": "a", "new_string": "b"})
 
     def test_S_015_4_writes_inside_the_worktree_or_its_run_folder_are_allowed(self):
-        for path in (self.worktree / "src" / "a.py", self.run_dir / "S-001" / "report.md"):
+        for path in (self.worktree / "src" / "a.py", self.run_dir / "S-001" / "build-report.md"):
             for tool in ("Write", "Edit", "MultiEdit", "NotebookEdit"):
                 with self.subTest(path=path, tool=tool):
                     self.assertEqual(self.write_to(path, tool)["permissionDecision"], "allow")
 
     def test_S_015_4_in_its_run_folder_house_elf_writes_only_its_report(self):
-        for name in ("findings-examiner.md", "base", "brief.md"):
+        for name in ("examiner-findings.md", "base", "brief.md"):
             with self.subTest(name):
                 self.assertEqual(self.write_to(self.run_dir / "S-001" / name)["permissionDecision"], "deny")
 
@@ -175,7 +175,7 @@ class HouseElfWritesTest(CurfewTestBase):
         outside = self.worktree.parent / "outside.txt"
         (self.worktree / "link").symlink_to(self.repo)
         for path in (self.repo / "app.py", self.worktree / ".." / "outside.txt", self.worktree / "link" / "x.py",
-                     self.run_dir / "push-ok", self.run_dir / "brew.lock", self.run_dir / "S-002" / "report.md",
+                     self.run_dir / "push-ok", self.run_dir / "brew.lock", self.run_dir / "S-002" / "build-report.md",
                      outside):
             with self.subTest(path):
                 answer = self.write_to(path)
@@ -288,8 +288,17 @@ class FlagsAndFormsTest(CurfewTestBase):
 
 
 class OtherAgentsTest(CurfewTestBase):
+    def test_S_023_1_quill_writes_story_files_and_its_summary_only(self):
+        accio = self.repo / ".accio"
+        for target in (accio / "stories" / "S-012.md", self.run_dir / "sort" / "quill-summary.md"):
+            self.assert_allowed("Write", {"file_path": str(target), "content": "x"}, agent="accio:quill")
+        for target in (accio / "config.json", accio / "stories" / "notes.md", accio / "design.md",
+                       self.worktree / "a.py"):
+            self.assert_denied("Write", {"file_path": str(target), "content": "x"}, "quill", agent="accio:quill")
+        self.assert_denied("Bash", self.bash("ls"), "Bash", agent="accio:quill")
+
     def test_S_015_7_reviewers_read_and_write_only_their_findings(self):
-        findings = self.run_dir / "S-001" / "findings-examiner.md"
+        findings = self.run_dir / "S-001" / "examiner-findings.md"
         for agent in ("accio:examiner", "accio:professor", "accio:auror"):
             with self.subTest(agent):
                 self.assert_allowed("Read", {"file_path": str(self.worktree / "a.py")}, agent=agent)

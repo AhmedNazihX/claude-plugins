@@ -125,12 +125,12 @@ test('S-019/9 every step keeps the run lock fresh', async () => {
 test('S-019/2 an implementer that returns BLOCKED or NEEDS_CONTEXT stops its story before the checks', async () => {
   const stories = [story('S-001'), story('S-002')]
   const { result, calls } = await runWorkflow('brew', happy(stories, {
-    'S-001 implement': async () => ({ status: 'BLOCKED', report: '/run/S-001/report.md' }),
-    'S-002 implement': async () => ({ status: 'NEEDS_CONTEXT', report: '/run/S-002/report.md' }),
+    'S-001 implement': async () => ({ status: 'BLOCKED', report: '/run/S-001/build-report.md' }),
+    'S-002 implement': async () => ({ status: 'NEEDS_CONTEXT', report: '/run/S-002/build-report.md' }),
   }))
   assert.deepEqual(steps(calls, 'S-001'), ['prepare', 'implement', 'outcome'])
   assert.deepEqual(steps(calls, 'S-002'), ['prepare', 'implement', 'judge', 'implement', 'outcome'])  // S-020/3
-  assert.match(calls.find((call) => call.label === 'S-001 outcome').prompt, /report says why: \/run\/S-001\/report.md/)
+  assert.match(calls.find((call) => call.label === 'S-001 outcome').prompt, /report says why: \/run\/S-001\/build-report.md/)
   assert.equal((result.match(/BLOCKED/g) || []).length, 2)
 })
 

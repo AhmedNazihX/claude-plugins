@@ -28,7 +28,7 @@ itself caused. Never review the whole story again.
 - A finding counts only with confidence ≥ 80, and needs a concrete failure scenario. Below that, leave it out.
 - Ignore what a linter, a formatter, a type checker or the project's checks already catch, naming and style
   preferences, and code the story didn't change.
-- Write your findings to the path the package gives (`.accio/run/<ID>/findings-professor.md`), in the format of
+- Write your findings to the path the package gives (`.accio/run/<ID>/professor-findings.md`), in the format of
   the findings template the package names (`references/findings-template.md`). That is the only file you may write.
 
 Reply with JSON only: `{"verdict": "pass" | "fail", "counts": {"critical": n, "major": n, "minor": n}, "path":
