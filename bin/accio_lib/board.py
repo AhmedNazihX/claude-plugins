@@ -6,11 +6,12 @@ A parent that is ready, doing or in review in this run counts as in the batch, s
 parent named; `brew` holds the child until the parent is READY (§ 3.4).
 """
 import json
+import subprocess
 import os
 import re
 import tempfile
 
-from accio_lib import runlock, story
+from accio_lib import paths, runlock, story
 
 COLUMNS = (("backlog", "Backlog"), ("ready", "Ready"), ("doing", "Doing"),
            ("review", "Review"), ("done", "Done"), ("blocked", "Blocked"))
@@ -112,6 +113,34 @@ def ready_batch(stories, status, stack_depth):
     batch = [sid for sid in stories if status[sid] == "ready" and level(sid) is not None]
     batch.sort(key=lambda sid: (levels[sid], sid))
     return tuple(_item(stories[sid], status, levels[sid]) for sid in batch)
+
+
+def _git_ok(cwd, *args):
+    try:
+        result = subprocess.run(["git", *args], cwd=cwd, capture_output=True, text=True, check=False)
+    except OSError:
+        return None
+    return result.stdout.strip() if result.returncode == 0 else None
+
+
+def resume_point(main, accio, story_id, base_branch):
+    """Where a story a crash left in *Doing* resumes (DESIGN § 12.6): `check` when its branch has commits after its
+    base (the base accio-brief recorded, so a stacked child doesn't count its parent's commits; else the merge-base
+    with the base branch), else `prepare`."""
+    from accio_lib import checks  # checks imports merge, which imports this module
+    branch = f"refs/heads/story/{story_id}"
+    worktree = paths.worktree_root(main) / story_id
+    recorded = checks.trusted_base(run_dir(accio) / story_id, worktree) if worktree.is_dir() else None
+    base = recorded or _git_ok(main, "merge-base", base_branch, branch)
+    count = _git_ok(main, "rev-list", "--count", f"{base}..{branch}") if base else None
+    return "check" if count and int(count) > 0 else "prepare"
+
+
+def resumed(stories, status, main, accio, base_branch):
+    """The stories a crash left in *Doing*, each with where it resumes and its worktree, ahead of the ready ones."""
+    return tuple({**_item(stories[sid], status, 1), "resume": resume_point(main, accio, sid, base_branch),
+                  "worktree": str(paths.worktree_root(main) / sid)}
+                 for sid in sorted(stories) if status[sid] == "doing")
 
 
 def _item(parsed, status, level):

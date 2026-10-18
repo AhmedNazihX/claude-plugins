@@ -9,9 +9,9 @@ import tempfile
 import time
 import unittest
 
-from support import ROOT, init_repo, write
+from support import ROOT, commit_all, git, init_repo, write
 
-from accio_lib import runlock
+from accio_lib import paths, runlock
 
 BOARD = ROOT / "bin" / "accio-board"
 
@@ -197,6 +197,38 @@ class BoardTest(unittest.TestCase):
         self.add("S-001", status="dropped", extra="dropped: not needed\n")
         self.add("S-002", deps=("S-001",))
         self.assertEqual(self.ready(), [])
+
+    def test_S_019_6_a_story_a_crash_left_in_doing_is_listed_with_where_to_resume(self):
+        self.add("S-001", status="doing")
+        self.add("S-002", status="doing")
+        self.add("S-003", status="ready")
+        commit_all(self.repo, "stories")
+        git(self.repo, "branch", "story/S-002")
+        git(self.repo, "checkout", "-q", "story/S-002")
+        write(self.repo / "work.py", "x = 1\n")
+        commit_all(self.repo, "S-002 work")
+        git(self.repo, "checkout", "-q", "main")
+        listed = json.loads(self.board("ready", "--json", "--resume").stdout)
+        self.assertEqual({item["id"]: item["resume"] for item in listed},
+                         {"S-001": "prepare", "S-002": "check", "S-003": None})
+        self.assertEqual([item["id"] for item in listed][:2], ["S-001", "S-002"])
+        self.assertEqual([item["id"] for item in self.ready()], ["S-003"])
+
+    def test_S_019_6_a_stacked_child_resumes_from_its_own_base_not_its_parents(self):
+        self.add("S-001", status="doing")
+        self.add("S-002", status="doing", deps=("S-001",))
+        commit_all(self.repo, "stories")
+        git(self.repo, "branch", "story/S-001")
+        git(self.repo, "checkout", "-q", "story/S-001")
+        write(self.repo / "parent.py", "x = 1\n")
+        commit_all(self.repo, "S-001 work")
+        git(self.repo, "checkout", "-q", "main")
+        worktree = paths.worktree_root(self.repo) / "S-002"
+        git(self.repo, "worktree", "add", "-q", str(worktree), "-b", "story/S-002", "story/S-001")
+        write(self.accio / "run" / "S-002" / "base", git(self.repo, "rev-parse", "story/S-001") + "\n")
+        listed = {item["id"]: item for item in json.loads(self.board("ready", "--json", "--resume").stdout)}
+        self.assertEqual((listed["S-001"]["resume"], listed["S-002"]["resume"]), ("check", "prepare"))
+        self.assertEqual(listed["S-002"]["worktree"], str(worktree))
 
     def test_a_dependency_cycle_is_reported(self):
         self.add("S-001", deps=("S-002",))

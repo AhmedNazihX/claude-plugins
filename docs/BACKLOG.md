@@ -35,7 +35,7 @@ evals/                       scripts/publish.py
 | done | S-028 `doc-size` and `librarian` |
 | todo | S-017 Build agents: `portkey`, `house-elf`, `prefect` |
 | done | S-018 Review agents and findings template |
-| todo | S-019 `brew.js`: load, prepare, implement, check, outcome |
+| done | S-019 `brew.js`: load, prepare, implement, check, outcome |
 | todo | S-020 `brew.js`: review, judge, fix rounds, budgets |
 | todo | S-021 `prophecy` skill |
 | todo | S-022 `owl` skill |
@@ -370,19 +370,26 @@ examiner's alone. Risk words match whole. The template and checklists live in `r
 `agents/`. A test checks every agent's tools against curfew's lists.
 
 ### S-019 · `brew.js`: load, prepare, implement, check, outcome
-Deps: S-001, S-017 · Files: `workflows/brew.js`, `tests/workflow/brew-core.test.mjs`, `tests/workflow/stub.mjs`
+Deps: S-001, S-017 · Files: `workflows/brew.js`, `tests/workflow/brew-core.test.mjs`, `tests/workflow/stub.mjs`, `bin/accio-board` (`ready --resume`), `bin/accio_lib/board.py`, `bin/accio_lib/policy.py` (refresh), `agents/{portkey,house-elf,prefect}.md`
 Context: DESIGN § 3.4, § 12.6; `docs/research/build-engine.md` "Option C in detail".
-- [ ] S-019/1 WHEN more than 3 stories are ready THE SYSTEM SHALL keep at most 3 in progress
-- [ ] S-019/2 WHEN an agent is silent past `stallMs` THE SYSTEM SHALL mark the story BLOCKED with a plain question
+- [x] S-019/1 WHEN more than 3 stories are ready THE SYSTEM SHALL keep at most 3 in progress
+- [x] S-019/2 WHEN an agent is silent past `stallMs` THE SYSTEM SHALL mark the story BLOCKED with a plain question
 Note (2026-10-18): `stallMs` does not end an agent waiting on a permission prompt (spike S-001), and another
 plugin's `ask` hook can cause one (see S-015's note); the build needs its own way to notice and end that wait.
-- [ ] S-019/3 WHEN a child's parent is not yet READY THE SYSTEM SHALL hold the child and give its slot to another story
-- [ ] S-019/4 WHEN the parent ends BLOCKED THE SYSTEM SHALL not start the child
-- [ ] S-019/5 WHEN the ledger reports a skip THE SYSTEM SHALL not re-run that step
-- [ ] S-019/6 WHEN a story was left in *Doing* by a crash THE SYSTEM SHALL resume it at check or prepare as in § 12.6
-- [ ] S-019/7 WHEN the run ends THE SYSTEM SHALL return the § 7.2 table only
-- [ ] S-019/8 WHEN a run starts THE SYSTEM SHALL have `portkey` take the lock (`accio-board lock`), and WHEN it ends, also when the script throws, release it from a `finally` block
-- [ ] S-019/9 WHEN any step of a story finishes THE SYSTEM SHALL refresh the run lock (`accio-board refresh` or a `move`), so a long story never lets it go stale and switch off the push guard mid-run
+- [x] S-019/3 WHEN a child's parent is not yet READY THE SYSTEM SHALL hold the child and give its slot to another story
+- [x] S-019/4 WHEN the parent ends BLOCKED THE SYSTEM SHALL not start the child
+- [x] S-019/5 WHEN the ledger reports a skip THE SYSTEM SHALL not re-run that step
+- [x] S-019/6 WHEN a story was left in *Doing* by a crash THE SYSTEM SHALL resume it at check or prepare as in § 12.6
+- [x] S-019/7 WHEN the run ends THE SYSTEM SHALL return the § 7.2 table only
+- [x] S-019/8 WHEN a run starts THE SYSTEM SHALL have `portkey` take the lock (`accio-board lock`), and WHEN it ends, also when the script throws, release it from a `finally` block
+- [x] S-019/9 WHEN any step of a story finishes THE SYSTEM SHALL refresh the run lock (`accio-board refresh` or a `move`), so a long story never lets it go stale and switch off the push guard mid-run
+Done: one review round. `brew.js` runs its body like the Workflow runtime; `tests/workflow/stub.mjs` drives it with a
+fake `agent()` that checks replies against each schema. prefect gets the story's worktree for the check and the
+outcome (crash-resumed stories get it from `accio-board ready --resume`, which resumes a stacked child from its own
+recorded base). A child with two parents in the same run waits for the next run; a load error after the lock still
+releases it, and a silent load leaves the lock to go stale rather than release someone else's. The table has no
+time or token column: workflows have no clock and `agent()` reports no usage (`owl` shows costs from `accio-cost`).
+Open: a DoD line that takes house-elf over 30 min with no checkpoint lets the lock go stale mid-story.
 
 ### S-020 · `brew.js`: review, judge, fix rounds, budgets
 Deps: S-018, S-019 · Files: `workflows/brew.js`, `tests/workflow/brew-review.test.mjs`

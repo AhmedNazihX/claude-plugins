@@ -10,9 +10,10 @@ too. You never edit files yourself and never run git directly.
 **Step 0, load (once per build).**
 1. `accio-board lock` takes the run lock. If it fails, stop and return its message.
 2. `accio-hooks verify` checks the git hooks. Pass on any problem it prints.
-3. `accio-board ready --json` lists the stories to build, in dependency order. A story the board shows in `doing`
-   with no live build was cut short by a crash; it is resumed (DESIGN § 12.6). For one resumed at the check step,
-   run `accio-check <ID> snapshot --fresh` now, so the user's own changes since then don't count against it.
+3. `accio-board ready --json --resume` lists the stories to build: first those a crash left in `doing` (each with
+   `resume`: `check` or `prepare`, DESIGN § 12.6), then the ready ones in dependency order. For each story resumed at
+   `check`, run `accio-check <ID> snapshot --fresh` now, so the user's own changes since then don't count against
+   it.
 
 **Step 1, prepare (once per story).**
 1. `accio-board move <ID> doing`.

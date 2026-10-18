@@ -3,7 +3,8 @@
 
   new                   print the next free story id
   move <ID> <status>    record a status in run/status.json and refresh the run lock
-  ready [--json]        the ready stories in dependency order, with stacked children
+  ready [--json] [--resume]  the ready stories in dependency order, with stacked children; --resume (at a
+                        build's load) puts first the stories a crash left in doing, with where they resume
   board                 regenerate .accio/board.md
   status                one-line summary of the columns
   lock / unlock         take or release the build's run lock
@@ -41,9 +42,12 @@ def cmd_move(args, accio):
 
 def cmd_ready(args, accio):
     stories, status = _loaded(accio)
-    batch = board.ready_batch(stories, status, config.load(accio)["stack_depth"])
+    settings = config.load(accio)
+    batch = [{**item, "resume": None} for item in board.ready_batch(stories, status, settings["stack_depth"])]
+    if args.resume:
+        batch = [*board.resumed(stories, status, paths.main_root(), accio, settings["base_branch"]), *batch]
     if args.json:
-        print(json.dumps(list(batch), indent=2))
+        print(json.dumps(batch, indent=2))
     else:
         for item in batch:
             print(f"{item['id']}  level {item['level']}  {item['title']}")
@@ -87,6 +91,7 @@ def parser():
     move.set_defaults(run=cmd_move)
     ready = commands.add_parser("ready")
     ready.add_argument("--json", action="store_true")
+    ready.add_argument("--resume", action="store_true", help="also list stories a crash left in doing (at load)")
     ready.set_defaults(run=cmd_ready)
     for name, run in (("board", cmd_board), ("status", cmd_status), ("lock", cmd_lock), ("unlock", cmd_unlock),
                       ("refresh", cmd_refresh)):

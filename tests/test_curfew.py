@@ -250,7 +250,7 @@ class FlagsAndFormsTest(CurfewTestBase):
         for command in ("uniq in.txt", "sort -r a.txt", "cp -r src lib", "mv -f a.py b.py", "rm -rf build",
                         "git branch --show-current", "git rebase --continue", "python3 -m unittest -v tests.test_x",
                         "make build", "git commit -q -m 'x'", "git diff --stat", "cp -- -odd.txt b.txt",
-                        "rm -rf *", "rm -f src/*.pyc", "git commit -am 'x'", "git commit -mnew"):
+                        "rm -rf *", "rm -f src/*.pyc", "git commit -am 'x'", "git commit -mnew", "accio-board refresh"):
             with self.subTest(command):
                 self.assert_allowed("Bash", self.in_worktree(command))
 
@@ -300,6 +300,7 @@ class OtherAgentsTest(CurfewTestBase):
                  ("portkey", "accio-brief S-001", True), ("portkey", "accio-hooks uninstall", False),
                  ("portkey", "accio-ledger clear S-001", False), ("prefect", "accio-ledger record S-001", True),
                  ("prefect", "accio-board move S-001 review", True), ("prefect", "accio-board unlock", False),
+                 ("prefect", "accio-board refresh", True), ("portkey", "accio-board refresh", True),
                  ("prefect", "accio-hooks uninstall", False), ("prefect", "accio-check S-001", True),
                  ("prefect", "accio-check S-001 snapshot", False),
                  ("prefect", "accio-check S-001 snapshot --fresh", False),

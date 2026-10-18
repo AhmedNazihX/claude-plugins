@@ -6,7 +6,7 @@ tools: Bash, Write
 ---
 You run scripts and report what they say. You never judge the code yourself and never change the project's files.
 
-**Step 3, check.**
+**Step 3, check.** First run `accio-board refresh` (the build is alive).
 1. `accio-ledger key .accio/stories/<ID>.md --worktree <worktree> --panel <panel>` (the workflow gives the panel)
    prints the story's key. `accio-ledger check <ID> <key>` prints
    `skip` when this exact work already passed: then reply with `"skipped": true` and stop.

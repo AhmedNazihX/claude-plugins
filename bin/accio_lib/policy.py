@@ -26,12 +26,12 @@ WRITE_TOOLS = frozenset({"Write", "Edit", "MultiEdit", "NotebookEdit"})
 WEB_TOOLS = frozenset({"WebSearch", "WebFetch"})
 CLAIM_SCRIPT = "accio-claim"
 REPORT_NAME = "report.md"
-BOARD_RUN = frozenset({"ready", "status", "lock", "unlock", "move"})
+BOARD_RUN = frozenset({"ready", "status", "lock", "unlock", "move", "refresh"})
 LEDGER_USE = frozenset({"key", "check", "record"})
 SCRIPTS = {  # each Bash policy's accio scripts and the subcommands it may run (None: any)
     "scripts": {"accio-board": BOARD_RUN, "accio-brief": None, "accio-hooks": frozenset({"verify"}),
                 "accio-check": None},
-    "checks": {"accio-ledger": LEDGER_USE, "accio-board": frozenset({"move"}), "accio-check": None},
+    "checks": {"accio-ledger": LEDGER_USE, "accio-board": frozenset({"move", "refresh"}), "accio-check": None},
     "ledger": {"accio-ledger": LEDGER_USE},
 }
 PREFECT_CHECK = re.compile(r"S-\d{3,}")  # prefect runs exactly `accio-check <ID>`; only portkey takes snapshots
@@ -169,7 +169,8 @@ def _house_elf_judge(worktree, ctx):
     prefixes = (_check_prefixes(ctx)
                 + bashpolicy.command_prefixes(ctx.config.get("agent_allow", []), "agent_allow entry"))
     return bashpolicy.Judge(agent="house-elf", prefixes=prefixes, read_only=True, files=True,
-                            git=bashpolicy.HOUSE_ELF_GIT, worktree=worktree)
+                            git=bashpolicy.HOUSE_ELF_GIT, worktree=worktree, bin_dir=ctx.bin_dir,
+                            scripts={"accio-board": frozenset({"refresh"})})
 
 
 # --- the other agents' Bash ----------------------------------------------------------------------------------------

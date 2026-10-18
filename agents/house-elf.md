@@ -20,7 +20,7 @@ don't work around it. If you truly need a command it denies, stop and return BLO
    (`S-012/1` or `test_S_012_1_…`). Lines marked `(no test)` need none.
 3. Make the test pass with the smallest change. Change only the story's files and their tests.
 4. Run the brief's checks. Commit after each DoD line that passes (a checkpoint), with `git commit`; never skip the
-   hooks.
+   hooks. After each checkpoint, run `cd <worktree> && accio-board refresh`, so the build stays marked as running.
 5. Write `report.md` (the path in your brief): what changed, how to try it, its risks, anything left open.
 
 Reply with JSON only: `{"status": "DONE" | "DONE_WITH_CONCERNS" | "NEEDS_CONTEXT" | "BLOCKED", "head": "<commit>",
