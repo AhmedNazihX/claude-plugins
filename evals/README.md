@@ -7,16 +7,15 @@ Run them from the plugin root:
 
 ```bash
 PATH="$(xcode-select -p)/usr/bin:$PATH" claude plugin eval . --tag prophecy --scaffold --trust-plugin \
-  --allow-tools "Bash(*/bin/accio-board *)" "Bash(git add *)" "Bash(git commit *)" --max-cost-usd 2
+  --allow-tools Edit "Bash(*/bin/accio-board *)" --max-cost-usd 2
 ```
 
 - `--scaffold` runs each case's `backlog.sh`, which builds a small git repo with an `.accio/` backlog. A scaffold
   script must sit inside its case folder, so `go/backlog.sh` is a symlink to `propose/backlog.sh`.
 - **macOS:** `/usr/bin/git` is Apple's `xcrun` shim, and inside the eval's OS sandbox it can't write its cache under
   `/var/folders`, so every git call fails. Putting the real binary's folder first on `PATH` (the command above)
-  fixes the scripts. The Claude under test still runs `git commit` through its own shell and may hit the shim:
-  the `commits` grader only checks the command was run after `accio-board go`, not that it succeeded.
+  fixes the scripts, `accio-board go`'s commit included (the skill never runs git itself).
 - Skills call accio's scripts as `${CLAUDE_PLUGIN_ROOT}/bin/<script>`: the plugin's `bin/` is not on `PATH` in eval
   runs.
-- Not covered by a case: prophecy with workflows off (S-021/6). Check it by hand, or run a case with
-  `--disallow-tools Workflow`.
+- `prophecy/workflows-off` (S-021/6) has its own tag, because it needs the `Workflow` tool taken away for the whole
+  run: add `--tag prophecy-workflows-off --disallow-tools Workflow` instead of `--tag prophecy`.
