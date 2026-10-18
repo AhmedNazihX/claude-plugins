@@ -46,3 +46,10 @@ Session evidence: git-guardrails blocked a harmless `grep -r` because it *could*
 - **A `curfew` Write/Edit guard keeps agents inside their worktree,** backed by a `git status` snapshot of the
   main checkout.
 - **All Claude hooks act only in repos that have `.accio/`.**
+
+## Amendment (2026-10-18, S-013 review, decided by the user)
+- **"When dcg is installed" means dcg is running as a Claude Code hook:** on PATH *and* set up as a PreToolUse hook
+  for Bash in the user's or the project's Claude settings. dcg on PATH alone changes nothing, because then nothing
+  else would guard `reset --hard`, `clean -f`, `branch -D` or `rm -rf` (git runs no hook for them).
+- **With dcg running, `protego` still blocks accio's own walls:** `--no-verify` (and `git commit -n`, `HUSKY=0`),
+  `core.hooksPath` changes and unsetting `CLAUDECODE`. dcg doesn't know accio's git hooks depend on them.

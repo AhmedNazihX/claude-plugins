@@ -28,7 +28,7 @@ evals/                       scripts/publish.py
 | done | S-010 `accio-summary` |
 | done | S-011 Secret patterns and `pre-commit` |
 | todo | S-012 `accio-hooks`: install, chain, verify, `pre-push` |
-| todo | S-013 `protego` |
+| done | S-013 `protego` |
 | todo | S-014 `fidelius` |
 | todo | S-015 `curfew`: permission policy and worktree claims |
 | todo | S-016 `session-start` |
@@ -213,11 +213,18 @@ Context: DESIGN § 4.5, § 12.1; decisions 004 and 009.
 ### S-013 · `protego`
 Deps: S-003 · Files: `hooks/protego.py`, `hooks/hooks.json`, `tests/test_protego.py`
 Context: DESIGN § 4.4; decision 004.
-- [ ] S-013/1 WHEN a Bash command is on the § 4.4 list THE SYSTEM SHALL exit 2 and name the safe alternative
-- [ ] S-013/2 WHEN the command is `git branch -d` THE SYSTEM SHALL allow it
-- [ ] S-013/3 WHEN the repo has no `.accio/` THE SYSTEM SHALL exit 0 silently
-- [ ] S-013/4 WHEN dcg is installed THE SYSTEM SHALL defer to it
-- [ ] S-013/5 WHEN a command unsets `CLAUDECODE` (`unset`, `env -u`) THE SYSTEM SHALL exit 2 and explain that accio's push guard needs it
+- [x] S-013/1 WHEN a Bash command is on the § 4.4 list THE SYSTEM SHALL exit 2 and name the safe alternative
+- [x] S-013/2 WHEN the command is `git branch -d` THE SYSTEM SHALL allow it
+- [x] S-013/3 WHEN the repo has no `.accio/` THE SYSTEM SHALL exit 0 silently
+- [x] S-013/4 WHEN dcg is installed THE SYSTEM SHALL defer to it
+- [x] S-013/5 WHEN a command unsets `CLAUDECODE` (`unset`, `env -u`) THE SYSTEM SHALL exit 2 and explain that accio's push guard needs it
+Status (2026-10-18): built; two review rounds and two automated security reviews, all findings fixed with tests.
+Round 2's fix replaced shlex with a quote-aware tokenizer, `bin/accio_lib/shellwords.py` (heredocs and operators
+only outside quotes; curfew reuses it in S-015). dcg counts only when it runs as a Bash hook (user's decision,
+decision 004 amendment). A third look (a short review of the new tokenizer plus an automated review) found bash
+grammar gaps (`$'…'`, reserved words, braces, `cd -P`, substitutions, heredocs fed to a shell, `case`); fixed
+with tests, and the path logic moved to `bin/accio_lib/shellpaths.py`. Later shell gaps go here as notes rather
+than more rounds (decision 004: protego is an early warning).
 
 ### S-014 · `fidelius`
 Deps: S-011, S-013 · Files: `hooks/fidelius.py`, `hooks/hooks.json`, `tests/test_fidelius.py`
