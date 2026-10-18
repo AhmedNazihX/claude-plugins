@@ -38,6 +38,11 @@ class EvalSuiteTest(unittest.TestCase):
         evals_job = text[text.index("  evals:"):]
         self.assertIn("workflow_dispatch", text.split("jobs:")[0])
         self.assertIn("github.event_name == 'workflow_dispatch'", evals_job)
+        self.assertIn('"Bash(${{ github.workspace }}/bin/accio-* *)"', command)  # only this checkout's scripts
+        self.assertNotIn("*/bin/", command)
+        before_steps = evals_job.split("steps:")[0]
+        self.assertNotIn("ANTHROPIC_API_KEY", before_steps)  # the key reaches the eval step only
+        self.assertRegex(evals_job, r"@anthropic-ai/claude-code@\d+\.\d+\.\d+")
 
     def test_S_026_2_every_skill_has_a_ci_case_that_shows_it_firing(self):
         missing = []

@@ -32,8 +32,6 @@ jobs:
     # One cheap case per skill (tag `ci`), free graders only, capped at $2 a run (DESIGN § 9, decision 006).
     if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
-    env:
-      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -45,9 +43,13 @@ jobs:
       - name: Install Claude Code and the sandbox it runs Bash in
         run: |
           sudo apt-get update && sudo apt-get install -y bubblewrap socat
-          npm install -g @anthropic-ai/claude-code
+          npm install -g @anthropic-ai/claude-code@2.1.302  # the version the baseline was measured with
       - name: Skill evals
-        run: claude plugin eval . --tag ci --runs 1 --ablation none --scaffold --trust-plugin --allow-tools Write Edit "Bash(*/bin/accio-* *)" --max-cost-usd 2
+        # The key reaches this step only, and Bash is granted for this checkout's own scripts only: a script the
+        # model under test writes elsewhere (say ./x/bin/accio-y) matches no grant.
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: claude plugin eval . --tag ci --runs 1 --ablation none --scaffold --trust-plugin --allow-tools Write Edit "Bash(${{ github.workspace }}/bin/accio-* *)" --max-cost-usd 2
       - name: Keep the report
         if: always()
         uses: actions/upload-artifact@v4

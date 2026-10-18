@@ -7,7 +7,7 @@ Run them from the plugin root:
 
 ```bash
 PATH="$(xcode-select -p)/usr/bin:$PATH" claude plugin eval . --tag prophecy --tag owl --scaffold --trust-plugin \
-  --allow-tools Edit "Bash(*/bin/accio-* *)" --max-cost-usd 2
+  --allow-tools Write Edit "Bash($PWD/bin/accio-* *)" --max-cost-usd 2
 ```
 
 - `--scaffold` runs each case's script: prophecy's `backlog.sh` builds a small git repo with an `.accio/` backlog,
