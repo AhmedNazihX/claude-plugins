@@ -26,4 +26,5 @@ command by its full path (`${CLAUDE_PLUGIN_ROOT}/bin/accio-board …`), with no 
      `/accio:wand` when `.accio/design.md` doesn't exist (Glob)
 
    If no tool named `Workflow` appears anywhere in your tools, including tools listed only by name, workflows are
-   switched off: say `/accio:brew-by-hand` instead of `/accio:brew`.
+   switched off, and accio's build needs them: in place of `/accio:brew`, say to turn them on (the
+   `disableWorkflows` setting off, the `CLAUDE_CODE_DISABLE_WORKFLOWS` variable unset) and then type `/accio:brew`.

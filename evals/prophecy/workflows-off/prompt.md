@@ -1,5 +1,5 @@
 ---
-description: with workflows off, prophecy hands over /accio:brew-by-hand (run with --disallow-tools Workflow)
+description: with workflows off, prophecy says the build needs them and how to turn them on (run with --disallow-tools Workflow)
 tags: [prophecy-workflows-off]
 runs: 1
 model: sonnet

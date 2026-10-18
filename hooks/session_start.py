@@ -2,9 +2,9 @@
 """session-start: what a new session in an accio repo should know (DESIGN § 4.4, § 10; S-012's outcome).
 
 Injects at most MAX_LINES lines as `additionalContext`: the board summary, the next step, and the plain-words rule
-(plugins can't ship rules). With `CLAUDE_CODE_DISABLE_WORKFLOWS` set, `/accio:brew` doesn't exist, so it points to
-`/accio:brew-by-hand`; the `disableWorkflows` setting is invisible here (spike S-001), and `prophecy` and `map`
-catch that case. It runs `accio-hooks verify` quietly, so a path a plugin update made stale is rewritten at once,
+(plugins can't ship rules). With `CLAUDE_CODE_DISABLE_WORKFLOWS` set, `/accio:brew` doesn't exist, so it says the
+build needs workflows and how to turn them on (decision 012: no fallback build in v1); the `disableWorkflows`
+setting is invisible here (spike S-001), and `prophecy` and `map` catch that case. It runs `accio-hooks verify` quietly, so a path a plugin update made stale is rewritten at once,
 and mentions only the problems verify can't fix; where no accio helper exists (hooks never installed, or
 uninstalled) it writes nothing. No text from the repo's files reaches the context: problems are named by kind and
 count, and `/accio:map` or `accio-hooks verify` show the details. Every line is one line of at most LINE_CHARS
@@ -41,7 +41,7 @@ def _stories(count, kind):
 
 def next_step(accio, status, workflows_off):
     """The one thing to do next, from where the project is."""
-    brew = "/accio:brew-by-hand" if workflows_off else "/accio:brew"
+    brew = "/accio:brew once workflows are on" if workflows_off else "/accio:brew"
     counts = {key: sum(1 for value in status.values() if value == key) for key in story.STATUSES}
     if runlock.is_held(accio / "run"):
         return "a build is running; when it ends, review it with /accio:owl."
@@ -97,8 +97,8 @@ def context_lines(root, accio, environ):
     workflows_off = bool(environ.get("CLAUDE_CODE_DISABLE_WORKFLOWS"))
     lines = _board_lines(accio, workflows_off) + [PLAIN_WORDS]
     if workflows_off:
-        lines.append("accio: workflows are off (CLAUDE_CODE_DISABLE_WORKFLOWS), so /accio:brew isn't available; "
-                     "build with /accio:brew-by-hand.")
+        lines.append("accio: workflows are off (CLAUDE_CODE_DISABLE_WORKFLOWS), and accio's build needs them: unset "
+                     "it, then use /accio:brew.")
     return [_short(line) for line in lines + _hook_lines(root)][:MAX_LINES]
 
 

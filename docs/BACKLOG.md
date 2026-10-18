@@ -43,7 +43,7 @@ evals/                       scripts/publish.py
 | done | S-024 `wand` skill, `seeker`, `wandmaker` |
 | done | S-025 `map` and `vow` skills |
 | done | S-026 Skill evals and baseline cost |
-| conditional | S-027 `brew-by-hand` (only if S-001 says so) |
+| deferred | S-027 `brew-by-hand`: v1.1 (decision 012) |
 
 ---
 
@@ -515,8 +515,10 @@ it spends API credit), a `ci` tag on one case per skill, and `tests/test_evals.p
 skill covered). Baseline: the `ci` cases score 1.00 for $0.61 a run; every case once is about $2; always-on context
 about 1,864 tokens. The first CI eval run waits for a GitHub remote and the `ANTHROPIC_API_KEY` secret.
 
-### S-027 · `brew-by-hand` (conditional)
+### S-027 · `brew-by-hand` (deferred to v1.1, decision 012)
 Deps: S-020 · only for users with workflows off (spike verdict was GO) · Files: `skills/brew-by-hand/SKILL.md`
 Context: DESIGN § 10 Fallbacks.
 - [ ] S-027/1 (no test) runs the § 3.4 steps as plain subagents with the same scripts, files and caps
 - [ ] S-027/2 (no test) is suggested by `session-start` and `map` when workflows are off
+Deferred (2026-10-18, decision 012, the user's choice): v1 has no fallback build. With workflows off,
+`session-start`, `prophecy` and `map` say accio's build needs them and how to turn them on.

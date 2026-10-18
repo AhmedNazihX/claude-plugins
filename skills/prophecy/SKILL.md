@@ -14,7 +14,8 @@ review a story gets (quick, story, feature); a story *stacked on* another is bui
 
 ## 1. Check how the build will run
 If no tool named `Workflow` appears anywhere in your tools, including tools listed only by name, workflows are
-switched off: the build will be `/accio:brew-by-hand`, not `/accio:brew`. Say so in the final "What happened" line.
+switched off: say in the final "What happened" line that accio's build needs them and how to turn them on (the
+`disableWorkflows` setting off, the `CLAUDE_CODE_DISABLE_WORKFLOWS` variable unset).
 
 ## 2. Get the proposal
 Run `${CLAUDE_PLUGIN_ROOT}/bin/accio-board plan --json`. It returns:
@@ -76,5 +77,5 @@ What I need from you: type /accio:brew to build them (it runs unattended; review
 My recommendation: <one line>
 ```
 
-When workflows are off, the second line names `/accio:brew-by-hand`. Never start the build yourself: typing the
+When workflows are off, the second line says to turn them on first, then type `/accio:brew`. Never start the build yourself: typing the
 command is the user's opt-in.

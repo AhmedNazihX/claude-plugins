@@ -100,12 +100,13 @@ class SessionStartTest(unittest.TestCase):
         self.add("S-001", "done")
         self.assertIn("every story is done", self.context())
 
-    def test_S_016_2_with_workflows_off_it_points_to_brew_by_hand(self):
+    def test_S_016_2_with_workflows_off_it_says_how_to_turn_them_on(self):  # decision 012: no brew-by-hand in v1
         self.install_hooks()
         self.add("S-001", "ready")
         text = self.context(CLAUDE_CODE_DISABLE_WORKFLOWS="1")
-        self.assertIn("/accio:brew-by-hand", text)
+        self.assertNotIn("brew-by-hand", text)
         self.assertIn("CLAUDE_CODE_DISABLE_WORKFLOWS", text)
+        self.assertIn("unset", text)
         self.assertNotIn("with /accio:brew.", text)
 
     def test_S_016_3_a_repo_without_accio_gets_nothing(self):
