@@ -316,6 +316,8 @@ Done: one review round. The next step follows the board, including a build that 
 with brew). verify runs only where accio's helper already exists (never installed or uninstalled: nothing is
 written), and the helper is never written through a symlink. Every line is collapsed to one line of at most 240
 characters, since error text can come from repo files.
+Follow-up (automated review after merge): no text from the repo's files reaches the context at all; problems are
+named by kind and count, and `/accio:map` or `accio-hooks verify` show the details.
 
 ### S-028 · `doc-size` and `librarian`
 Deps: S-013 · Files: `hooks/doc_size.py`, `hooks/hooks.json`, `agents/librarian.md`, `tests/test_doc_size.py`

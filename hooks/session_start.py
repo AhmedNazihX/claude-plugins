@@ -6,8 +6,9 @@ Injects at most MAX_LINES lines as `additionalContext`: the board summary, the n
 `/accio:brew-by-hand`; the `disableWorkflows` setting is invisible here (spike S-001), and `prophecy` and `map`
 catch that case. It runs `accio-hooks verify` quietly, so a path a plugin update made stale is rewritten at once,
 and mentions only the problems verify can't fix; where no accio helper exists (hooks never installed, or
-uninstalled) it writes nothing. Every line is one line of at most LINE_CHARS characters, since error text can come
-from repo files. Prints nothing in a repo without `.accio/`, and never fails a session start.
+uninstalled) it writes nothing. No text from the repo's files reaches the context: problems are named by kind and
+count, and `/accio:map` or `accio-hooks verify` show the details. Every line is one line of at most LINE_CHARS
+characters. Prints nothing in a repo without `.accio/`, and never fails a session start.
 """
 import json
 import os
@@ -66,8 +67,9 @@ def _board_lines(accio, workflows_off):
     try:
         stories = board.load_stories(accio)
         status = board.statuses(stories, board.read_overrides(accio))
-    except (board.BoardError, story.StoryError, OSError) as error:
-        return [f"accio: the board can't be read; fix it, then run /accio:map. ({error})"]
+    except (board.BoardError, story.StoryError, OSError):
+        return ["accio: the board can't be read (a story file or run/status.json has a problem); run /accio:map to "
+                "see which."]
     return [f"accio: {board.summary(status)}.", f"accio: next, {next_step(accio, status, workflows_off)}"]
 
 
@@ -76,13 +78,13 @@ def _hook_lines(root):
     try:
         if githooks.read_helper(root) is None:
             return []
-        problems, _ = githooks.verify(root, BIN / "accio-hooks")
-    except githooks.HooksError as error:
-        problems = (str(error),)
-    if not problems:
+        count = len(githooks.verify(root, BIN / "accio-hooks")[0])
+    except githooks.HooksError:
+        count = 1
+    if not count:
         return []
-    more = f" (and {len(problems) - 1} more)" if len(problems) > 1 else ""
-    return [f"accio-hooks: run `accio-hooks verify` to see what to do{more}. {problems[0]}"]
+    return [f"accio-hooks: accio's git hooks have {count} problem{'' if count == 1 else 's'} verify can't fix; run "
+            "`accio-hooks verify` to see what to do."]
 
 
 def _short(line):
@@ -111,7 +113,7 @@ def main():
     try:
         lines = context_lines(accio.parent, accio, os.environ)
     except Exception as error:  # noqa: BLE001 — a session must start whatever goes wrong here
-        lines = [_short(f"accio: session-start couldn't read the project ({type(error).__name__}: {error}).")]
+        lines = [f"accio: session-start couldn't read the project ({type(error).__name__}); run /accio:map."]
     print(json.dumps({"hookSpecificOutput": {"hookEventName": "SessionStart",
                                              "additionalContext": "\n".join(lines)}}))
     return 0
