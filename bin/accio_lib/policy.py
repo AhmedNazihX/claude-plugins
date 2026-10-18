@@ -16,6 +16,7 @@ import dataclasses
 import fnmatch
 import os
 import pathlib
+import re
 import shlex
 
 from accio_lib import bashpolicy, paths, shellwords, story
@@ -28,10 +29,12 @@ REPORT_NAME = "report.md"
 BOARD_RUN = frozenset({"ready", "status", "lock", "unlock", "move"})
 LEDGER_USE = frozenset({"key", "check", "record"})
 SCRIPTS = {  # each Bash policy's accio scripts and the subcommands it may run (None: any)
-    "scripts": {"accio-board": BOARD_RUN, "accio-brief": None, "accio-hooks": frozenset({"verify"})},
-    "checks": {"accio-ledger": LEDGER_USE, "accio-board": frozenset({"move"})},
+    "scripts": {"accio-board": BOARD_RUN, "accio-brief": None, "accio-hooks": frozenset({"verify"}),
+                "accio-check": None},
+    "checks": {"accio-ledger": LEDGER_USE, "accio-board": frozenset({"move"}), "accio-check": None},
     "ledger": {"accio-ledger": LEDGER_USE},
 }
+PREFECT_CHECK = re.compile(r"S-\d{3,}")  # prefect runs exactly `accio-check <ID>`; only portkey takes snapshots
 IN_PROGRESS = "doing"
 
 
@@ -45,7 +48,7 @@ class Lists:
 
 AGENTS = {
     "portkey": Lists(bash="scripts"),
-    "prefect": Lists(bash="checks"),
+    "prefect": Lists(writes=("run/questions/*.md",), bash="checks"),
     "examiner": Lists(writes=("run/*/findings-*.md",)),
     "professor": Lists(writes=("run/*/findings-*.md",)),
     "auror": Lists(writes=("run/*/findings-*.md",)),
@@ -175,7 +178,8 @@ def _other_judge(agent, kind, ctx):
     if kind != "checks":
         return bashpolicy.Judge(agent=agent, scripts=SCRIPTS[kind], bin_dir=ctx.bin_dir)
     return bashpolicy.Judge(agent=agent, prefixes=_check_prefixes(ctx), read_only=True, git=bashpolicy.READ_ONLY_GIT,
-                            scripts=SCRIPTS[kind], bin_dir=ctx.bin_dir, may_cd=True)
+                            scripts=SCRIPTS[kind], bin_dir=ctx.bin_dir, may_cd=True,
+                            script_args={"accio-check": PREFECT_CHECK})
 
 
 def _check_prefixes(ctx):

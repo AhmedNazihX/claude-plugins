@@ -252,7 +252,7 @@ The build itself is the workflow `/accio:brew` (§ 4.3), not a skill.
 | `wandmaker` | architect, 2–3 options | Opus | read-only | `options: <path>` |
 | `portkey` | worktree and brief | Haiku | Bash (scripts only) | `{worktree, brief, base}` |
 | `house-elf` | implementer | Sonnet / Opus | Read, Grep, Glob, Write, Edit, Bash, kept short because `curfew` must answer every tool (§ 4.4) | `{status, head, report}` |
-| `prefect` | checks, ledger, DoD tags, main snapshot | Haiku | Bash | `{pass, failing[], skipped}` |
+| `prefect` | checks, ledger, DoD tags, main snapshot (`accio-check`) | Haiku | Bash, Write (only `run/questions/`) | `{pass, failing[], skipped}` |
 | `examiner` | spec reviewer and backlog checker | Sonnet | read-only plus Write to its findings path | `{verdict, counts, path}` |
 | `professor` | quality reviewer | Sonnet | same as examiner | same |
 | `auror` | security reviewer (risky paths) | Sonnet | same as examiner | same |
@@ -320,6 +320,7 @@ script's absolute path.
 | `accio-merge` | integration worktree, `--no-ff` merges in dependency order, full checks, find the breaking story, fast-forward main, clean up |
 | `accio-cost` | sums `usage` from each `agent-<id>.jsonl` in the run's transcript folder, grouped by the label in `agent-<id>.meta.json`, per story and iteration (spike S-001) |
 | `accio-claim` | run by `house-elf` as its first command; prints its worktree; `curfew` records the claim (decision 010) |
+| `accio-check` | `snapshot` of the main checkout before a story; then the checks scoped to the diff, the boundary and DoD-tag checks, and the snapshot and remote comparison, as `prefect`'s reply (§ 12.5) |
 | `accio-hooks` | install (with chaining), `verify`, `run <hook>`, uninstall |
 | `accio-summary` | reports and cost data → `run/owl.md` for the review |
 
@@ -576,12 +577,12 @@ workflow launch: the first `/accio:brew` asks once, and "don't ask again" covers
 | `board.md` | `accio-board` only | together with the stories |
 | `run/status.json` | `accio-board move` (from `portkey`/`prefect`) | never (runtime); `owl` folds it into the story files |
 | `run/ledger.tsv` | `accio-ledger` (from `prefect`, `headmaster`) | never |
-| `run/main-snapshot` | `prefect` (before and after each story: `git status` and `origin/<base>`) | never |
+| `run/<ID>/main-snapshot.json` | `accio-check <ID> snapshot` (from `portkey`, once per brief; `accio-brief` clears it); `prefect` compares after the story (status, mode and content of each changed, untracked or ignored path; HEAD; `origin/<base>`) | never |
 | `run/brew.lock` | `accio-board lock` / `unlock` (from `portkey`), refreshed by `accio-board move` | never |
 | `run/claims.json` | `curfew` (when `house-elf` runs `accio-claim`) | never; cleared when a run starts |
 | `run/stuck.json` | `curfew` (a permission question reached an accio agent: it froze) | never |
 | `run/<ID>/brief.md`, `report.md`, `findings-*.md` | `accio-brief`; `house-elf`; each reviewer | never |
-| `run/questions/<ID>.md` | `headmaster` (needs-user), or an agent's `needs override` | never; answers go into the story at `owl` |
+| `run/questions/<ID>.md` | `headmaster` (needs-user), `prefect` (a Blocked outcome), or an agent's `needs override` | never; answers go into the story at `owl` |
 
 **During a build, status lives only in `run/status.json`.** Nothing commits to main while a build runs.
 
@@ -614,7 +615,7 @@ from = merge-base with base, or the parent's head for a stacked child
 | Agent | Reply |
 |---|---|
 | `house-elf` | `status ∈ {DONE, DONE_WITH_CONCERNS, NEEDS_CONTEXT, BLOCKED}` |
-| `prefect` | `{pass: bool, failing: [check], skipped: bool, out_of_bounds: [path], untagged: [dod-id], weak_tests: [dod-id], main_changed: [path], remote_moved: bool}` |
+| `prefect` | `{pass: bool, failing: [check], skipped: bool, out_of_bounds: [path], untagged: [dod-id], weak_tests: [dod-id], audit: "not audited" \| "audited", main_changed: [path], remote_moved: bool}` |
 | reviewers | `{verdict ∈ {pass, fail}, counts: {critical, major, minor}, path}` |
 | `headmaster` | `{kind ∈ {ruling, question}, text, path}` |
 

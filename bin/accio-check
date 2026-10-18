@@ -1,0 +1,76 @@
+#!/usr/bin/env python3
+"""accio-check: prefect's check script (DESIGN § 3.4 step 3, § 12.5).
+
+  accio-check <ID> snapshot [--fresh]   record the main checkout before the story (run/<ID>/main-snapshot.json),
+                                        once per brief; --fresh replaces it (portkey, for a story resumed after a crash)
+  accio-check <ID>                      run the scoped checks, the boundary and DoD-tag checks, and compare the main
+                                        checkout with the snapshot; prints prefect's reply as JSON. The diff starts
+                                        where accio-brief recorded it.
+"""
+import argparse
+import json
+import pathlib
+import sys
+
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+
+from accio_lib import checks, config, paths, story  # noqa: E402
+
+
+def _context(story_id):
+    main, accio = paths.main_root(), paths.accio_dir()
+    if main is None or accio is None:
+        raise checks.CheckError("no .accio/ folder in this repo")
+    if not story.STORY_ID.match(story_id):
+        raise checks.CheckError(f"{story_id} isn't a story ID")
+    worktree = paths.worktree_root(main) / story_id
+    if not worktree.is_dir():
+        raise checks.CheckError(f"there is no worktree for {story_id} at {worktree}")
+    return main, accio, worktree, config.load(accio)
+
+
+def _snapshot(main, accio, story_id, settings, fresh):
+    path = accio / "run" / story_id / checks.SNAPSHOT_NAME
+    if path.exists() and not fresh:
+        raise checks.CheckError(f"{story_id} already has a snapshot ({path}); it is taken once per brief")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(checks.snapshot(main, settings["base_branch"]), indent=2) + "\n", encoding="utf-8")
+    return {"snapshot": str(path)}
+
+
+def _check(main, accio, worktree, story_id, settings):
+    path = accio / "run" / story_id / checks.SNAPSHOT_NAME
+    try:
+        before = json.loads(path.read_text(encoding="utf-8"))
+    except FileNotFoundError as error:
+        raise checks.CheckError(f"no snapshot for {story_id}: portkey takes it before the story starts, so this "
+                                "story can't be checked; report BLOCKED") from error
+    except (OSError, ValueError) as error:
+        raise checks.CheckError(f"cannot read {path}: {error}") from error
+    parsed = story.parse(accio / "stories" / f"{story_id}.md")
+    start = checks.diff_start(accio / "run" / story_id, worktree, settings["base_branch"])
+    return checks.run(main, worktree, parsed, start, settings, before)
+
+
+def main(argv=None):
+    parser = argparse.ArgumentParser(prog="accio-check", description=__doc__,
+                                     formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("id")
+    parser.add_argument("action", nargs="?", choices=("snapshot",))
+    parser.add_argument("--fresh", action="store_true", help="replace an existing snapshot (portkey only)")
+    args = parser.parse_args(argv)
+    try:
+        main_root, accio, worktree, settings = _context(args.id)
+        if args.action == "snapshot":
+            reply = _snapshot(main_root, accio, args.id, settings, args.fresh)
+        else:
+            reply = _check(main_root, accio, worktree, args.id, settings)
+    except (checks.CheckError, config.ConfigError, story.StoryError) as error:
+        print(f"accio-check: {error}", file=sys.stderr)
+        return 1
+    print(json.dumps(reply, indent=2))
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

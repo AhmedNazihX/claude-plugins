@@ -332,16 +332,24 @@ loads the whole file); `.markdown` and `.mdx` count. The repo lookup fidelius us
 `paths.guarding_accio_dir`.
 
 ### S-017 · Build agents: `portkey`, `house-elf`, `prefect`
-Deps: S-007, S-006, S-015 · Files: `agents/{portkey,house-elf,prefect}.md`, `bin/accio_lib/checks.py`, `tests/test_checks.py`
+Deps: S-007, S-006, S-015 · Files: `agents/{portkey,house-elf,prefect}.md`, `bin/accio_lib/checks.py`, `bin/accio-check`, `bin/accio-brief`, `bin/accio-ledger`, `bin/accio_lib/merge.py`, `bin/accio_lib/policy.py`, `bin/accio_lib/bashpolicy.py`, `tests/test_checks.py`
 Context: DESIGN § 3.4 steps 0–3 and 7, § 4.2, § 7.1, § 12.5; decision 011.
-- [ ] S-017/1 WHEN `prefect`'s check script runs THE SYSTEM SHALL run only the checks whose globs match the diff
-- [ ] S-017/2 WHEN the diff touches a file outside the story's `files` (plus tests) THE SYSTEM SHALL list it in `out_of_bounds`
-- [ ] S-017/3 WHEN a numbered DoD line not marked `(no test)` has no tagged test THE SYSTEM SHALL list it in `untagged`
-- [ ] S-017/4 WHEN the main checkout's `git status` differs from the snapshot THE SYSTEM SHALL list the paths in `main_changed`
-- [ ] S-017/5 (no test) each agent file sets the model from § 4.2, the tools from § 4.2 and the reply schema from § 12.5
-- [ ] S-017/6 WHEN `origin/<base>` moved during the story THE SYSTEM SHALL set `remote_moved` and the story goes to Blocked
-- [ ] S-017/7 (no test) `house-elf`'s prompt makes `accio-claim <ID>` its first command and states the `cd <worktree> &&` rule
+- [x] S-017/1 WHEN `prefect`'s check script runs THE SYSTEM SHALL run only the checks whose globs match the diff
+- [x] S-017/2 WHEN the diff touches a file outside the story's `files` (plus tests) THE SYSTEM SHALL list it in `out_of_bounds`
+- [x] S-017/3 WHEN a numbered DoD line not marked `(no test)` has no tagged test THE SYSTEM SHALL list it in `untagged`
+- [x] S-017/4 WHEN the main checkout's `git status` differs from the snapshot THE SYSTEM SHALL list the paths in `main_changed`
+- [x] S-017/5 (no test) each agent file sets the model from § 4.2, the tools from § 4.2 and the reply schema from § 12.5
+- [x] S-017/6 WHEN `origin/<base>` moved during the story THE SYSTEM SHALL set `remote_moved` and the story goes to Blocked
+- [x] S-017/7 (no test) `house-elf`'s prompt makes `accio-claim <ID>` its first command and states the `cd <worktree> &&` rule
 - [ ] S-017/8 WHEN the project's mutation tool (set in `config.json`), run on the story's changed lines only, leaves a mutant that no tagged test catches THE SYSTEM SHALL list it in `weak_tests`, and report "not audited" when no tool is set (decision 011)
+Status (2026-10-18): /1-/7 done after three review rounds (`accio-check`, `checks.py`, the three agents). The main
+snapshot is write-once per brief (only portkey takes it; prefect runs exactly `accio-check <ID>`); the diff starts
+where `accio-brief` recorded it, for the check and the ledger key alike; all checks share one 9-min budget (prefect's
+Bash call stops at 10 min; longer suites need the workflow to run checks itself, S-019); test areas follow common
+layouts and never dot-folders. **/8 waits on the user:** how a project's mutation tool is called and reports
+(option A recommended: `mutation.command` in config.json with `{diff}`, survivors as `file:line`, so `weak_tests`
+lists `file:line`). Open notes: `src/ABTest.kt` reads as a test; a stacked child with no recorded base falls back to
+the merge-base.
 
 ### S-018 · Review agents and findings template
 Deps: S-017 · Files: `agents/{examiner,professor,auror,headmaster}.md`, `agents/references/findings-template.md`, `agents/references/checklists/`, `tests/test_agents.py`

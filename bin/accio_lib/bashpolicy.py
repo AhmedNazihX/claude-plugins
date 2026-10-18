@@ -65,6 +65,7 @@ class Judge:
     bin_dir: pathlib.Path = None
     worktree: pathlib.Path = None
     may_cd: bool = False
+    script_args: dict = dataclasses.field(default_factory=dict)  # script -> pattern its arguments must match whole
 
 
 def command_prefixes(commands, where):
@@ -130,6 +131,9 @@ def _is_script(words, judge):
     if name not in judge.scripts:
         return False
     if words[0] != name and os.path.realpath(words[0]) != os.path.realpath(judge.bin_dir / name):
+        return False
+    pattern = judge.script_args.get(name)
+    if pattern is not None and not pattern.fullmatch(" ".join(words[1:])):
         return False
     allowed = judge.scripts[name]
     return allowed is None or (len(words) > 1 and words[1] in allowed)

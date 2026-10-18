@@ -12,7 +12,7 @@ import sys
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 
-from accio_lib import config, ledger, paths, runlock, story  # noqa: E402
+from accio_lib import brief, config, ledger, paths, runlock, story  # noqa: E402
 
 
 def _run_dir(start="."):
@@ -26,7 +26,8 @@ def cmd_key(args):
     parsed = story.parse(args.story)
     accio, _ = _run_dir(args.story.resolve().parent)
     settings = config.load(accio)
-    start = ledger.diff_base(args.worktree, settings["base_branch"], args.parent)
+    recorded = brief.recorded_base(accio / "run" / parsed.meta["id"])  # the same start as accio-check
+    start = recorded or ledger.diff_base(args.worktree, settings["base_branch"], args.parent)
     work = ledger.work_digest(args.worktree, start)
     print(ledger.key(work, settings["checks"], args.panel, parsed))
 

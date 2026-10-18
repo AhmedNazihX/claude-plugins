@@ -68,7 +68,7 @@ def _record_base(run_dir, onto):
     write_file(run_dir / BASE_RECORD, onto + "\n")
 
 
-def _recorded_base(run_dir):
+def recorded_base(run_dir):
     try:
         return (run_dir / BASE_RECORD).read_text(encoding="utf-8").strip() or None
     except FileNotFoundError:
@@ -88,7 +88,7 @@ def prepare_worktree(main, run_dir, story_id, onto):
         if worktree.exists():
             raise BriefError(f"{worktree} exists but is not a git worktree; move it away and run again")
         _git(main, "worktree", "add", "-q", str(worktree), branch)
-    notes = rebase(worktree, onto, _recorded_base(run_dir))
+    notes = rebase(worktree, onto, recorded_base(run_dir))
     if not notes:
         _record_base(run_dir, onto)
     _share_hooks(main, worktree)

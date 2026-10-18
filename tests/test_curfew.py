@@ -237,7 +237,8 @@ class FlagsAndFormsTest(CurfewTestBase):
                  "sort --compress-program=./x -S1M a": "sort", "file --comp x": "file", "uniq - out.txt": "uniq",
                  "uniq -- a.txt -out.txt": "uniq",
                  f"git diff --out={push_ok}": "--output", "echo x > .git": ".git", "mv a.py .git": ".git",
-                 "rm .git": ".git", "mkdir -p .git/hooks": ".git", "rm -rf .gi?": ".gi?", "cp a.py .g*/x": ".g*", "echo x > .GIT": ".GIT", "rm -rf .Gi?": ".Gi?",
+                 "rm .git": ".git", "mkdir -p .git/hooks": ".git", "rm -rf .gi?": ".gi?", "cp a.py .g*/x": ".g*",
+                 "echo x > .GIT": ".GIT", "rm -rf .Gi?": ".Gi?",
                  "git commit -n -m x": "verify", "git commit --no-verif -m x": "verify", "git commit -anm x": "verify",
                  "git rebase --no-verify": "rebase"}
         for command, word in cases.items():
@@ -299,7 +300,13 @@ class OtherAgentsTest(CurfewTestBase):
                  ("portkey", "accio-brief S-001", True), ("portkey", "accio-hooks uninstall", False),
                  ("portkey", "accio-ledger clear S-001", False), ("prefect", "accio-ledger record S-001", True),
                  ("prefect", "accio-board move S-001 review", True), ("prefect", "accio-board unlock", False),
-                 ("prefect", "accio-hooks uninstall", False), ("headmaster", "accio-ledger check S-001", True),
+                 ("prefect", "accio-hooks uninstall", False), ("prefect", "accio-check S-001", True),
+                 ("prefect", "accio-check S-001 snapshot", False),
+                 ("prefect", "accio-check S-001 snapshot --fresh", False),
+                 ("prefect", "accio-check S-001 {snapshot,}", False), ("prefect", "accio-check S-001 $X", False),
+                 ("portkey", "accio-check S-001 snapshot --fresh", True),
+                 ("portkey", "accio-check S-001 snapshot", True), ("headmaster", "accio-check S-001", False),
+                 ("headmaster", "accio-ledger check S-001", True),
                  ("headmaster", "accio-ledger clear S-001", False))
         for agent, command, allowed in cases:
             with self.subTest(agent=agent, command=command):
@@ -312,6 +319,8 @@ class OtherAgentsTest(CurfewTestBase):
         self.assert_denied("Bash", self.in_worktree("git commit -m x"), "commit", agent="accio:prefect")
         self.assert_denied("Write", {"file_path": str(self.run_dir / "push-ok"), "content": "x"},
                            agent="accio:prefect")
+        self.assert_allowed("Write", {"file_path": str(self.run_dir / "questions" / "S-001.md"), "content": "x"},
+                            agent="accio:prefect")
         self.assert_allowed("WebFetch", {"url": "https://example.com"}, agent="accio:seeker")
         self.assert_allowed("Write", {"file_path": str(self.repo / ".accio" / "stories" / "S-009.md"),
                                       "content": "x"}, agent="accio:quill")

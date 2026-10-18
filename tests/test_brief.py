@@ -125,6 +125,17 @@ class BriefTest(unittest.TestCase):
         self.assertIn("uncommitted", pathlib.Path(reply["brief"]).read_text(encoding="utf-8"))
 
     # S-007/4
+    def test_S_017_4_a_new_brief_clears_the_main_snapshot_but_a_fix_brief_keeps_it(self):
+        snapshot = self.accio / "run" / "S-001" / "main-snapshot.json"
+        self.brief("S-001")
+        write(snapshot, "{}\n")
+        findings = self.base / "findings.md"
+        write(findings, "- major: x\n")
+        self.brief("S-001", "--fix", str(findings))
+        self.assertTrue(snapshot.exists())
+        self.brief("S-001")
+        self.assertFalse(snapshot.exists())
+
     def test_S_015_3_a_new_brief_releases_the_storys_claim(self):
         claims = {"a1": {"story": "S-001", "worktree": "x"}, "a2": {"story": "S-002", "worktree": "y"}}
         write(self.accio / "run" / "claims.json", json.dumps(claims))

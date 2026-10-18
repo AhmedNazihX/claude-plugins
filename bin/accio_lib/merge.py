@@ -107,12 +107,12 @@ def merge_stories(worktree, stories, ordered):
     return tuple(merged), None
 
 
-def _run_check(worktree, command):
+def _run_check(worktree, command, timeout):
     """(passed, output tail); a timeout kills the whole process group."""
     process = subprocess.Popen(command, shell=True, cwd=worktree, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
                                stderr=subprocess.STDOUT, start_new_session=True)
     try:
-        output, _ = process.communicate(timeout=CHECK_TIMEOUT_SECONDS)
+        output, _ = process.communicate(timeout=timeout)
         timed_out = False
     except subprocess.TimeoutExpired:
         os.killpg(process.pid, signal.SIGKILL)
@@ -120,15 +120,19 @@ def _run_check(worktree, command):
         timed_out = True
     text = output.decode("utf-8", errors="replace")[-OUTPUT_TAIL_CHARS:]
     if timed_out:
-        text += f"\n(stopped after {CHECK_TIMEOUT_SECONDS // 60} min)"
+        text += f"\n(stopped after {_duration(timeout)})"
     return process.returncode == 0 and not timed_out, text
 
 
-def run_checks(worktree, commands):
-    """{command: output tail} for every command that fails or times out."""
+def _duration(seconds):
+    return f"{round(seconds / 60)} min" if seconds >= 60 else f"{round(seconds)} s"
+
+
+def run_checks(worktree, commands, timeout=CHECK_TIMEOUT_SECONDS):
+    """{command: output tail} for every command that fails or runs past `timeout` seconds."""
     failing = {}
     for command in commands:
-        passed, output = _run_check(worktree, command)
+        passed, output = _run_check(worktree, command, timeout)
         if not passed:
             failing[command] = output
     return failing
@@ -157,19 +161,25 @@ def _nul_paths(output):
     return [part for part in output.split("\0") if part]
 
 
-def _dirty_paths(main):
-    """Every uncommitted, untracked (expanded) or ignored path in the main checkout, rename sources included."""
+def status_entries(main):
+    """(status code, path) for every uncommitted, untracked (expanded) or ignored path in a checkout; a rename or
+    copy gives its source too, with the same code. An ignored folder is one entry, without its trailing `/`."""
     entries = _nul_paths(_git(main, "status", "--porcelain", "-z", "--untracked-files=all",
                               "--ignored=matching").stdout)
-    found, index = set(), 0
+    found, index = [], 0
     while index < len(entries):
         code, path = entries[index][:2], entries[index][3:]
-        found.add(path.rstrip("/"))
+        found.append((code, path.rstrip("/")))
         if code[0] in "RC" and index + 1 < len(entries):
-            found.add(entries[index + 1])
+            found.append((code, entries[index + 1]))
             index += 1
         index += 1
     return found
+
+
+def _dirty_paths(main):
+    """Every uncommitted, untracked or ignored path in the main checkout, rename sources included."""
+    return {path for _, path in status_entries(main)}
 
 
 def _blocking_changes(main, base_branch, new_head):

@@ -12,7 +12,7 @@ import sys
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 
-from accio_lib import brief, config, globs, paths, runlock, story  # noqa: E402
+from accio_lib import brief, checks, config, globs, paths, runlock, story  # noqa: E402
 
 
 def run(args):
@@ -39,6 +39,7 @@ def run(args):
         target = brief.write_file(run_dir / "fix-brief.md", text)
     else:
         worktree, notes = brief.prepare_worktree(main, run_dir, args.id, onto)
+        (run_dir / checks.SNAPSHOT_NAME).unlink(missing_ok=True)  # portkey snapshots the main checkout afresh
         files = parsed.meta.get("files", ())
         text = brief.render_brief(parsed, accio, worktree, onto, brief.scoped_checks(settings["checks"], files),
                                   brief.existing_files(main, onto, files), notes)
