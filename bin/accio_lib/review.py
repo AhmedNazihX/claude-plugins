@@ -55,9 +55,10 @@ def _succeeds(worktree, *args):
 
 def _fix_start(worktree, since, start):
     """`since`, checked: a commit of the story itself, from where it starts up to its HEAD."""
-    if not _succeeds(worktree, "rev-parse", "--verify", "--quiet", f"{since}^{{commit}}"):
-        raise brief.BriefError(f"--since {since} is not a commit")
-    commit = _git(worktree, "rev-parse", f"{since}^{{commit}}").strip()
+    try:
+        commit = _git(worktree, "rev-parse", "--verify", "--quiet", f"{since}^{{commit}}").strip()
+    except brief.BriefError as error:
+        raise brief.BriefError(f"--since {since} is not a commit") from error
     if not (_succeeds(worktree, "merge-base", "--is-ancestor", commit, "HEAD")
             and _succeeds(worktree, "merge-base", "--is-ancestor", start, commit)):
         raise brief.BriefError(f"--since {since} is not a commit of this story, between where it starts and its HEAD")

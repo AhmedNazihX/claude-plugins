@@ -17,7 +17,8 @@ export const meta = {
 // build table only.
 // A story that passes its checks is reviewed by its panel (Quick: examiner alone; else examiner and professor;
 // auror on a risky path, also when only a fix touches one). Findings get at most 2 fix rounds, each a fresh house-elf (one tier up in round 2), a
-// re-check, and a re-review of only the fix diff by only the reviewers that raised them. A house-elf that returns
+// re-check, and a re-review of only the fix diff by the reviewers that raised them, plus auror whenever the
+// package is risky. A house-elf that returns
 // NEEDS_CONTEXT, which includes a fix it refuses because the finding conflicts with the story, goes to headmaster:
 // a ruling gets one more try, a question blocks the story. house-elf's `maxTurns` is the 2× budget stop (S-001).
 // Every label starts with the story id: accio-cost ties usage to stories by it.
@@ -286,7 +287,7 @@ async function reviewAndFix(story, worktree, model, earlier) {
     pkg = await packageFor(story, round + 1, pkg.head)
     if (pkg.stop) return pkg
     names = failing.map((each) => each.name)
-    if (pkg.risky && !names.includes('auror')) names.push('auror')  // the fix itself touched a risky path
+    if (pkg.risky && !names.includes('auror')) names.push('auror')  // the fix touched a risky path, or `risk` names security
   }
 }
 
