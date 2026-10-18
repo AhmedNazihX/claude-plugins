@@ -38,6 +38,7 @@ Date: 2026-10-17 · Status: decided by the user
 | `auror` | security reviewer | Sonnet |
 | `headmaster` | judge | Sonnet |
 | `librarian` | doc lookups | Haiku |
+| `howler` | CI watcher after `owl`'s push (v2, S-029; named 2026-10-19) | Haiku |
 
 ### Hooks
 - `protego`: destructive commands

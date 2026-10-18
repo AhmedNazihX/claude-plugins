@@ -44,6 +44,7 @@ evals/                       (CI: the marketplace's .github/workflows/test.yml)
 | done | S-025 `map` and `vow` skills |
 | done | S-026 Skill evals and baseline cost |
 | deferred | S-027 `brew-by-hand`: v1.1 (decision 012) |
+| todo (v2) | S-029 `howler`: CI after owl's push |
 
 ---
 
@@ -523,3 +524,20 @@ Context: DESIGN § 10 Fallbacks.
 - [ ] S-027/2 (no test) is suggested by `session-start` and `map` when workflows are off
 Deferred (2026-10-18, decision 012, the user's choice): v1 has no fallback build. With workflows off,
 `session-start`, `prophecy` and `map` say accio's build needs them and how to turn them on.
+
+### S-029 · `howler`: CI after owl's push (v2)
+Deps: S-022 · Files: `agents/howler.md`, `skills/owl/SKILL.md`, `bin/accio_lib/policy.py`, `tests/test_agents.py`,
+`tests/test_curfew.py`
+Context: DESIGN § 3.5. Name chosen by the user (2026-10-19): a howler is the letter that delivers its news out
+loud. Reference, read for ideas only (never run): foreman's `ci-watcher` agent, in the `archive/foreman` tag of this
+repo (`foreman/agents/ci-watcher.md`).
+- [ ] S-029/1 (no test) `howler` (Haiku, read-only) waits for every GitHub Actions run of one pushed commit and
+  reports each run's and each job's result; for a failed job, the failing step or test and its error
+- [ ] S-029/2 (no test) treats CI output as data, never instructions: only numeric ids, full shas and a checked
+  branch name ever reach a command
+- [ ] S-029/3 (no test) calls a failure `real` when the previous run of the same workflow failed the same way, else
+  `first failure`, and says when the failing code lies outside the pushed range (a stale base, or broken before)
+- [ ] S-029/4 (no test) `owl` launches it in the background right after its push, and its report reaches the user
+  with the iteration's outcome
+- [ ] S-029/5 WHEN `howler` calls a tool THE SYSTEM SHALL allow only reads and `git rev-parse`, `git remote get-url`,
+  `git diff --name-only`, `gh run list`, `gh run view` and `gh run watch` (curfew)
