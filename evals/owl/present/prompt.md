@@ -1,6 +1,6 @@
 ---
 description: owl shows the summary and asks for one batch answer, writing nothing before it
-tags: [owl]
+tags: [owl, ci]
 runs: 2
 model: sonnet
 max_turns: 20

@@ -1,6 +1,6 @@
 ---
 description: on first use wand sets accio up, then asks one question and writes nothing else yet
-tags: [wand]
+tags: [wand, ci]
 runs: 2
 model: sonnet
 max_turns: 20

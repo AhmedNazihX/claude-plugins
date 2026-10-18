@@ -1,6 +1,6 @@
 ---
 description: vow writes a numbered decision record with options, pros, cons and costs, and commits it
-tags: [vow]
+tags: [vow, ci]
 runs: 2
 model: sonnet
 max_turns: 15

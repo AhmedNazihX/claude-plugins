@@ -1,6 +1,6 @@
 ---
 description: map shows the board from the script and the next step (brew, since a story is Ready)
-tags: [map]
+tags: [map, ci]
 runs: 2
 model: sonnet
 max_turns: 15

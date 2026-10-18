@@ -1,6 +1,6 @@
 ---
 description: "sort turns the design into story files: EARS DoD lines, the outcome in each Context, a backlog check, one commit, a summary only"
-tags: [sort]
+tags: [sort, ci]
 runs: 2
 model: sonnet
 max_turns: 40

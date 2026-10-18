@@ -26,3 +26,14 @@ PATH="$(xcode-select -p)/usr/bin:$PATH" claude plugin eval . --tag prophecy --ta
   `prophecy-workflows-off` and `map-workflows-off`, run with `--disallow-tools Workflow`.
 - `prophecy/workflows-off` (S-021/6) has its own tag, because it needs the `Workflow` tool taken away for the whole
   run: add `--tag prophecy-workflows-off --disallow-tools Workflow` instead of `--tag prophecy`.
+
+## In CI, and the baseline (S-026)
+
+- The `evals` job in `.github/workflows/ci.yml` runs only by hand (`workflow_dispatch`), since it spends API credit:
+  the six cases tagged `ci` (one per skill), one run each, free graders only, `--max-cost-usd 2`. It needs the
+  `ANTHROPIC_API_KEY` secret. `tests/test_evals.py` keeps the graders free, the cap in place and every skill covered.
+- **Baseline, 2026-10-18** (Claude Code 2.1.302, Sonnet under test, run on macOS): the `ci` cases all scored 1.00
+  in about 2 minutes for **$0.61**. One run of every case (all tags) costs about **$2** (wand's options case alone
+  about $0.40, since wandmaker is Opus).
+- **Always-on context:** about **1,864 tokens** for every accio description (`claude --plugin-dir . plugin details
+  accio`), within DESIGN § 8.5's target of about 2k.

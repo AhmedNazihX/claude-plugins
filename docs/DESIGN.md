@@ -508,8 +508,8 @@ Next: /accio:owl
 - **Workflow:** `brew.js` runs with a stubbed `agent()`. Tests cover the cap of 2 rounds, a timeout turning into
   Blocked, the WIP limit of 3, a ledger skip, a judge question, a held-back child, a child skipped when its
   parent is BLOCKED, and the lock released in `finally` when the script throws.
-- **Skills:** `claude plugin eval` with free graders (`tool_used`, `regex`, `file_exists`) and
-  `--max-cost-usd 2`.
+- **Skills:** `claude plugin eval` with free graders (`tool_used`, `tool_order`, `regex`, `file_exists`) and
+  `--max-cost-usd 2`; in CI only by hand, one case per skill (about $0.61 a run; `evals/README.md`).
 - **CI:** GitHub Actions on macOS and Linux from the first story.
 
 ---

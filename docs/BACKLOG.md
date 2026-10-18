@@ -42,7 +42,7 @@ evals/                       scripts/publish.py
 | done | S-023 `sort` skill and `quill` |
 | done | S-024 `wand` skill, `seeker`, `wandmaker` |
 | done | S-025 `map` and `vow` skills |
-| todo | S-026 Skill evals and baseline cost |
+| done | S-026 Skill evals and baseline cost |
 | conditional | S-027 `brew-by-hand` (only if S-001 says so) |
 
 ---
@@ -505,11 +505,15 @@ only what the conversation says, writes `not discussed` rather than guessing, re
 and keeps each cost on its own line with its source. Evals: map, map with workflows off, vow; all 1.00 locally.
 
 ### S-026 · Skill evals and baseline cost
-Deps: S-021, S-022, S-023, S-024, S-025 · Files: `evals/`, `.github/workflows/ci.yml`
+Deps: S-021, S-022, S-023, S-024, S-025 · Files: `evals/`, `.github/workflows/ci.yml`, `tests/test_evals.py`
 Context: DESIGN § 8.5, § 9.
-- [ ] S-026/1 WHEN `claude plugin eval` runs THE SYSTEM SHALL use only free graders and `--max-cost-usd 2`
-- [ ] S-026/2 WHEN each skill's trigger phrases are given THE EVAL SHALL show the right skill used
-- [ ] S-026/3 (no test) `claude plugin details accio` shows about 2k tokens or less for all descriptions
+- [x] S-026/1 WHEN `claude plugin eval` runs THE SYSTEM SHALL use only free graders and `--max-cost-usd 2`
+- [x] S-026/2 WHEN each skill's trigger phrases are given THE EVAL SHALL show the right skill used
+- [x] S-026/3 (no test) `claude plugin details accio` shows about 2k tokens or less for all descriptions
+Done: each skill's evals were built with its own story (18 cases); this story adds the CI job (by hand only, since
+it spends API credit), a `ci` tag on one case per skill, and `tests/test_evals.py` (free graders, the $2 cap, every
+skill covered). Baseline: the `ci` cases score 1.00 for $0.61 a run; every case once is about $2; always-on context
+about 1,864 tokens. The first CI eval run waits for a GitHub remote and the `ANTHROPIC_API_KEY` secret.
 
 ### S-027 · `brew-by-hand` (conditional)
 Deps: S-020 · only for users with workflows off (spike verdict was GO) · Files: `skills/brew-by-hand/SKILL.md`

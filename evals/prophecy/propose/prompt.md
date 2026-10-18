@@ -1,6 +1,6 @@
 ---
 description: prophecy proposes only eligible stories, asks about the dropped dependency first, and writes nothing before go
-tags: [prophecy]
+tags: [prophecy, ci]
 runs: 2
 model: sonnet
 max_turns: 20
