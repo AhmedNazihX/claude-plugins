@@ -34,7 +34,7 @@ evals/                       scripts/publish.py
 | done | S-016 `session-start` |
 | done | S-028 `doc-size` and `librarian` |
 | todo | S-017 Build agents: `portkey`, `house-elf`, `prefect` |
-| todo | S-018 Review agents and findings template |
+| done | S-018 Review agents and findings template |
 | todo | S-019 `brew.js`: load, prepare, implement, check, outcome |
 | todo | S-020 `brew.js`: review, judge, fix rounds, budgets |
 | todo | S-021 `prophecy` skill |
@@ -357,13 +357,17 @@ file itself lives in `.accio/run/`, which code the story runs can reach; like cu
 mistakes and leaves a trail, not a determined agent.
 
 ### S-018 · Review agents and findings template
-Deps: S-017 · Files: `agents/{examiner,professor,auror,headmaster}.md`, `agents/references/findings-template.md`, `agents/references/checklists/`, `tests/test_agents.py`
+Deps: S-017 · Files: `agents/{examiner,professor,auror,headmaster}.md`, `references/findings-template.md`, `references/checklists/`, `tests/test_agents.py` (not under `agents/`: every `.md` there is read as an agent)
 Context: DESIGN § 3.4 steps 4–5, § 7.1, § 12.5; decision 011.
-- [ ] S-018/1 WHEN an agent file is loaded THE TEST SHALL find its model, tools and reply schema as in § 4.2 and § 12.5
-- [ ] S-018/2 (no test) the findings template holds severity, confidence, `file:line`, claim, failure scenario and DoD tag
-- [ ] S-018/3 (no test) `examiner` checks the DoD line by line and judges only whether each tagged test checks its line
-- [ ] S-018/4 (no test) each reviewer lists the false positives it ignores and the ≥ 80 confidence rule
-- [ ] S-018/5 (no test) the story's risk flag picks method checklists (performance, data migration, auth and security, accessibility) that list what an expert runs or inspects, not a persona (decision 011)
+- [x] S-018/1 WHEN an agent file is loaded THE TEST SHALL find its model, tools and reply schema as in § 4.2 and § 12.5
+- [x] S-018/2 (no test) the findings template holds severity, confidence, `file:line`, claim, failure scenario and DoD tag
+- [x] S-018/3 (no test) `examiner` checks the DoD line by line and judges only whether each tagged test checks its line
+- [x] S-018/4 (no test) each reviewer lists the false positives it ignores and the ≥ 80 confidence rule
+- [x] S-018/5 (no test) the story's risk flag picks method checklists (performance, data migration, auth and security, accessibility) that list what an expert runs or inspects, not a persona (decision 011)
+Done: one review round. Findings carry an id and a status, so a fix round marks each `resolved` or `open`, and
+reviewers judge only the fix diff then. Severity is defined for spec, quality and security alike; tagged tests are
+examiner's alone. Risk words match whole. The template and checklists live in `references/` (shipped), not under
+`agents/`. A test checks every agent's tools against curfew's lists.
 
 ### S-019 · `brew.js`: load, prepare, implement, check, outcome
 Deps: S-001, S-017 · Files: `workflows/brew.js`, `tests/workflow/brew-core.test.mjs`, `tests/workflow/stub.mjs`

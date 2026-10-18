@@ -256,7 +256,7 @@ The build itself is the workflow `/accio:brew` (§ 4.3), not a skill.
 | `examiner` | spec reviewer and backlog checker | Sonnet | read-only plus Write to its findings path | `{verdict, counts, path}` |
 | `professor` | quality reviewer | Sonnet | same as examiner | same |
 | `auror` | security reviewer (risky paths) | Sonnet | same as examiner | same |
-| `headmaster` | judge | Sonnet | read-only plus Write to the ledger | `{ruling | question}` |
+| `headmaster` | judge | Sonnet | Read, Grep, Glob; Bash (only `accio-ledger key/check/record`); Write (only `run/questions/`) | `{ruling | question}` |
 | `quill` | writes story files from the design (in `sort`) | Sonnet | Read, Write to `.accio/stories/` | `stories: N · summary: <path>` |
 | `librarian` | doc lookups, quotes only | Haiku | Read, Grep | quotes with `file:line` |
 

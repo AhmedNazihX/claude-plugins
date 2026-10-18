@@ -13,7 +13,7 @@ import sys
 PLUGIN_NAME = "accio"
 DEFAULT_SOURCE = pathlib.Path(__file__).resolve().parents[1]
 DEFAULT_DEST = pathlib.Path.home() / "Workspace" / "claude-plugins-release"
-SHIPPED = (".claude-plugin", "agents", "skills", "workflows", "hooks", "bin", "README.md")
+SHIPPED = (".claude-plugin", "agents", "references", "skills", "workflows", "hooks", "bin", "README.md")
 MARKETPLACE = pathlib.Path(".claude-plugin") / "marketplace.json"
 REQUIRED_MANIFEST_KEYS = ("version", "description")
 REGULAR_FILE_MODES = ("100644", "100755")
