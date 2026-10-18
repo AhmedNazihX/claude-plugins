@@ -37,7 +37,7 @@ evals/                       scripts/publish.py
 | done | S-018 Review agents and findings template |
 | done | S-019 `brew.js`: load, prepare, implement, check, outcome |
 | done | S-020 `brew.js`: review, judge, fix rounds, budgets |
-| todo | S-021 `prophecy` skill |
+| done | S-021 `prophecy` skill |
 | todo | S-022 `owl` skill |
 | todo | S-023 `sort` skill and `quill` |
 | todo | S-024 `wand` skill, `seeker`, `wandmaker` |
@@ -413,14 +413,21 @@ key's panel now includes `risk` and `risky_paths`. The table lists stories in lo
 provisional): it caps agents, not the story.
 
 ### S-021 · `prophecy` skill
-Deps: S-004, S-005 · Files: `skills/prophecy/SKILL.md`, `skills/prophecy/references/`, `evals/prophecy/`
+Deps: S-004, S-005 · Files: `skills/prophecy/SKILL.md`, `skills/prophecy/references/`, `evals/prophecy/`, `bin/accio-board` (`plan`, `go`), `bin/accio_lib/plan.py`, `tests/test_plan.py`
 Context: DESIGN § 3.3, § 7.3.
-- [ ] S-021/1 (no test) proposes at most 8 eligible stories (deps done, or stacked within 2 levels), never a dropped one
-- [ ] S-021/2 (no test) asks one question at a time in the `decisions.md` format and bundles low-stakes defaults
-- [ ] S-021/3 (no test) asks about stories whose dependency was dropped
-- [ ] S-021/4 (no test) on "go", moves the stories to Ready, writes `iterations/<N>.md`, commits, and tells the user to type `/accio:brew`
-- [ ] S-021/5 (no test) SKILL.md is at most about 80 lines
-- [ ] S-021/6 (no test) when the `Workflow` tool is missing from its tool list, points to `/accio:brew-by-hand` instead of `/accio:brew`
+- [x] S-021/1 (no test) proposes at most 8 eligible stories (deps done, or stacked within 2 levels), never a dropped one
+- [x] S-021/2 (no test) asks one question at a time in the `decisions.md` format and bundles low-stakes defaults
+- [x] S-021/3 (no test) asks about stories whose dependency was dropped
+- [x] S-021/4 (no test) on "go", moves the stories to Ready, writes `iterations/<N>.md`, commits, and tells the user to type `/accio:brew`
+- [x] S-021/5 (no test) SKILL.md is at most about 80 lines
+- [x] S-021/6 (no test) when the `Workflow` tool is missing from its tool list, points to `/accio:brew-by-hand` instead of `/accio:brew`
+Done: two review rounds (code and skill) and a focused re-review. The rules live in scripts: `accio-board plan`
+proposes (eligible, held with why, dropped deps, waiting, an open iteration) and `accio-board go` makes the chosen
+set exactly the iteration (other Ready stories go back to Backlog; a planned-but-unbuilt iteration is planned again
+in place), all or nothing, and commits its files plus the story files the skill edited (`--also`) with
+`git commit --only`. Outside a build the story file holds the status, so prophecy writes it there. Evals (4 cases,
+free graders, all 1.00 locally, about $1 in all): the plugin's `bin/` isn't on PATH in eval runs, so skills call
+`${CLAUDE_PLUGIN_ROOT}/bin/<script>`; on macOS the eval sandbox breaks the `xcrun` git shim (see `evals/README.md`).
 
 ### S-022 · `owl` skill
 Deps: S-008, S-010, S-012 · Files: `skills/owl/SKILL.md`, `skills/owl/references/`, `evals/owl/`

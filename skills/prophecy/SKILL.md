@@ -59,13 +59,14 @@ Before "go", the only writes are the step-4 edits to story files. Never run `acc
 On "go":
 1. Run `${CLAUDE_PLUGIN_ROOT}/bin/accio-board go <ID> … [--track <ID>=<track> …] [--also <story file> …]`, with
    one `--also` per story file you edited in step 4. It sets the stories to Ready, returns any other Ready story to
-   Backlog (`returned`: tell the user), writes the iteration and board files, all or nothing, and commits exactly
-   those files. If it refuses (`accio-board: …`):
+   Backlog (`returned`: tell the user), writes the story, iteration and board files, all or nothing, and commits
+   exactly those plus the `--also` files. If it refuses (`accio-board: …`):
    - a build is running: say to plan after it ends, and stop
    - it cannot write: show the error and stop; nothing was changed, don't retry
    - a story can't go: say which and why, from the message, and ask for go again; never change the set yourself
-2. If its reply has a `commit_error` (a git hook refused), the plan is written but not committed: report the error
-   with the fix as "What I need from you", and don't hand over the build until it is committed.
+   - a bad `--also`: you passed a file that isn't a story file; fix the list and run it again
+2. If its reply has a `commit_error`, the plan is written but git didn't commit it (a hook refused, or no repo):
+   report git's message with the fix as "What I need from you", and don't hand over the build until it is committed.
 3. Otherwise end in the report format:
 
 ```

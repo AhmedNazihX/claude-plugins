@@ -13,7 +13,7 @@ import unittest
 
 from support import ROOT, git, init_repo, write
 
-from accio_lib import story
+from accio_lib import plan, story
 
 BOARD = ROOT / "bin" / "accio-board"
 
@@ -162,13 +162,47 @@ class PlanTest(unittest.TestCase):
         edited.write_text(edited.read_text().replace("status: backlog", "status: dropped\ndropped: not needed"))
         write(self.repo / "notes.txt", "mine\n")
         git(self.repo, "add", "notes.txt")
+        write(self.repo / "scratch.txt", "untracked\n")
         reply = self.go("S-001", "--also", ".accio/stories/S-004.md")
         self.assertEqual(git(self.repo, "log", "-1", "--format=%s"), "chore(accio): plan iteration 1")
         self.assertEqual(reply["commit"], git(self.repo, "rev-parse", "HEAD"))
         committed = set(git(self.repo, "show", "--name-only", "--format=", "HEAD").splitlines())
         self.assertEqual(committed, {".accio/stories/S-001.md", ".accio/stories/S-004.md", ".accio/iterations/1.md",
                                      ".accio/board.md"})
-        self.assertEqual(git(self.repo, "status", "--porcelain"), "A  notes.txt")
+        self.assertEqual(git(self.repo, "status", "--porcelain").splitlines(), ["A  notes.txt", "?? scratch.txt"])
+
+    def test_S_021_4_planning_the_same_set_again_is_not_a_commit_error(self):
+        self.add("S-001")
+        first = self.go("S-001")
+        again = self.go("S-001")
+        self.assertEqual((again["commit"], again["commit_error"]), (first["commit"], None))
+
+    def test_S_021_4_a_refused_commit_leaves_nothing_staged(self):
+        self.add("S-001")
+        hook = self.repo / ".git" / "hooks" / "pre-commit"
+        write(hook, "#!/bin/sh\nexit 1\n")
+        hook.chmod(0o755)
+        self.go("S-001")
+        self.assertEqual(git(self.repo, "diff", "--cached", "--name-only"), "")
+
+    def test_a_failed_write_leaves_no_temp_file(self):
+        self.add("S-001")
+        self.add("S-002")
+        real_chmod, calls = plan.os.chmod, []
+
+        def failing_chmod(path, mode):
+            calls.append(path)
+            if len(calls) == 2:
+                raise OSError("disk full")
+            real_chmod(path, mode)
+
+        plan.os.chmod = failing_chmod
+        try:
+            with self.assertRaises(plan.PlanError):
+                plan._write_all({self.accio / "stories" / "S-001.md": "a", self.accio / "stories" / "S-002.md": "b"})
+        finally:
+            plan.os.chmod = real_chmod
+        self.assertEqual(sorted(path.name for path in (self.accio / "stories").iterdir()), ["S-001.md", "S-002.md"])
 
     def test_S_021_4_also_takes_only_story_files(self):
         self.add("S-001")

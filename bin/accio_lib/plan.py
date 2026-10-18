@@ -10,8 +10,9 @@
   build never takes a story the user left out. An iteration planned but not built yet (its outcome is still the
   placeholder and its stories are still Ready) is planned again under its own number. It writes
   `iterations/<N>.md` and `board.md`, all or nothing, then commits exactly those files plus the story files the
-  skill edited (`--also`), with `git commit --only`, so nothing else the user staged goes in. A commit a hook
-  refuses leaves the plan written and says why. It refuses while a build holds the run lock: then
+  skill edited (`--also`), with `git commit --only`, so nothing else the user staged goes in (each listed file goes
+  in whole, hand edits included). Files that already match HEAD need no commit. A commit git refuses (a hook, no
+  repo) leaves the plan written, unstaged, and says why. It refuses while a build holds the run lock: then
   run/status.json, not the story file, holds the status.
 - Values are changed in place: a line's trailing comment, the file's line endings and its mode are kept.
 """
@@ -174,10 +175,29 @@ def _read_bytes(target):
 def _stage(target, text):
     """A temp file beside `target` holding `text`, with the target's mode (or DEFAULT_MODE for a new file)."""
     handle, temporary = tempfile.mkstemp(dir=os.path.dirname(target), prefix=".accio-")
-    with os.fdopen(handle, "w", encoding="utf-8", newline="") as stream:
-        stream.write(text)
-    os.chmod(temporary, os.stat(target).st_mode & 0o777 if os.path.exists(target) else DEFAULT_MODE)
+    try:
+        with os.fdopen(handle, "w", encoding="utf-8", newline="") as stream:
+            stream.write(text)
+        os.chmod(temporary, os.stat(target).st_mode & 0o777 if os.path.exists(target) else DEFAULT_MODE)
+    except OSError:
+        os.unlink(temporary)
+        raise
     return temporary
+
+
+def _restore(swapped, originals):
+    """Put back what was swapped in; returns the files that couldn't be put back."""
+    failed = []
+    for target in swapped:
+        try:
+            if originals[target] is None:
+                os.unlink(target)
+            else:
+                with open(target, "wb") as stream:
+                    stream.write(originals[target])
+        except OSError:
+            failed.append(target)
+    return failed
 
 
 def _write_all(texts):
@@ -195,12 +215,10 @@ def _write_all(texts):
         for target, temporary in staged.items():
             if target not in swapped and os.path.exists(temporary):
                 os.unlink(temporary)
-        for target in swapped:
-            if originals[target] is None:
-                os.unlink(target)
-            else:
-                with open(target, "wb") as stream:
-                    stream.write(originals[target])
+        failed = _restore(swapped, originals)
+        if failed:
+            raise PlanError(f"cannot write the iteration ({error}), and these files couldn't be put back: "
+                            f"{', '.join(failed)}; `git checkout -- <file>` restores them") from error
         raise PlanError(f"cannot write the iteration ({error}); nothing was changed") from error
 
 
@@ -232,13 +250,19 @@ def _git(root, *args):
 
 
 def _commit(root, files, number):
-    """Commit exactly `files`; returns (commit id, None) or (None, why it failed)."""
+    """Commit exactly `files`; returns (commit id, None) or (None, git's reason). Unchanged files need no commit; a
+    refused commit is unstaged again, so the user's next commit doesn't take the plan by surprise."""
     names = [os.path.relpath(os.path.realpath(path), os.path.realpath(root)) for path in files]
-    for step in (("add", "--", *names), ("commit", "-q", "-m", COMMIT_MESSAGE.format(number=number), "--only", "--",
-                                         *names)):
-        result = _git(root, *step)
-        if result.returncode != 0:
-            return None, (result.stderr or result.stdout).strip() or f"git {step[0]} failed"
+    added = _git(root, "add", "--", *names)
+    if added.returncode != 0:
+        return None, (added.stderr or added.stdout).strip() or "git add failed"
+    head = _git(root, "rev-parse", "--verify", "--quiet", "HEAD").stdout.strip()
+    if head and _git(root, "diff", "--cached", "--quiet", "HEAD", "--", *names).returncode == 0:
+        return head, None
+    committed = _git(root, "commit", "-q", "-m", COMMIT_MESSAGE.format(number=number), "--only", "--", *names)
+    if committed.returncode != 0:
+        _git(root, *(("reset", "-q", "--", *names) if head else ("rm", "-q", "--cached", "--", *names)))
+        return None, (committed.stderr or committed.stdout).strip() or "git commit failed"
     return _git(root, "rev-parse", "HEAD").stdout.strip(), None
 
 
