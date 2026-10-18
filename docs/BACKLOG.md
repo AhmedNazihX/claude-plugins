@@ -29,7 +29,7 @@ evals/                       scripts/publish.py
 | done | S-011 Secret patterns and `pre-commit` |
 | done | S-012 `accio-hooks`: install, chain, verify, `pre-push` |
 | done | S-013 `protego` |
-| todo | S-014 `fidelius` |
+| done | S-014 `fidelius` |
 | todo | S-015 `curfew`: permission policy and worktree claims |
 | todo | S-016 `session-start` |
 | todo | S-028 `doc-size` and `librarian` |
@@ -248,10 +248,16 @@ other than a final `*` in `rm` targets; `$(…)` inside an unquoted heredoc body
 `$(…)`; `CDPATH`; a shell started inside `.git`.
 
 ### S-014 · `fidelius`
-Deps: S-011, S-013 · Files: `hooks/fidelius.py`, `hooks/hooks.json`, `tests/test_fidelius.py`
+Deps: S-011, S-013 · Files: `hooks/fidelius.py`, `hooks/hooks.json`, `bin/accio_lib/secret_scan.py`, `tests/test_fidelius.py`
 Context: DESIGN § 4.4, § 6.
-- [ ] S-014/1 WHEN Write/Edit content holds a reported secret THE SYSTEM SHALL exit 2 without echoing the value
-- [ ] S-014/2 WHEN the repo has no `.accio/` THE SYSTEM SHALL exit 0 silently
+- [x] S-014/1 WHEN Write/Edit content holds a reported secret THE SYSTEM SHALL exit 2 without echoing the value
+- [x] S-014/2 WHEN the repo has no `.accio/` THE SYSTEM SHALL exit 0 silently
+Done: two review rounds. A Write is checked whole; an Edit/MultiEdit as the file would read after it, skipping
+only as many occurrences of a value as were already there (a second key under the same PEM header counts). A real
+env file is exempt only when its resolved name is env-shaped with no template word and git ignores it (checked
+from its nearest existing folder). The repo is found from `cwd` and from the file's folder. **Open notes:** MCP
+filesystem write tools aren't matched; a file that isn't UTF-8 or is over 2 MB falls back to the new strings (the
+commit scan backs it up); a lone private-key header in prose blocks.
 
 ### S-015 · `curfew`: permission policy and worktree claims
 Deps: S-003, S-013 · Files: `hooks/curfew.py`, `hooks/hooks.json`, `bin/accio-claim`, `bin/accio_lib/policy.py`, `tests/test_curfew.py`

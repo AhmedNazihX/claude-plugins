@@ -20,6 +20,7 @@ installed, adds its own rules on top.
 """
 import base64
 import binascii
+import collections
 import dataclasses
 import json
 import re
@@ -120,8 +121,8 @@ def mask(secret):
     return f"{secret[:VISIBLE_PREFIX]}…"
 
 
-def find_secrets(text, path=""):
-    """Every recognisable secret, with its line and a masked preview; an earlier pattern wins an overlap."""
+def _matches(text):
+    """(start, name, value) of every secret; an earlier pattern wins an overlap."""
     matches = []
     for name, pattern, is_secret in PATTERNS:
         for match in pattern.finditer(text):
@@ -132,8 +133,26 @@ def find_secrets(text, path=""):
     for start, end, name, value in matches:
         if not any(start < k_end and k_start < end for k_start, k_end, _, _ in kept):
             kept.append((start, end, name, value))
-    return tuple(Finding(name=name, line=text.count("\n", 0, start) + 1, preview=mask(value), path=path)
-                 for start, end, name, value in kept)
+    return tuple((start, name, value) for start, _, name, value in kept)
+
+
+def secret_values(text):
+    """How often each raw secret occurs in `text`, only for comparing two texts; never print them."""
+    return collections.Counter(value for _, _, value in _matches(text))
+
+
+def find_secrets(text, path="", known=None):
+    """Every recognisable secret, with its line and a masked preview. `known` counts occurrences to skip (a value
+    already in the file before an edit); one more occurrence than known is still found, so a second private key
+    under the same header counts."""
+    remaining = collections.Counter(known or {})
+    findings = []
+    for start, name, value in _matches(text):
+        if remaining[value] > 0:
+            remaining[value] -= 1
+            continue
+        findings.append(Finding(name=name, line=text.count("\n", 0, start) + 1, preview=mask(value), path=path))
+    return tuple(findings)
 
 
 def describe(path, findings):
