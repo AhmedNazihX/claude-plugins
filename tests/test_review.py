@@ -118,7 +118,7 @@ class ReviewPackageTest(unittest.TestCase):
         self.build('.github/workflows/de"ploy\tci.yml', "on: push\n")
         reply, text = self.package()
         self.assertIs(reply["risky"], True)
-        self.assertIn('.github/workflows/de"ploy', text)
+        self.assertIn('- `.github/workflows/de"ploy\tci.yml`\n', text)
 
     def test_S_020_5_in_a_fix_round_risky_means_the_fix_diff_touches_a_risky_path(self):
         self.story(files="src/a.py, src/b.py, src/auth/login.py")
@@ -156,11 +156,14 @@ class ReviewPackageTest(unittest.TestCase):
         self.brief()
         self.build()
         (self.accio / "run" / "S-001" / "base").unlink()
-        write(self.accio / "config.json", json.dumps({"base_branch": "gone"}))
+        lonely = git(self.repo, "commit-tree", git(self.repo, "rev-parse", "HEAD^{tree}"), "-m", "no shared history")
+        git(self.repo, "branch", "lonely", lonely)  # a base the story shares no history with: merge-base fails
+        write(self.accio / "config.json", json.dumps({"base_branch": "lonely"}))
         result = self.brief("--review", check=False)
         self.assertEqual(result.returncode, 1)
         self.assertIn("accio-brief:", result.stderr)
         self.assertNotIn("Traceback", result.stderr)
+        self.assertIn("where S-001's diff starts", result.stderr)
 
     def other_commit(self):
         write(self.repo / "src" / "other.py", "x = 1\n")
