@@ -16,9 +16,14 @@ Scripts, not a model, decide these, so an agent's claim never does:
   path with its status code and mode, plus its content hash (tracked and untracked files up to MAX_HASHED_BYTES),
   its size and change time (ignored or bigger files), a listing of the files inside (an ignored folder, up to
   MAX_LISTED_FILES) or its target (a symlink). After the story, any difference is `main_changed` (`HEAD` for a
-  commit), and a moved `origin/<base>` is `remote_moved`. `.accio/run/` is left out: the run writes there.
-- **diff start:** the base `accio-brief` recorded for the story (its parent's head when stacked), never a caller's
-  choice, and the same one `accio-ledger key` uses; the merge-base with the base branch when none is recorded.
+  commit; `git refs`, `git config` or `git hooks` when those change), and a moved `origin/<base>` is
+  `remote_moved`. `.accio/run/` is left out, since the run writes there, except `push-ok` and each story's `base`,
+  which nothing writes during a story. Times are recorded with `ctime`, which can't be set back.
+  **Limit:** the snapshot file lives in `.accio/run/` too, so code the story runs could rewrite it; like curfew
+  (DESIGN § 6), this catches mistakes and leaves a trail, not a determined agent.
+- **diff start:** the base `accio-brief` recorded for the story (its parent's head when stacked), when it is a full
+  commit id and an ancestor of the story's HEAD; never a caller's choice, and the same one `accio-ledger key` uses;
+  the merge-base with the base branch otherwise.
 - **test audit:** "not audited" until the mutation tool contract is settled (S-017/8, decision 011).
 """
 import hashlib
@@ -41,6 +46,9 @@ CODE_EXTENSIONS = frozenset({"py", "js", "jsx", "ts", "tsx", "mjs", "cjs", "go",
 DATA_EXTENSIONS = frozenset({"json", "yaml", "yml", "toml", "csv", "tsv", "txt", "xml", "html", "md", "snap", "plist",
                              "golden", "ini", "cfg", "png", "jpg", "jpeg", "gif", "svg", "pdf"})  # fixtures
 RUN_FOLDER = ".accio/run/"
+WATCHED_RUN_FILES = ("push-ok", "*/base")  # nothing writes these during a story
+COMMIT_ID = re.compile(r"[0-9a-f]{40}|[0-9a-f]{64}")
+STORY_REFS = b"refs/heads/story/"  # story branches move with every checkpoint commit
 SNAPSHOT_NAME = "main-snapshot.json"
 CHECK_TIMEOUT_SECONDS = 9 * 60  # for all of a story's checks together
 MAX_TEST_BYTES = 1_000_000
@@ -130,12 +138,28 @@ def test_texts(worktree):
     return texts
 
 
+def trusted_base(run_dir, worktree):
+    """The base accio-brief recorded, when it is a full commit id and an ancestor of the story's HEAD; else None
+    (the run folder is reachable from code the story runs, so the record is checked, not trusted)."""
+    recorded = brief.recorded_base(run_dir)
+    if not recorded or not COMMIT_ID.fullmatch(recorded):
+        return None
+    result = subprocess.run(["git", "merge-base", "--is-ancestor", recorded, "HEAD"], cwd=worktree,
+                            capture_output=True, check=False)
+    return recorded if result.returncode == 0 else None
+
+
 def diff_start(run_dir, worktree, base_branch):
-    """Where the story's diff starts: the base accio-brief recorded, else the merge-base with the base branch."""
-    return brief.recorded_base(run_dir) or _git(worktree, "merge-base", base_branch, "HEAD").decode().strip()
+    """Where the story's diff starts: the trusted recorded base, else the merge-base with the base branch."""
+    return trusted_base(run_dir, worktree) or _git(worktree, "merge-base", base_branch, "HEAD").decode().strip()
 
 
 # --- the main checkout ---------------------------------------------------------------------------------------------
+
+def _stat_line(stat):
+    """Size, change and status-change time: `ctime` can't be set back the way `mtime` can (`touch -d`)."""
+    return f"{stat.st_size}|{stat.st_mtime_ns}|{stat.st_ctime_ns}"
+
 
 def _folder_listing(folder):
     """A hash of every file under an (ignored) folder by path, size and change time; "many files" past the cap."""
@@ -143,7 +167,7 @@ def _folder_listing(folder):
     for root, _, names in os.walk(folder):
         for name in names:
             stat = os.lstat(os.path.join(root, name))
-            rows.append(f"{os.path.relpath(os.path.join(root, name), folder)}|{stat.st_size}|{stat.st_mtime_ns}")
+            rows.append(f"{os.path.relpath(os.path.join(root, name), folder)}|{_stat_line(stat)}")
             if len(rows) > MAX_LISTED_FILES:
                 return "many files"
     return hashlib.sha256("\n".join(sorted(rows)).encode()).hexdigest()
@@ -155,7 +179,7 @@ def _content(file, stat, ignored):
     if file.is_dir():
         return _folder_listing(file)
     if ignored or stat.st_size > MAX_HASHED_BYTES:
-        return f"{stat.st_size}|{stat.st_mtime_ns}"
+        return _stat_line(stat)
     return hashlib.sha256(file.read_bytes()).hexdigest()
 
 
@@ -176,10 +200,29 @@ def _ref(main, ref):
         return None
 
 
+def _git_state(main):
+    """Hashes of what git itself runs or trusts: every ref but the story branches, the config, the hooks folder."""
+    common = pathlib.Path(_git(main, "rev-parse", "--path-format=absolute", "--git-common-dir").decode().strip())
+    hooks = pathlib.Path(_git(main, "rev-parse", "--path-format=absolute", "--git-path", "hooks").decode().strip())
+    config = common / "config"
+    refs = [line for line in _git(main, "for-each-ref", "--format=%(refname) %(objectname)").splitlines()
+            if not line.startswith(STORY_REFS)]
+    return {"git refs": hashlib.sha256(b"\n".join(refs)).hexdigest(),
+            "git config": hashlib.sha256(config.read_bytes()).hexdigest() if config.is_file() else "missing",
+            "git hooks": _folder_listing(hooks) if hooks.is_dir() else "missing"}
+
+
+def _watched_run_files(main):
+    run = pathlib.Path(main) / RUN_FOLDER
+    found = [path for pattern in WATCHED_RUN_FILES for path in run.glob(pattern)]
+    return {str(path.relative_to(main)): _record(main, "run", str(path.relative_to(main))) for path in found}
+
+
 def snapshot(main, base_branch):
     dirty = {path: _record(main, code, path) for code, path in merge.status_entries(main)
              if not path.startswith(RUN_FOLDER) and path != RUN_FOLDER.rstrip("/")}
-    return {"head": _ref(main, "HEAD"), "dirty": dirty, "origin": _ref(main, f"refs/remotes/origin/{base_branch}")}
+    return {"head": _ref(main, "HEAD"), "dirty": {**dirty, **_watched_run_files(main)}, "git": _git_state(main),
+            "origin": _ref(main, f"refs/remotes/origin/{base_branch}")}
 
 
 def compare(before, after):
@@ -187,7 +230,9 @@ def compare(before, after):
     paths = sorted(path for path in set(before["dirty"]) | set(after["dirty"])
                    if before["dirty"].get(path) != after["dirty"].get(path))
     moved_head = ["HEAD"] if before["head"] != after["head"] else []
-    return moved_head + paths, before["origin"] != after["origin"]
+    git_state = [name for name in sorted(after.get("git", {}))
+                 if before.get("git", {}).get(name) != after["git"][name]]
+    return moved_head + git_state + paths, before["origin"] != after["origin"]
 
 
 # --- the whole check -----------------------------------------------------------------------------------------------

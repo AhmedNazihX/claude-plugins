@@ -1,6 +1,7 @@
 """S-017: prefect's check script (`accio_lib.checks`, `bin/accio-check`) and the build agents' files
 (DESIGN § 3.4 steps 0-3 and 7, § 4.2, § 7.1, § 12.5)."""
 import json
+import os
 import pathlib
 import subprocess
 import sys
@@ -176,6 +177,34 @@ class SnapshotTest(CheckTestBase):
         from_merge_base = run()
         write(self.accio / "run" / "S-001" / "base", git(self.worktree, "rev-parse", "HEAD") + "\n")
         self.assertNotEqual(run(), from_merge_base)
+
+    def test_S_017_4_refs_git_config_hooks_and_the_runs_control_files_are_watched(self):
+        self.check("S-001", "snapshot")
+        before = json.loads((self.accio / "run" / "S-001" / "main-snapshot.json").read_text(encoding="utf-8"))
+        git(self.repo, "branch", "sneaky")
+        git(self.repo, "config", "core.fsmonitor", "touch x")
+        write(self.repo / ".git" / "hooks" / "pre-push", "#!/bin/sh\nexit 0\n")
+        write(self.accio / "run" / "push-ok", "abc\n")
+        write(self.accio / "run" / "S-001" / "base", "0" * 40 + "\n")
+        changed = checks.compare(before, checks.snapshot(self.repo, "main"))[0]
+        for name in ("git refs", "git config", "git hooks", ".accio/run/push-ok", ".accio/run/S-001/base"):
+            self.assertIn(name, changed)
+
+    def test_S_017_4_a_touched_back_ignored_file_still_counts(self):
+        write(self.repo / ".env", "KEY=one\n")
+        self.check("S-001", "snapshot")
+        before = json.loads((self.accio / "run" / "S-001" / "main-snapshot.json").read_text(encoding="utf-8"))
+        stat = (self.repo / ".env").stat()
+        write(self.repo / ".env", "KEY=two\n")
+        os.utime(self.repo / ".env", ns=(stat.st_atime_ns, stat.st_mtime_ns))
+        self.assertIn(".env", checks.compare(before, checks.snapshot(self.repo, "main"))[0])
+
+    def test_a_recorded_base_that_isnt_an_ancestor_is_not_trusted(self):
+        run_dir = self.accio / "run" / "S-001"
+        merge_base = git(self.repo, "rev-parse", "main")
+        for bad in ("HEAD~1", "--output=/tmp/x", "f" * 40):
+            write(run_dir / "base", bad + "\n")
+            self.assertEqual(checks.diff_start(run_dir, self.worktree, "main"), merge_base, bad)
 
     def test_S_017_4_a_change_that_is_only_staged_counts(self):
         write(self.repo / "src" / "a.py", "value = 5\n")

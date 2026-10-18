@@ -350,6 +350,11 @@ layouts and never dot-folders. **/8 waits on the user:** how a project's mutatio
 (option A recommended: `mutation.command` in config.json with `{diff}`, survivors as `file:line`, so `weak_tests`
 lists `file:line`). Open notes: `src/ABTest.kt` reads as a test; a stacked child with no recorded base falls back to
 the merge-base.
+Follow-up (automated review after merge): the snapshot also watches every ref but the story branches, the git
+config, the hooks folder, `run/push-ok` and each story's `run/<ID>/base`, with `ctime` (which can't be set back);
+a recorded base counts only as a full commit id that is an ancestor of the story's HEAD. **Limit:** the snapshot
+file itself lives in `.accio/run/`, which code the story runs can reach; like curfew (DESIGN § 6) it catches
+mistakes and leaves a trail, not a determined agent.
 
 ### S-018 · Review agents and findings template
 Deps: S-017 · Files: `agents/{examiner,professor,auror,headmaster}.md`, `agents/references/findings-template.md`, `agents/references/checklists/`, `tests/test_agents.py`
