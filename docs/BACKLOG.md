@@ -33,7 +33,7 @@ evals/                       scripts/publish.py
 | done | S-015 `curfew`: permission policy and worktree claims |
 | done | S-016 `session-start` |
 | done | S-028 `doc-size` and `librarian` |
-| todo | S-017 Build agents: `portkey`, `house-elf`, `prefect` |
+| done | S-017 Build agents: `portkey`, `house-elf`, `prefect` |
 | done | S-018 Review agents and findings template |
 | done | S-019 `brew.js`: load, prepare, implement, check, outcome |
 | todo | S-020 `brew.js`: review, judge, fix rounds, budgets |
@@ -341,14 +341,14 @@ Context: DESIGN § 3.4 steps 0–3 and 7, § 4.2, § 7.1, § 12.5; decision 011.
 - [x] S-017/5 (no test) each agent file sets the model from § 4.2, the tools from § 4.2 and the reply schema from § 12.5
 - [x] S-017/6 WHEN `origin/<base>` moved during the story THE SYSTEM SHALL set `remote_moved` and the story goes to Blocked
 - [x] S-017/7 (no test) `house-elf`'s prompt makes `accio-claim <ID>` its first command and states the `cd <worktree> &&` rule
-- [ ] S-017/8 WHEN the project's mutation tool (set in `config.json`), run on the story's changed lines only, leaves a mutant that no tagged test catches THE SYSTEM SHALL list it in `weak_tests`, and report "not audited" when no tool is set (decision 011)
+- [x] S-017/8 WHEN the project's mutation tool (set in `config.json`), run on the story's changed lines only, leaves a mutant that no tagged test catches THE SYSTEM SHALL list it in `weak_tests`, and report "not audited" when no tool is set (decision 011)
 Status (2026-10-18): /1-/7 done after three review rounds (`accio-check`, `checks.py`, the three agents). The main
 snapshot is write-once per brief (only portkey takes it; prefect runs exactly `accio-check <ID>`); the diff starts
 where `accio-brief` recorded it, for the check and the ledger key alike; all checks share one 9-min budget (prefect's
 Bash call stops at 10 min; longer suites need the workflow to run checks itself, S-019); test areas follow common
-layouts and never dot-folders. **/8 waits on the user:** how a project's mutation tool is called and reports
-(option A recommended: `mutation.command` in config.json with `{diff}`, survivors as `file:line`, so `weak_tests`
-lists `file:line`). Open notes: `src/ABTest.kt` reads as a test; a stacked child with no recorded base falls back to
+layouts and never dot-folders. /8 done with the user's option A (decision 011 amended): `mutation.command` in
+config.json with `{diff}`; survivors printed as `file:line …` become `weak_tests` and fail the story; a tool that
+fails is "failed" and doesn't. Open notes: `src/ABTest.kt` reads as a test; a stacked child with no recorded base falls back to
 the merge-base.
 Follow-up (automated review after merge): the snapshot also watches every ref but the story branches, the git
 config, the hooks folder, `run/push-ok` and each story's `run/<ID>/base`, with `ctime` (which can't be set back);

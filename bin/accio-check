@@ -49,7 +49,7 @@ def _check(main, accio, worktree, story_id, settings):
         raise checks.CheckError(f"cannot read {path}: {error}") from error
     parsed = story.parse(accio / "stories" / f"{story_id}.md")
     start = checks.diff_start(accio / "run" / story_id, worktree, settings["base_branch"])
-    return checks.run(main, worktree, parsed, start, settings, before)
+    return checks.run(main, worktree, parsed, start, settings, before, accio / "run" / story_id)
 
 
 def main(argv=None):

@@ -17,6 +17,7 @@ DEFAULTS = freeze({
     "stack_depth": 2,
     "agent_allow": [],
     "paid_call_cap_usd": 0,
+    "mutation": None,
 })
 
 
@@ -58,6 +59,14 @@ def _check_budgets(value):
     return None
 
 
+def _check_mutation(value):
+    if value is None:
+        return None
+    if not isinstance(value, dict) or set(value) != {"command"} or not isinstance(value["command"], str):
+        return 'must be {"command": "<the mutation tool, with {diff} where the story\'s diff file goes>"}'
+    return None if "{diff}" in value["command"] else "command must contain {diff}, where the story's diff file goes"
+
+
 CHECKERS = {
     "base_branch": lambda v: None if isinstance(v, str) and v.strip() else "must be a branch name",
     "push_mode": lambda v: None if v in PUSH_MODES else f"must be one of {', '.join(PUSH_MODES)} (\"pr\" comes in v2)",
@@ -70,6 +79,7 @@ CHECKERS = {
     "agent_allow": lambda v: None if _strings(v) else "must be a list of command strings",
     "paid_call_cap_usd": lambda v: None if isinstance(v, (int, float)) and not isinstance(v, bool) and v >= 0
     else "must be a number, 0 or more",
+    "mutation": _check_mutation,
 }
 
 

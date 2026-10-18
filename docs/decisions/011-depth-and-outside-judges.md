@@ -17,6 +17,12 @@ accio's principle P5: "Do not ask the model to judge itself", ideally a judge th
    *Amended the same day (side-agent review, decided by the user):* the first version reverted the story's whole
    change at once. That is too blunt: reverting a new file makes every test fail to load, which counts as
    "failed", so it would have caught almost none of those weak tests.
+   *Contract, decided by the user on 2026-10-18 (option A of three: a config command / accio's own engine / defer):*
+   `mutation.command` in `config.json` names the tool's command with `{diff}` where the story's diff file goes.
+   The tool mutates only the changed lines (natively, like `cargo mutants --in-diff`, or through a small wrapper
+   for Stryker or mutmut) and prints each surviving mutant on its own line starting `file:line`. `weak_tests` lists
+   those lines: no tool can tell which DoD line's test should have caught a mutant. accio's own engine stays a v2
+   fallback for projects without a tool.
 2. **`wandmaker` answers four depth questions for each option:** what would a top professional in this field do;
    what is the rawest material (data, logs, the real system) to work from; which methods and tools the best
    people use; and what, other than the model or the user, would show the result is right. The last answer seeds

@@ -107,8 +107,8 @@ def merge_stories(worktree, stories, ordered):
     return tuple(merged), None
 
 
-def _run_check(worktree, command, timeout):
-    """(passed, output tail); a timeout kills the whole process group."""
+def run_command(worktree, command, timeout, keep_all=False):
+    """(passed, output: its tail, or all of it with keep_all); a timeout kills the whole process group."""
     process = subprocess.Popen(command, shell=True, cwd=worktree, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
                                stderr=subprocess.STDOUT, start_new_session=True)
     try:
@@ -118,7 +118,8 @@ def _run_check(worktree, command, timeout):
         os.killpg(process.pid, signal.SIGKILL)
         output, _ = process.communicate()
         timed_out = True
-    text = output.decode("utf-8", errors="replace")[-OUTPUT_TAIL_CHARS:]
+    text = output.decode("utf-8", errors="replace")
+    text = text if keep_all else text[-OUTPUT_TAIL_CHARS:]
     if timed_out:
         text += f"\n(stopped after {_duration(timeout)})"
     return process.returncode == 0 and not timed_out, text
@@ -132,7 +133,7 @@ def run_checks(worktree, commands, timeout=CHECK_TIMEOUT_SECONDS):
     """{command: output tail} for every command that fails or runs past `timeout` seconds."""
     failing = {}
     for command in commands:
-        passed, output = _run_check(worktree, command, timeout)
+        passed, output = run_command(worktree, command, timeout)
         if not passed:
             failing[command] = output
     return failing

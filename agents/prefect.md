@@ -21,5 +21,5 @@ fail`, and write the one plain question the workflow gives you to `.accio/run/qu
 may write; if it already holds a question, read it and keep it, adding yours below).
 
 Reply with JSON only: `{"pass": bool, "failing": [check], "skipped": bool, "out_of_bounds": [path],
-"untagged": [dod-id], "weak_tests": [dod-id], "main_changed": [path], "remote_moved": bool}`, plus `audit` as
-`accio-check` gives it. If a script fails, reply `{"error": "<its message>"}`.
+"untagged": [dod-id], "weak_tests": [file:line], "main_changed": [path], "remote_moved": bool}`, plus `audit` and
+`audit_output` as `accio-check` gives them. If a script fails, reply `{"error": "<its message>"}`.

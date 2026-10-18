@@ -387,6 +387,7 @@ A dropped story also records `dropped: <reason>` in its frontmatter.
 | `stack_depth` | 2 |
 | `agent_allow` | commands `house-elf` may run beyond the built-in allow list; grown by "allow from now on" at `owl` (decision 010) |
 | `paid_call_cap_usd` | 0 |
+| `mutation` | optional `{"command": "…{diff}…"}`: the project's mutation tool, run on the story's diff file; it prints each surviving mutant as a `file:line …` line (decision 011, option A) |
 
 A missing key falls back to its default.
 
@@ -430,9 +431,10 @@ Messages show only a prefix of the secret.
   - a test written from each EARS line, carrying its tag (`S-012/1`)
   - `prefect` fails a numbered line that has no tagged test, with a grep and no model (decision 009)
   - `examiner` judges only whether each tagged test really checks its line
-  - **test audit (decision 011, moved from v2):** `prefect`'s script runs the project's own mutation tool on the
-    story's changed lines only; a mutant no tagged test catches is listed in `weak_tests`, with no model; a project
-    without a mutation tool is reported "not audited"
+  - **test audit (decision 011, moved from v2):** `prefect`'s script runs the project's own mutation tool
+    (`mutation.command` in `config.json`) on the story's diff file, so only changed lines are mutated; each
+    surviving mutant the tool prints as `file:line …` is listed in `weak_tests` and fails the story, with no model;
+    no command means "not audited", and a tool that fails is reported "failed" without failing the story
 - **Method checklists (decision 011):** the story's risk flag picks checklists for the reviewers (performance, data
   migration, auth and security, accessibility, …); each lists what an expert would run or inspect, not a persona.
 - Building accio's own mutation operators for languages without a tool stays a **v2** candidate.
@@ -615,7 +617,7 @@ from = merge-base with base, or the parent's head for a stacked child
 | Agent | Reply |
 |---|---|
 | `house-elf` | `status ∈ {DONE, DONE_WITH_CONCERNS, NEEDS_CONTEXT, BLOCKED}` |
-| `prefect` | `{pass: bool, failing: [check], skipped: bool, out_of_bounds: [path], untagged: [dod-id], weak_tests: [dod-id], audit: "not audited" \| "audited", main_changed: [path], remote_moved: bool}` |
+| `prefect` | `{pass: bool, failing: [check], skipped: bool, out_of_bounds: [path], untagged: [dod-id], weak_tests: [file:line], audit: "not audited" \| "audited" \| "failed", audit_output: text, main_changed: [path], remote_moved: bool}` |
 | reviewers | `{verdict ∈ {pass, fail}, counts: {critical, major, minor}, path}` |
 | `headmaster` | `{kind ∈ {ruling, question}, text, path}` |
 

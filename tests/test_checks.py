@@ -166,7 +166,7 @@ class SnapshotTest(CheckTestBase):
         self.change({"src/a.py": "value = 2\n"})
         with mock.patch.object(checks, "CHECK_TIMEOUT_SECONDS", 2):
             reply = checks.run(self.repo, self.worktree, parsed, git(self.repo, "rev-parse", "main"), settings,
-                               checks.snapshot(self.repo, "main"))
+                               checks.snapshot(self.repo, "main"), self.accio / "run" / "S-001")
         self.assertEqual(reply["failing"], ["sleep 1.6"])
 
     def test_the_ledger_key_covers_the_same_diff_as_the_check(self):
@@ -225,7 +225,7 @@ class SnapshotTest(CheckTestBase):
         self.change({"src/a.py": "value = 2\n"})
         with mock.patch.object(merge, "run_checks", fake_run_checks):
             checks.run(self.repo, self.worktree, parsed, git(self.repo, "rev-parse", "main"), settings,
-                       checks.snapshot(self.repo, "main"))
+                       checks.snapshot(self.repo, "main"), self.accio / "run" / "S-001")
         self.assertLess(captured["timeout"], 10 * 60)
 
     def test_S_017_4_a_snapshot_is_written_once_per_brief(self):
@@ -268,6 +268,50 @@ class SnapshotTest(CheckTestBase):
                                 text=True, check=False)
         self.assertEqual(result.returncode, 1)
         self.assertIn("snapshot", result.stderr)
+
+
+class MutationAuditTest(CheckTestBase):
+    """S-017/8, decision 011 (option A): the project's own mutation tool, called on the story's diff."""
+
+    def tool(self, body):
+        script = self.repo.parent / "fake-mutation-tool.py"
+        write(script, body)
+        config = json.loads((self.accio / "config.json").read_text(encoding="utf-8"))
+        config["mutation"] = {"command": f"{sys.executable} {script} {{diff}}"}
+        write(self.accio / "config.json", json.dumps(config))
+
+    def run_story(self):
+        self.check("S-001", "snapshot")
+        self.change({"src/a.py": "value = 2\n", "tests/test_a.py": "# S-001/1 S-001/3\n"})
+        return self.check("S-001")
+
+    def test_S_017_8_a_surviving_mutant_on_the_changed_lines_is_a_weak_test(self):
+        self.tool("import sys\ndiff = open(sys.argv[1]).read()\n"
+                  "print('mutating...')\n"
+                  "if '+value = 2' in diff: print('src/a.py:1: replaced 2 with 3, no test failed')\n")
+        reply = self.run_story()
+        self.assertEqual((reply["audit"], reply["weak_tests"]), ("audited", ["src/a.py:1: replaced 2 with 3, no test failed"]))
+        self.assertFalse(reply["pass"])
+
+    def test_S_017_8_no_survivors_passes_and_no_tool_means_not_audited(self):
+        self.tool("print('all mutants caught')\n")
+        reply = self.run_story()
+        self.assertEqual((reply["audit"], reply["weak_tests"], reply["pass"]), ("audited", [], True))
+        write(self.accio / "config.json", json.dumps({"checks": []}))
+        self.assertEqual(self.check("S-001")["audit"], "not audited")
+
+    def test_S_017_8_a_tool_that_fails_is_reported_but_does_not_fail_the_story(self):
+        self.tool("import sys\nprint('src/a.py:1: half a run')\nsys.exit(2)\n")
+        reply = self.run_story()
+        self.assertEqual((reply["audit"], reply["weak_tests"], reply["pass"]), ("failed", [], True))
+        self.assertIn("half a run", reply["audit_output"])
+
+    def test_the_mutation_command_must_name_the_diff(self):
+        write(self.accio / "config.json", json.dumps({"mutation": {"command": "cargo mutants"}}))
+        result = subprocess.run([sys.executable, "-I", str(CHECK), "S-001", "snapshot"], cwd=self.repo,
+                                capture_output=True, text=True, check=False)
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("{diff}", result.stderr)
 
 
 class AgentFilesTest(unittest.TestCase):

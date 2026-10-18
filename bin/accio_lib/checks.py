@@ -24,12 +24,18 @@ Scripts, not a model, decide these, so an agent's claim never does:
 - **diff start:** the base `accio-brief` recorded for the story (its parent's head when stacked), when it is a full
   commit id and an ancestor of the story's HEAD; never a caller's choice, and the same one `accio-ledger key` uses;
   the merge-base with the base branch otherwise.
-- **test audit:** "not audited" until the mutation tool contract is settled (S-017/8, decision 011).
+- **test audit (decision 011, option A):** with `mutation.command` in config.json, the story's diff goes to
+  `run/<ID>/story.diff` and the command runs in the worktree with `{diff}` replaced by that file's path, within what
+  is left of the time budget. The tool mutates only the changed lines (natively, like `cargo mutants --in-diff`, or
+  through a small wrapper) and prints each mutant that no test caught on its own line, starting `file:line`; those
+  lines are `weak_tests` and fail the story. No command: "not audited". A command that fails or runs out of time:
+  "failed", reported with its output, and the story isn't failed for it (a broken tool mustn't block every build).
 """
 import hashlib
 import os
 import pathlib
 import re
+import shlex
 import subprocess
 import time
 
@@ -55,6 +61,10 @@ MAX_TEST_BYTES = 1_000_000
 MAX_HASHED_BYTES = 50_000_000  # a bigger file is recorded by size and change time
 MAX_LISTED_FILES = 20_000      # an ignored folder with more files counts by its presence only
 NOT_AUDITED = "not audited"
+AUDITED = "audited"
+AUDIT_FAILED = "failed"
+SURVIVOR = re.compile(r"^\S+:\d+(?:\D|$)")
+DIFF_NAME = "story.diff"
 
 
 class CheckError(Exception):
@@ -237,9 +247,9 @@ def compare(before, after):
 
 # --- the whole check -----------------------------------------------------------------------------------------------
 
-def _run_within_budget(worktree, commands):
-    """{command: output} for the failing checks, all of them within one CHECK_TIMEOUT_SECONDS budget."""
-    deadline, failing = time.monotonic() + CHECK_TIMEOUT_SECONDS, {}
+def _run_within_budget(worktree, commands, deadline):
+    """{command: output} for the failing checks, all of them before `deadline`."""
+    failing = {}
     for command in commands:
         remaining = deadline - time.monotonic()
         if remaining <= 0:
@@ -249,14 +259,35 @@ def _run_within_budget(worktree, commands):
     return failing
 
 
-def run(main, worktree, parsed_story, start, settings, before):
+def audit(worktree, start, run_dir, mutation, deadline):
+    """(audit, weak tests, the tool's output when it failed) for the story's diff (decision 011, option A)."""
+    if not mutation:
+        return NOT_AUDITED, [], ""
+    remaining = deadline - time.monotonic()
+    if remaining <= 0:
+        return AUDIT_FAILED, [], "not run: the checks' time budget ran out"
+    diff_file = pathlib.Path(run_dir) / DIFF_NAME
+    diff_file.parent.mkdir(parents=True, exist_ok=True)
+    diff_file.write_bytes(_git(worktree, "diff", "--no-color", "--no-ext-diff", "--no-textconv", start, "HEAD"))
+    command = mutation["command"].replace("{diff}", shlex.quote(str(diff_file)))
+    passed, output = merge.run_command(worktree, command, remaining, keep_all=True)
+    if not passed:
+        return AUDIT_FAILED, [], output[-merge.OUTPUT_TAIL_CHARS:]
+    return AUDITED, [line.strip() for line in output.splitlines() if SURVIVOR.match(line.strip())], ""
+
+
+def run(main, worktree, parsed_story, start, settings, before, run_dir):
     """prefect's reply (DESIGN § 12.5) for a story's worktree, its diff start and the snapshot taken before it."""
+    deadline = time.monotonic() + CHECK_TIMEOUT_SECONDS
     changed = changed_files(worktree, start)
-    failing = sorted(_run_within_budget(worktree, scoped_to_diff(settings["checks"], changed)))
+    failing = sorted(_run_within_budget(worktree, scoped_to_diff(settings["checks"], changed), deadline))
+    audited, weak_tests, audit_output = audit(worktree, start, run_dir, settings.get("mutation"), deadline)
     main_changed, remote_moved = compare(before, snapshot(main, settings["base_branch"]))
     reply = {"failing": failing, "skipped": False,
              "out_of_bounds": out_of_bounds(changed, parsed_story.meta.get("files", ())),
-             "untagged": untagged(parsed_story.dod, test_texts(worktree)), "weak_tests": [], "audit": NOT_AUDITED,
-             "main_changed": main_changed, "remote_moved": remote_moved}
-    passed = not (failing or reply["out_of_bounds"] or reply["untagged"] or main_changed or remote_moved)
+             "untagged": untagged(parsed_story.dod, test_texts(worktree)), "weak_tests": weak_tests,
+             "audit": audited, "audit_output": audit_output, "main_changed": main_changed,
+             "remote_moved": remote_moved}
+    passed = not (failing or reply["out_of_bounds"] or reply["untagged"] or weak_tests or main_changed
+                  or remote_moved)
     return {"pass": passed, **reply}
