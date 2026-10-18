@@ -72,6 +72,12 @@ def dod_digest(parsed_story):
     return _sha("\n".join(f"{line.id}|{line.testable}|{line.text}" for line in parsed_story.dod))
 
 
+def panel_id(panel, parsed_story, risky_paths):
+    """The panel the workflow names, plus what decides whether auror joins it (the story's `risk`, `risky_paths`):
+    a pass recorded by a smaller panel must not be skipped to (S-020)."""
+    return f"{panel}|risk={parsed_story.meta.get('risk', '')}|risky_paths={json.dumps(list(risky_paths))}"
+
+
 def key(work, checks, panel, parsed_story):
     checks_text = json.dumps([dict(check) for check in checks], sort_keys=True)
     return _sha("\n".join((work, _sha(checks_text), panel, dod_digest(parsed_story))))

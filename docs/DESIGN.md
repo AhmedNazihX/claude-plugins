@@ -139,7 +139,7 @@ This is the unattended part. The full spec is in `docs/research/build-engine.md`
 | 1 prepare | `portkey` | Haiku | `accio-brief` creates or reuses the worktree and branch `story/<ID>` (§ 12.3), from base or from the parent's head when stacked, and writes `brief.md`, including review notes from a rejection |
 | 2 implement | `house-elf` | Sonnet; Opus if complex or risky | first runs `accio-claim <ID>` (§ 4.4); reads only the brief; starts each Bash command that touches files with `cd <worktree> &&` or uses `git -C <worktree>`; test-first; tags each test with its DoD line; checkpoint commits; `report.md`; returns a status |
 | 3 check | `prefect` | Haiku | the ledger skips an exact key that already passed (§ 12.4); checks scoped to the change; **boundary check:** a diff outside the story's `files` (plus tests) becomes a finding; **DoD tags:** every numbered line not marked `(no test)` has a tagged test; **main snapshot:** the main checkout's `git status` is unchanged; **remote check:** `origin/<base>` has not moved; **test audit:** the project's mutation tool, limited to the story's changed lines; a mutant no tagged test catches marks a weak test, and no tool means "not audited" (decision 011) |
-| 4 review | `examiner` + `professor` (+ `auror` on risky paths); Quick track: `examiner` alone, also reviewing quality | Sonnet | read-only; `accio-brief <ID> --review` (from `portkey`) writes the review package and diff as files; confidence ≥ 80 |
+| 4 review | `examiner` + `professor` (+ `auror` when the diff under review touches a risky path, or the story's `risk` names security); Quick track: `examiner` alone, also reviewing quality | Sonnet | read-only; `accio-brief <ID> --review` (from `portkey`) writes the review package and diff as files; confidence ≥ 80 |
 | 5 judge | `headmaster` | Sonnet | on NEEDS_CONTEXT from any `house-elf`, which includes a fix it refuses because the finding conflicts with the story; a ruling gets one more try (and the re-review sees it), a question marks the story needs-user; it never writes the ledger |
 | 6 fix | a fresh `house-elf` | one tier up in round 2 | **≤ 2 rounds**; `accio-brief --fix` writes the fix brief; the checks run again; the re-review covers only the fix diff (`--review --since`), and only the reviewers that raised findings run |
 | 7 outcome | `prefect` | Haiku | `accio-board move` + `accio-ledger record`: READY → *Review*; otherwise *Blocked*, with one plain question in `run/questions/<ID>.md` |
@@ -482,9 +482,11 @@ Next: /accio:owl
    accio repos.
 6. **Budgets.** Quick has 80k tokens and Story has 400k, counting fresh tokens only (input, cache writes, output):
    cache reads re-read an agent's saved conversation on every step, so they are reported apart and not budgeted
-   (the user's choice, 2026-10-18). Above budget, the build table shows a warning. At 2× the
-   budget, the story stops and goes to Blocked. *`agent()` reports no usage (spike S-001), so the 2× stop is the
-   agent's `maxTurns` (`house-elf`: 150, a provisional number; S-020), and `accio-cost` reports the real usage from the transcripts after the run (decision 006).*
+   (the user's choice, 2026-10-18). Above budget, the build table shows a warning. At 2× the budget, the story stops
+   and goes to Blocked. *`agent()` reports no usage (spike S-001), so the 2× stop is each agent's `maxTurns`
+   (provisional: `house-elf` 150, reviewers 60, `headmaster` 30; S-020). It caps each agent, not the story, and no
+   live run has yet shown what `agent()` returns when an agent hits it. `accio-cost` reports the real usage from the
+   transcripts after the run (decision 006).*
 7. **Measure.** `accio-cost` reports per story in `owl`, and per iteration in `pensieve`.
 
 ---

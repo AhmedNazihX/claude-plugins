@@ -1,5 +1,6 @@
 """S-006: accio-ledger (verdict keys from the exact diff, check/record/clear)."""
 import concurrent.futures
+import json
 import pathlib
 import subprocess
 import sys
@@ -231,6 +232,16 @@ class CliTest(unittest.TestCase):
         self.assertEqual(self.cli("check", "S-001", key).stdout.strip(), "skip")
         self.cli("clear", "S-001")
         self.assertEqual(self.cli("check", "S-001", key).stdout.strip(), "run")
+
+    def test_S_020_5_the_key_changes_with_what_picks_the_review_panel(self):
+        # auror joins on a risky path or a security `risk` word: a pass recorded without it must not be skipped to
+        def key():
+            return self.cli("key", str(self.story_path), "--worktree", str(self.worktree), "--panel", "story").stdout
+        before = key()
+        write(self.repo / ".accio" / "config.json", json.dumps({"risky_paths": ["a.txt"]}))
+        widened = key()
+        self.story_path.write_text(self.story_path.read_text().replace("---\nid:", "---\nrisk: auth\nid:", 1))
+        self.assertEqual(len({before, widened, key()}), 3)
 
     def test_errors_are_plain(self):
         result = self.cli("record", "S-001", "k", "maybe", check=False)

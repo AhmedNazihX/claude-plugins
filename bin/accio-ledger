@@ -29,7 +29,7 @@ def cmd_key(args):
     recorded = checks.trusted_base(accio / "run" / parsed.meta["id"], args.worktree)  # the same as accio-check
     start = recorded or ledger.diff_base(args.worktree, settings["base_branch"], args.parent)
     work = ledger.work_digest(args.worktree, start)
-    print(ledger.key(work, settings["checks"], args.panel, parsed))
+    print(ledger.key(work, settings["checks"], ledger.panel_id(args.panel, parsed, settings["risky_paths"]), parsed))
 
 
 def cmd_check(args):

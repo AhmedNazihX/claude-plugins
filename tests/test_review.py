@@ -112,6 +112,23 @@ class ReviewPackageTest(unittest.TestCase):
         self.assertIn("fix round", text.lower())
         self.assertIn(first[:12], text)
 
+    def test_S_020_5_a_path_git_would_quote_is_still_matched_against_the_risky_globs(self):
+        self.story(files='src/a.py, .github/workflows/')
+        self.brief()
+        self.build('.github/workflows/de"ploy\tci.yml', "on: push\n")
+        reply, text = self.package()
+        self.assertIs(reply["risky"], True)
+        self.assertIn('.github/workflows/de"ploy', text)
+
+    def test_S_020_5_in_a_fix_round_risky_means_the_fix_diff_touches_a_risky_path(self):
+        self.story(files="src/a.py, src/b.py, src/auth/login.py")
+        self.brief()
+        first = self.build("src/auth/login.py", "ok = True\n")
+        second = self.build("src/b.py", "fixed = True\n")
+        self.assertIs(self.package("--since", first)[0]["risky"], False)
+        self.build("src/auth/login.py", "ok = False\n")
+        self.assertIs(self.package("--since", second)[0]["risky"], True)
+
     def test_S_020_2_since_must_be_an_earlier_commit_of_the_story(self):
         self.story()
         self.brief()
@@ -121,6 +138,29 @@ class ReviewPackageTest(unittest.TestCase):
                 result = self.brief("--review", "--since", since, check=False)
                 self.assertEqual(result.returncode, 1)
                 self.assertIn("--since", result.stderr)
+
+    def test_S_020_2_since_cannot_reach_back_before_the_story(self):
+        write(self.repo / "src" / "c.py", "c = 1\n")
+        commit_all(self.repo)
+        self.story()
+        self.brief()
+        before_story = git(self.repo, "rev-parse", "HEAD~1")
+        self.build()
+        result = self.brief("--review", "--since", before_story, check=False)
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("--since", result.stderr)
+        self.assertEqual(self.brief("--review", "--since", git(self.repo, "rev-parse", "main"))["risky"], False)
+
+    def test_a_git_failure_is_a_plain_error_not_a_traceback(self):
+        self.story()
+        self.brief()
+        self.build()
+        (self.accio / "run" / "S-001" / "base").unlink()
+        write(self.accio / "config.json", json.dumps({"base_branch": "gone"}))
+        result = self.brief("--review", check=False)
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("accio-brief:", result.stderr)
+        self.assertNotIn("Traceback", result.stderr)
 
     def other_commit(self):
         write(self.repo / "src" / "other.py", "x = 1\n")

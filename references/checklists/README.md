@@ -12,5 +12,5 @@ like one.
 | `accessibility`, `a11y`, `ui` | `accessibility.md` |
 
 Words are matched whole (split at spaces, commas and dashes), so `author` is not `auth` and `build` is not `ui`.
-A story with no `risk` gets no checklist. A risky path (`risky_paths` in config.json) with no `risk` field gets
-`auth-and-security.md`.
+A story with no `risk` gets no checklist. A diff that touches a risky path (`risky_paths` in config.json) also gets
+`auth-and-security.md`, whatever its `risk` field: `auror` joins the review then and always applies it.

@@ -62,6 +62,25 @@ class ReviewAgentsTest(unittest.TestCase):
                 self.assertNotIn("in your head", text)
 
 
+class BrewRolesTest(unittest.TestCase):
+    """S-020: what brew.js asks of each agent is in that agent's own file."""
+
+    def test_portkey_knows_the_review_package_and_the_fix_brief(self):
+        _, body = front_and_body("portkey")
+        for words in ("--review", "--since", "--fix", '"package"', '"head"', '"risky"'):
+            self.assertIn(words, body)
+
+    def test_reviewers_let_a_ruling_stand(self):
+        for name in REVIEWERS:
+            with self.subTest(name):
+                self.assertIn("ruling", front_and_body(name)[1])
+
+    def test_S_020_6_every_model_heavy_agent_has_a_turn_limit(self):
+        for name in ("house-elf", *REVIEWERS, "headmaster"):
+            with self.subTest(name):
+                self.assertGreater(int(front_and_body(name)[0].get("maxTurns", "0")), 0)
+
+
 class AgentsMatchCurfewTest(unittest.TestCase):
     """A tool an agent has but curfew denies (or the reverse) turns into a BLOCKED story at run time."""
 

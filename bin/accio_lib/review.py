@@ -3,8 +3,9 @@
 - The diff goes to `run/<ID>/review.diff`: the whole story (from where its diff starts, as accio-check takes it) on
   the first review; in a fix round, only the fix, from the commit reviewed last (`--since`), which must be an
   earlier commit of the story.
-- `risky` (the workflow adds auror) when the story's diff touches a `risky_paths` glob, or its `risk` field holds a
-  security word. The method checklists follow `references/checklists/README.md`; auror always gets the security one.
+- `risky` (the workflow adds auror) when the diff under review (the whole story, or a fix round's fix) touches a
+  `risky_paths` glob, or the story's `risk` field holds a security word. Paths are read NUL-separated, so a name git
+  would quote (a tab, a `"`) still meets the globs as it is. The method checklists follow `references/checklists/README.md`; auror always gets the security one.
 """
 import re
 import subprocess
@@ -45,14 +46,21 @@ def checklists(risk, touches_risky_path):
     return tuple(picked)
 
 
-def _fix_start(worktree, since):
-    """`since`, checked: a commit that is an earlier commit of the story's HEAD."""
-    found = subprocess.run(["git", "rev-parse", "--verify", "--quiet", f"{since}^{{commit}}"], cwd=worktree,
-                           capture_output=True, text=True, check=False)
-    commit = found.stdout.strip()
-    if found.returncode != 0 or subprocess.run(["git", "merge-base", "--is-ancestor", commit, "HEAD"], cwd=worktree,
-                                               capture_output=True, check=False).returncode != 0:
-        raise brief.BriefError(f"--since {since} is not an earlier commit of this story's branch")
+def _succeeds(worktree, *args):
+    try:
+        return subprocess.run(["git", *args], cwd=worktree, capture_output=True, check=False).returncode == 0
+    except OSError as error:
+        raise brief.BriefError(f"git could not run in {worktree}: {error}") from error
+
+
+def _fix_start(worktree, since, start):
+    """`since`, checked: a commit of the story itself, from where it starts up to its HEAD."""
+    if not _succeeds(worktree, "rev-parse", "--verify", "--quiet", f"{since}^{{commit}}"):
+        raise brief.BriefError(f"--since {since} is not a commit")
+    commit = _git(worktree, "rev-parse", f"{since}^{{commit}}").strip()
+    if not (_succeeds(worktree, "merge-base", "--is-ancestor", commit, "HEAD")
+            and _succeeds(worktree, "merge-base", "--is-ancestor", start, commit)):
+        raise brief.BriefError(f"--since {since} is not a commit of this story, between where it starts and its HEAD")
     return commit
 
 
@@ -61,10 +69,13 @@ def package(accio, parsed, worktree, settings, since=None):
     story_id = parsed.meta["id"]
     run_dir = accio / "run" / story_id
     head = _git(worktree, "rev-parse", "HEAD").strip()
-    start = checks.diff_start(run_dir, worktree, settings["base_branch"])
-    origin = _fix_start(worktree, since) if since else start
-    risky_files = [path for path in _git(worktree, "diff", "--name-only", "--no-renames", start, head).splitlines()
-                   if globs.matches_any(path, settings["risky_paths"])]
+    try:
+        start = checks.diff_start(run_dir, worktree, settings["base_branch"])
+    except checks.CheckError as error:
+        raise brief.BriefError(f"can't tell where {story_id}'s diff starts: {error}") from error
+    origin = _fix_start(worktree, since, start) if since else start
+    changed = _git(worktree, "diff", "--name-only", "-z", "--no-renames", origin, head).split("\0")
+    risky_files = [path for path in changed if path and globs.matches_any(path, settings["risky_paths"])]
     picked = checklists(parsed.meta.get("risk"), bool(risky_files))
     diff = brief.write_file(run_dir / DIFF_NAME,
                             _git(worktree, "diff", "--no-color", "--no-ext-diff", "--no-textconv", origin, head))

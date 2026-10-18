@@ -16,7 +16,7 @@ export const meta = {
 // every step refreshes it (a board move, or prefect's and house-elf's `accio-board refresh`). The run returns the
 // build table only.
 // A story that passes its checks is reviewed by its panel (Quick: examiner alone; else examiner and professor;
-// auror on a risky path). Findings get at most 2 fix rounds, each a fresh house-elf (one tier up in round 2), a
+// auror on a risky path, also when only a fix touches one). Findings get at most 2 fix rounds, each a fresh house-elf (one tier up in round 2), a
 // re-check, and a re-review of only the fix diff by only the reviewers that raised them. A house-elf that returns
 // NEEDS_CONTEXT, which includes a fix it refuses because the finding conflicts with the story, goes to headmaster:
 // a ruling gets one more try, a question blocks the story. house-elf's `maxTurns` is the 2× budget stop (S-001).
@@ -102,6 +102,7 @@ async function call(prompt, opts) {
 
 const label = (story, step, round) => `${story.id} ${step}${round ? ` r${round}` : ''}`
 const rulingNote = (ruling) => (ruling ? ` The judge ruled: ${ruling}` : '')
+const addRuling = (earlier, ruling) => [earlier, ruling].filter(Boolean).join(' ')
 // A step that ends the story; `asked` when headmaster already wrote the question file.
 const stop = (question, asked = false) => ({ stop: true, question, asked })
 
@@ -171,24 +172,26 @@ function settle(reply, ruling) {
   return { reply, ruling }
 }
 
-// `attempt(ruling)` runs a fresh house-elf. NEEDS_CONTEXT goes to headmaster once (S-020/3): a ruling gets one more
-// try, a question stops the story with headmaster's question file (S-020/4).
-async function build(story, worktree, round, attempt, findings = []) {
-  const first = await attempt('')
-  if (!first || first.status !== 'NEEDS_CONTEXT') return settle(first, '')
+// `attempt(ruling)` runs a fresh house-elf, given the story's rulings so far. NEEDS_CONTEXT goes to headmaster once
+// (S-020/3): a ruling gets one more try and holds for the rest of the story; a question stops the story, with
+// headmaster's question file when it wrote one (S-020/4).
+async function build(story, worktree, round, attempt, findings = [], earlier = '') {
+  const first = await attempt(earlier)
+  if (!first || first.status !== 'NEEDS_CONTEXT') return settle(first, earlier)
   const judged = await judge(story, worktree, round, first.report, findings)
   if (!judged || !judged.text) {
     return stop(`The implementer needs context (see ${first.report || 'its report'}) and the judge didn't answer. Try again?`)
   }
-  if (judged.kind === 'question') return stop(judged.text, true)
-  const again = await attempt(judged.text)
+  if (judged.kind === 'question') return stop(judged.text, Boolean(judged.path))
+  const ruling = addRuling(earlier, judged.text)
+  const again = await attempt(ruling)
   if (again && again.status === 'NEEDS_CONTEXT') {
     return stop(`The implementer still needs context after the judge's ruling; its report says what: ${again.report || 'none'}.`)
   }
-  return settle(again, judged.text)
+  return settle(again, ruling)
 }
 
-async function fixRound(story, worktree, round, findings, model) {
+async function fixRound(story, worktree, round, findings, model, earlier) {
   const flags = findings.map((path) => ` --fix ${path}`).join('')
   const brief = await call(
     `Fix round ${round} of story ${story.id}: run \`accio-brief ${story.id}${flags}\`. Reply with its ` +
@@ -202,7 +205,7 @@ async function fixRound(story, worktree, round, findings, model) {
       'Run the claim command from the brief first, on its own. If a finding conflicts with the story (it asks ' +
       'for what the DoD rules out, or contradicts it), don\'t fix it: reply NEEDS_CONTEXT and name it in your ' +
       'report.' + rulingNote(ruling),
-    { agentType: HOUSE_ELF, model, schema: IMPLEMENT_SCHEMA, label: label(story, 'fix', round) }), findings)
+    { agentType: HOUSE_ELF, model, schema: IMPLEMENT_SCHEMA, label: label(story, 'fix', round) }), findings, earlier)
 }
 
 // --- checks and review -----------------------------------------------------------------------------------------
@@ -258,11 +261,11 @@ async function review(story, names, pkg, round, ruling) {
 }
 
 // Review, then at most MAX_FIX_ROUNDS fix rounds (S-020/1, /2, /5). Returns a stop, or {} when the story is READY.
-async function reviewAndFix(story, worktree, model) {
+async function reviewAndFix(story, worktree, model, earlier) {
   let pkg = await packageFor(story, 0, null)
   if (pkg.stop) return pkg
   let names = panel(story, pkg.risky)
-  let ruling = ''
+  let ruling = earlier
   for (let round = 0; ; round += 1) {
     const verdicts = await review(story, names, pkg, round, ruling)
     const silent = verdicts.find((each) => !each.reply)
@@ -274,14 +277,16 @@ async function reviewAndFix(story, worktree, model) {
       return stop(`Findings remain after ${MAX_FIX_ROUNDS} fix rounds (${findings.join(', ')}). Fix them by hand, ` +
         'or change the story?')
     }
-    const fixed = await fixRound(story, worktree, round + 1, findings, round + 1 === MAX_FIX_ROUNDS ? TIER_UP[model] : model)
+    const tier = round + 1 === MAX_FIX_ROUNDS ? TIER_UP[model] : model
+    const fixed = await fixRound(story, worktree, round + 1, findings, tier, ruling)
     if (fixed.stop) return fixed
-    ruling = fixed.ruling || ruling
+    ruling = fixed.ruling
     const failed = checkStop(await check(story, worktree, round + 1))
     if (failed) return failed
     pkg = await packageFor(story, round + 1, pkg.head)
     if (pkg.stop) return pkg
     names = failing.map((each) => each.name)
+    if (pkg.risky && !names.includes('auror')) names.push('auror')  // the fix itself touched a risky path
   }
 }
 
@@ -291,6 +296,7 @@ async function runStory(story) {
   const model = story.track === 'feature' ? 'opus' : 'sonnet'
   const blocked = (worktree, ended) => record(story, worktree, 'BLOCKED', ended.question, ended.asked)
   let worktree = story.worktree
+  let ruling = ''
   if (story.resume !== 'check') {
     const prepared = await prepare(story)
     if (!prepared || prepared.error || !prepared.brief) {
@@ -300,12 +306,13 @@ async function runStory(story) {
     worktree = prepared.worktree
     const built = await build(story, worktree, 0, (ruling) => implement(story, prepared, model, ruling))
     if (built.stop) return blocked(worktree, built)
+    ruling = built.ruling
   }
   const result = await check(story, worktree, 0)
   if (result && result.skipped && !result.error) return record(story, worktree, 'READY')  // passed review before
   const failed = checkStop(result)
   if (failed) return blocked(worktree, failed)
-  const reviewed = await reviewAndFix(story, worktree, model)
+  const reviewed = await reviewAndFix(story, worktree, model, ruling)
   return reviewed.stop ? blocked(worktree, reviewed) : record(story, worktree, 'READY')
 }
 
