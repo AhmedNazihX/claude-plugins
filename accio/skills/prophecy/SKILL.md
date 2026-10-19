@@ -64,6 +64,8 @@ On "go":
    Backlog (`returned`: tell the user), writes the story, iteration and board files, all or nothing, and commits
    exactly those plus the `--also` files. If it refuses (`accio-board: …`):
    - a build is running, or the last one isn't reviewed: say so (review it with `/accio:owl` first), and stop
+   - no `checks` in `.accio/config.json`: nothing was changed; show the message (it names the file and an example
+     entry), ask the user to set `checks`, and run go again after
    - it cannot write: show the error and stop; nothing was changed, don't retry
    - a story can't go: say which and why, from the message, and ask for go again; never change the set yourself
    - a bad `--also`: you passed a file that isn't a story file; fix the list and run it again

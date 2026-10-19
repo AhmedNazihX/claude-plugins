@@ -16,6 +16,7 @@ from support import ROOT, git, init_repo, write
 from accio_lib import story, storyfiles
 
 BOARD = ROOT / "bin" / "accio-board"
+CHECKS = [{"command": "python3 -m unittest", "glob": "**/*.py"}]
 
 
 def story_text(story_id, status="backlog", deps=(), track="story", extra=""):
@@ -33,6 +34,10 @@ class PlanTest(unittest.TestCase):
         (self.accio / "stories").mkdir(parents=True)
         git(self.repo, "config", "user.name", "t")
         git(self.repo, "config", "user.email", "t@example.com")
+        self.config()
+
+    def config(self, **settings):
+        write(self.accio / "config.json", json.dumps({"checks": CHECKS, **settings}))
 
     def tearDown(self):
         self.tmp.cleanup()
@@ -53,10 +58,24 @@ class PlanTest(unittest.TestCase):
     def proposed(self):
         return [item["id"] for item in self.plan()["proposed"]]
 
+    def test_S_010_4_go_refuses_without_checks_and_writes_nothing(self):
+        self.add("S-001")
+        for text in (None, "{}"):
+            if text is None:
+                (self.accio / "config.json").unlink()
+            else:
+                write(self.accio / "config.json", text)
+            result = self.board("go", "S-001", check=False)
+            self.assertEqual(result.returncode, 1)
+            self.assertIn("config.json", result.stderr)
+            self.assertIn('"checks"', result.stderr)
+            self.assertFalse((self.accio / "iterations").exists())
+            self.assertIn("status: backlog", (self.accio / "stories" / "S-001.md").read_text())
+
     def test_S_021_1_proposes_at_most_iteration_max_eligible_stories_in_dependency_order(self):
         for number in range(1, 11):
             self.add(f"S-{number:03d}")
-        write(self.accio / "config.json", json.dumps({"iteration_max": 8}))
+        self.config(iteration_max=8)
         plan = self.plan()
         self.assertEqual([item["id"] for item in plan["proposed"]], [f"S-{n:03d}" for n in range(1, 9)])
         self.assertEqual([item["id"] for item in plan["held"]], ["S-009", "S-010"])
@@ -85,7 +104,7 @@ class PlanTest(unittest.TestCase):
         self.add("S-002")
         self.add("S-003", deps=["S-001", "S-002"])
         self.add("S-004", deps=["S-003"])
-        write(self.accio / "config.json", json.dumps({"stack_depth": 3}))
+        self.config(stack_depth=3)
         plan = self.plan()
         self.assertEqual([item["id"] for item in plan["proposed"]], ["S-001", "S-002"])
         self.assertEqual([entry["id"] for entry in plan["held"]], ["S-003", "S-004"])
@@ -101,7 +120,7 @@ class PlanTest(unittest.TestCase):
         self.add("S-001")
         self.add("S-002", deps=["S-001"])
         self.add("S-003")
-        write(self.accio / "config.json", json.dumps({"iteration_max": 1}))
+        self.config(iteration_max=1)
         self.assertEqual(self.proposed(), ["S-001"])
 
     def test_S_021_1_a_child_with_two_parents_in_the_iteration_waits_for_the_next(self):

@@ -14,6 +14,7 @@ from support import ROOT, commit_all, git, init_repo, write
 from accio_lib import paths, runlock
 
 BOARD = ROOT / "bin" / "accio-board"
+CHECKS = [{"command": "python3 -m unittest", "glob": "**/*.py"}]
 
 
 def story_text(story_id, status="ready", deps=(), title=None, track="story", extra=""):
@@ -28,6 +29,10 @@ class BoardTest(unittest.TestCase):
         self.repo = init_repo(pathlib.Path(self.tmp.name).resolve() / "app")
         self.accio = self.repo / ".accio"
         (self.accio / "stories").mkdir(parents=True)
+        self.config()
+
+    def config(self, **settings):
+        write(self.accio / "config.json", json.dumps({"checks": CHECKS, **settings}))
 
     def tearDown(self):
         self.tmp.cleanup()
@@ -44,6 +49,32 @@ class BoardTest(unittest.TestCase):
 
     def ready(self):
         return json.loads(self.board("ready", "--json").stdout)
+
+    def test_S_010_1_ready_refuses_without_checks_and_names_config_json_with_an_example(self):
+        for text in (None, "{}", json.dumps({"checks": []})):
+            if text is None:
+                (self.accio / "config.json").unlink()
+            else:
+                write(self.accio / "config.json", text)
+            result = self.board("ready", "--json", check=False)
+            self.assertEqual(result.returncode, 1)
+            self.assertIn("config.json", result.stderr)
+            self.assertIn('"checks"', result.stderr)
+            self.assertIn('"command"', result.stderr)
+            self.assertEqual(result.stdout, "")
+
+    def test_S_010_2_a_refused_ready_changes_nothing_on_the_board(self):
+        self.add("S-001")
+        write(self.accio / "config.json", "{}")
+        commit_all(self.repo)
+        before = sorted(str(p) for p in self.accio.rglob("*"))
+        self.assertEqual(self.board("ready", "--resume", check=False).returncode, 1)
+        self.assertEqual(git(self.repo, "status", "--porcelain"), "")
+        self.assertEqual(before, sorted(str(p) for p in self.accio.rglob("*")))
+
+    def test_S_010_3_ready_behaves_as_today_when_checks_are_set(self):
+        self.add("S-001")
+        self.assertEqual([item["id"] for item in self.ready()], ["S-001"])
 
     # S-004/1
     def test_S_004_1_new_returns_the_next_free_id(self):
@@ -165,7 +196,7 @@ class BoardTest(unittest.TestCase):
         self.assertEqual([item["id"] for item in self.ready()], ["S-001", "S-002"])
 
     def test_S_004_3_stack_depth_comes_from_config(self):
-        write(self.accio / "config.json", json.dumps({"stack_depth": 1}))
+        self.config(stack_depth=1)
         self.add("S-001")
         self.add("S-002", deps=("S-001",))
         self.assertEqual([item["id"] for item in self.ready()], ["S-001"])

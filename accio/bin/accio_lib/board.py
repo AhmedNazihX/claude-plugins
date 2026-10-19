@@ -91,6 +91,16 @@ def statuses(stories, overrides):
     return {story_id: overrides.get(story_id, s.meta["status"]) for story_id, s in stories.items()}
 
 
+NO_CHECKS = ('there are no checks to run: set "checks" in .accio/config.json first, for example '
+             '{"checks": [{"command": "python3 -m unittest", "glob": "**/*.py"}]}')
+
+
+def require_checks(settings):
+    """Refuse to build or plan with no `checks`: the checker would run nothing (R1). Changes nothing."""
+    if not settings["checks"]:
+        raise BoardError(NO_CHECKS)
+
+
 def ready_batch(stories, status, stack_depth):
     """Ready stories in dependency order. A dep must be done, or a ready parent in the batch within stack_depth."""
     levels = {}

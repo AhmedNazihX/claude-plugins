@@ -172,6 +172,10 @@ def story_files(accio, also, what="--also"):
 def go(accio, settings, chosen, tracks, also=()):
     """Make `chosen` exactly the next iteration and commit it; returns {iteration, path, stories, returned, files,
     commit, commit_error}."""
+    try:
+        board.require_checks(settings)
+    except board.BoardError as error:
+        raise PlanError(str(error)) from error
     if runlock.is_held(board.run_dir(accio)):
         raise PlanError("a build is running (run/brew.lock); plan the next iteration after it ends")
     unreviewed = sorted(sid for sid, value in board.read_overrides(accio).items() if value in ("review", "blocked"))
