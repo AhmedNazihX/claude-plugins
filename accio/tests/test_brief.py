@@ -220,6 +220,11 @@ class BriefTest(unittest.TestCase):
         text = pathlib.Path(self.brief("S-001")["brief"]).read_text(encoding="utf-8")
         self.assertNotIn("Your earlier work", text)
 
+    def test_S_012_4_a_missing_worktree_leaves_the_section_out(self):
+        sys.path.insert(0, str(ROOT / "bin"))
+        from accio_lib import brief
+        self.assertEqual(brief.earlier_commits(self.base / "nowhere", "0" * 40, None), ())
+
     def test_a_rebase_already_in_progress_is_left_alone(self):
         self.brief("S-001")
         worktree = self.wt_root / "S-001"

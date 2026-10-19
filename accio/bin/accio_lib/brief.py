@@ -169,6 +169,8 @@ def dod_lines(parsed):
 
 def earlier_commits(worktree, onto, old_base):
     """One line per commit on the story branch past its base (the rebased `onto`, else the recorded old base)."""
+    if not pathlib.Path(worktree).is_dir():
+        return ()
     for base in (onto, old_base):
         if base and _git(worktree, "merge-base", "--is-ancestor", base, "HEAD", check=False).returncode == 0:
             return tuple(_git(worktree, "log", "--format=%h %s", f"{base}..HEAD").stdout.splitlines())
