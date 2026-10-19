@@ -392,6 +392,8 @@ A dropped story also records `dropped: <reason>` in its frontmatter.
 | `paid_call_cap_usd` | 0 |
 | `mutation` | optional `{"command": "…{diff}…"}`: the project's mutation tool, run on the story's diff file; it prints each surviving mutant as a `file:line …` line (decision 011, option A) |
 
+| `snapshot_skip` | optional glob paths the main snapshot ignores: files another tool keeps writing during a run (e.g. `.remember/**`); never accio's own run files |
+
 A missing key falls back to its default.
 
 ---

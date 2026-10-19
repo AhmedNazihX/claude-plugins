@@ -201,6 +201,24 @@ class SnapshotTest(CheckTestBase):
         os.utime(self.repo / ".env", ns=(stat.st_atime_ns, stat.st_mtime_ns))
         self.assertIn(".env", checks.compare(before, checks.snapshot(self.repo, "main"))[0])
 
+    def test_a_skipped_path_another_tool_writes_does_not_count(self):
+        write(self.repo / ".env", "KEY=one\n")
+        write(self.repo / ".remember" / "now.md", "one\n")
+        self.check("S-001", "snapshot")
+        before = json.loads((self.accio / "run" / "S-001" / "main-snapshot.json").read_text(encoding="utf-8"))
+        write(self.repo / ".remember" / "now.md", "two\n")
+        write(self.repo / ".remember" / "today.md", "new\n")
+        write(self.repo / ".env", "KEY=two\n")
+        changed = checks.compare(before, checks.snapshot(self.repo, "main"), skip=(".remember/**",))[0]
+        self.assertEqual(changed, [".env"])
+
+    def test_a_skip_never_hides_accios_own_run_files(self):
+        self.check("S-001", "snapshot")
+        before = json.loads((self.accio / "run" / "S-001" / "main-snapshot.json").read_text(encoding="utf-8"))
+        write(self.accio / "run" / "push-ok", "abc\n")
+        changed = checks.compare(before, checks.snapshot(self.repo, "main"), skip=("**", ".accio/**"))[0]
+        self.assertIn(".accio/run/push-ok", changed)
+
     def test_a_recorded_base_that_isnt_an_ancestor_is_not_trusted(self):
         run_dir = self.accio / "run" / "S-001"
         merge_base = git(self.repo, "rev-parse", "main")

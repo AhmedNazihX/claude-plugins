@@ -134,6 +134,17 @@ class ConfigTest(unittest.TestCase):
         with self.assertRaisesRegex(config.ConfigError, "glob"):
             config.load(self.accio)
 
+    def test_snapshot_skip_defaults_to_nothing_and_takes_globs(self):
+        self.assertEqual(config.load(self.accio)["snapshot_skip"], ())
+        self.write_config({"snapshot_skip": [".remember/**"]})
+        self.assertEqual(config.load(self.accio)["snapshot_skip"], (".remember/**",))
+
+    def test_snapshot_skip_must_be_a_list_of_globs(self):
+        for bad in (".remember/**", [""], [3]):
+            self.write_config({"snapshot_skip": bad})
+            with self.assertRaisesRegex(config.ConfigError, "snapshot_skip"):
+                config.load(self.accio)
+
     def test_pr_push_mode_is_refused_until_v2(self):
         self.write_config({"push_mode": "pr"})
         with self.assertRaisesRegex(config.ConfigError, "push_mode"):

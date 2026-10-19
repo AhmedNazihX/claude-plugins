@@ -19,6 +19,8 @@ Scripts, not a model, decide these, so an agent's claim never does:
   commit; `git refs`, `git config` or `git hooks` when those change), and a moved `origin/<base>` is
   `remote_moved`. `.accio/run/` is left out, since the run writes there, except `push-ok`, each story's `base` and
   `allow-once.json` (owl's grants for one build), which nothing writes during a story. Times are recorded with `ctime`, which can't be set back.
+  Paths matching config's `snapshot_skip` globs (another tool's files, such as `.remember/**`) are left out of the
+  comparison; accio's own run files never are.
   **Limit:** the snapshot file lives in `.accio/run/` too, so code the story runs could rewrite it; like curfew
   (DESIGN § 6), this catches mistakes and leaves a trail, not a determined agent.
 - **diff start:** the base `accio-brief` recorded for the story (its parent's head when stacked), when it is a full
@@ -235,10 +237,18 @@ def snapshot(main, base_branch):
             "origin": _ref(main, f"refs/remotes/origin/{base_branch}")}
 
 
-def compare(before, after):
-    """(paths that changed in the main checkout, `HEAD` for a commit; whether origin/<base> moved)."""
+def _skipped(path, skip):
+    """Whether config's `snapshot_skip` covers `path`; accio's own run files are always watched."""
+    return not path.startswith(RUN_FOLDER) and globs.matches_any(path, skip)
+
+
+def compare(before, after, skip=()):
+    """(paths that changed in the main checkout, `HEAD` for a commit; whether origin/<base> moved).
+
+    `skip` holds config's `snapshot_skip` globs: paths another tool keeps writing during a run.
+    """
     paths = sorted(path for path in set(before["dirty"]) | set(after["dirty"])
-                   if before["dirty"].get(path) != after["dirty"].get(path))
+                   if before["dirty"].get(path) != after["dirty"].get(path) and not _skipped(path, skip))
     moved_head = ["HEAD"] if before["head"] != after["head"] else []
     git_state = [name for name in sorted(after.get("git", {}))
                  if before.get("git", {}).get(name) != after["git"][name]]
@@ -282,7 +292,8 @@ def run(main, worktree, parsed_story, start, settings, before, run_dir):
     changed = changed_files(worktree, start)
     failing = sorted(_run_within_budget(worktree, scoped_to_diff(settings["checks"], changed), deadline))
     audited, weak_tests, audit_output = audit(worktree, start, run_dir, settings.get("mutation"), deadline)
-    main_changed, remote_moved = compare(before, snapshot(main, settings["base_branch"]))
+    main_changed, remote_moved = compare(before, snapshot(main, settings["base_branch"]),
+                                         settings.get("snapshot_skip", ()))
     reply = {"failing": failing, "skipped": False,
              "out_of_bounds": out_of_bounds(changed, parsed_story.meta.get("files", ())),
              "untagged": untagged(parsed_story.dod, test_texts(worktree)), "weak_tests": weak_tests,

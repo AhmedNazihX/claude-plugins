@@ -18,6 +18,7 @@ DEFAULTS = freeze({
     "agent_allow": [],
     "paid_call_cap_usd": 0,
     "mutation": None,
+    "snapshot_skip": [],
 })
 
 
@@ -80,6 +81,7 @@ CHECKERS = {
     "paid_call_cap_usd": lambda v: None if isinstance(v, (int, float)) and not isinstance(v, bool) and v >= 0
     else "must be a number, 0 or more",
     "mutation": _check_mutation,
+    "snapshot_skip": lambda v: None if _strings(v) else "must be a list of glob strings",
 }
 
 
