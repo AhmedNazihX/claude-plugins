@@ -19,7 +19,9 @@ with no variables and no `&&` or `;` chains.
 ## The step
 - `wand`, `sort`, `prophecy`, `owl`: load that step's skill with the Skill tool (`accio:<step>`) and follow it in
   this chat.
-- `brew`: there is no brew skill. Load `accio:brew` and start the build yourself with the Workflow tool.
+- `brew`: load `accio:brew` and start the build yourself with the Workflow tool, but only when the user typed
+  `/accio` or asked in their own words to build. A bare "continue" is not that opt-in: say the plan is ready and
+  ask them to type `/accio` or say "start the build".
 - `wait`: a build is running. Say so in one line, then stop and carry on at the build's end notice.
 - `done`: no skill. Say the `sentence`, ask what to design next, and stop.
 
