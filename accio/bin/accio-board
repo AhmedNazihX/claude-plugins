@@ -16,16 +16,19 @@
                         story files (prophecy, on "go")
   record <story file>...  after sort: check every story, regenerate board.md and commit those stories with it
   lock / unlock         take or release the build's run lock
+  next [--json]         the one next step (wand, sort, prophecy, brew, owl, wait or done), whether it runs
+                        on its own (auto), and the plain sentence
   refresh               mark the running build as alive (every brew step calls it)
 """
 import argparse
 import json
+import os
 import pathlib
 import sys
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 
-from accio_lib import backlog, board, config, design, paths, plan, runlock, story  # noqa: E402
+from accio_lib import backlog, board, config, design, nextstep, paths, plan, runlock, story  # noqa: E402
 
 
 def _accio():
@@ -106,6 +109,12 @@ def cmd_status(_args, accio):
     print(board.summary(status))
 
 
+def cmd_next(args, accio):
+    _, status = _loaded(accio)
+    reply = nextstep.next_step(accio, status, bool(os.environ.get("CLAUDE_CODE_DISABLE_WORKFLOWS")))
+    print(json.dumps(reply, indent=2) if args.json else reply["sentence"])
+
+
 def cmd_lock(_args, accio):
     note = runlock.take(board.run_dir(accio))
     if note:
@@ -140,6 +149,9 @@ def parser():
     go.add_argument("--track", action="append", default=[])
     go.add_argument("--also", action="append", default=[], help="a story file the skill edited, to commit too")
     go.set_defaults(run=cmd_go)
+    next_parser = commands.add_parser("next")
+    next_parser.add_argument("--json", action="store_true")
+    next_parser.set_defaults(run=cmd_next)
     commands.add_parser("init")
     commands.add_parser("record-design").set_defaults(run=cmd_record_design)
     record = commands.add_parser("record")

@@ -18,7 +18,7 @@ import sys
 BIN = pathlib.Path(__file__).resolve().parents[1] / "bin"
 sys.path.insert(0, str(BIN))
 
-from accio_lib import board, githooks, paths, runlock, story  # noqa: E402
+from accio_lib import board, githooks, nextstep, paths, story  # noqa: E402
 
 MAX_LINES = 10
 LINE_CHARS = 240
@@ -35,34 +35,6 @@ def _cwd(raw):
     return cwd if isinstance(cwd, str) else os.getcwd()
 
 
-def _stories(count, kind):
-    return f"{count} {kind} {'story' if count == 1 else 'stories'}"
-
-
-def next_step(accio, status, workflows_off):
-    """The one thing to do next, from where the project is."""
-    brew = "/accio:brew once workflows are on" if workflows_off else "/accio:brew"
-    counts = {key: sum(1 for value in status.values() if value == key) for key in story.STATUSES}
-    if runlock.is_held(accio / "run"):
-        return "a build is running; when it ends, review it with /accio:owl."
-    if counts["doing"]:
-        return f"a build stopped mid-way ({_stories(counts['doing'], 'unfinished')}); resume it with {brew}."
-    if counts["review"] or counts["blocked"]:
-        work = [part for count, part in ((counts["review"], f"review {_stories(counts['review'], 'built')}"),
-                                          (counts["blocked"], f"answer {_stories(counts['blocked'], 'blocked')}"))
-                if count]
-        return f"{' and '.join(work)} with /accio:owl."
-    if counts["ready"]:
-        return f"build {_stories(counts['ready'], 'ready')} with {brew}."
-    if counts["backlog"]:
-        return "plan the next iteration with /accio:prophecy."
-    if not (accio / "design.md").is_file():
-        return "design what to build with /accio:wand."
-    if not status:
-        return "turn the design into stories with /accio:sort."
-    return "every story is done or dropped; design what comes next with /accio:wand."
-
-
 def _board_lines(accio, workflows_off):
     try:
         stories = board.load_stories(accio)
@@ -70,7 +42,8 @@ def _board_lines(accio, workflows_off):
     except (board.BoardError, story.StoryError, OSError):
         return ["accio: the board can't be read (a story file or run/status.json has a problem); run /accio:map to "
                 "see which."]
-    return [f"accio: {board.summary(status)}.", f"accio: next, {next_step(accio, status, workflows_off)}"]
+    sentence = nextstep.next_step(accio, status, workflows_off)["sentence"]
+    return [f"accio: {board.summary(status)}.", f"accio: next, {sentence}"]
 
 
 def _hook_lines(root):
