@@ -74,3 +74,7 @@ What happened: <the design or note in one sentence>; <k> decisions recorded (<n>
 What I need from you: <nothing | the hooks fix or snippet | the commit fix> — then /accio:sort to turn it into stories
 My recommendation: <one line, with why>
 ```
+
+When the `accio` conductor skill was loaded earlier in this chat and has not finished, `/accio` is driving: the
+second line says `next: sort (accio carries on)` instead of the "/accio:sort" hand-over. When this skill runs alone,
+keep the "/accio:sort" ending above.
