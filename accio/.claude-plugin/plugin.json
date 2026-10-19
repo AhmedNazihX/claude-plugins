@@ -1,6 +1,6 @@
 {
   "name": "accio",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "Plans, builds, reviews and safely merges your project's work in small iterations, asking you only at two checkpoints.",
   "author": {
     "name": "Ahmed Nazih"
