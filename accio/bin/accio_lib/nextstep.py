@@ -6,19 +6,20 @@
 from . import runlock, story
 
 # step -> auto: does accio carry on without asking the user?
-AUTO = {"wait": False, "brew": True, "owl": False, "prophecy": False, "wand": False, "sort": True, "done": False}
+AUTO = {"wait": False, "brew": True, "owl": True, "prophecy": True, "wand": False, "sort": True, "done": False}
+# owl is not auto with a blocked story, prophecy not with a dropped dep: both then need the user (decision 004).
 
 
 def _stories(count, kind):
     return f"{count} {kind} {'story' if count == 1 else 'stories'}"
 
 
-def _reply(step, sentence):
-    return {"step": step, "auto": AUTO[step], "sentence": sentence}
+def _reply(step, sentence, needs_user=False):
+    return {"step": step, "auto": AUTO[step] and not needs_user, "sentence": sentence}
 
 
-def next_step(accio, status, workflows_off):
-    """The one thing to do next: {"step", "auto", "sentence"}."""
+def next_step(accio, status, workflows_off, dropped_deps=()):
+    """The one thing to do next: {"step", "auto", "sentence"}. `dropped_deps` is the plan's list of them."""
     brew = "/accio:brew once workflows are on" if workflows_off else "/accio:brew"
     counts = {key: sum(1 for value in status.values() if value == key) for key in story.STATUSES}
     if runlock.is_held(accio / "run"):
@@ -30,11 +31,11 @@ def next_step(accio, status, workflows_off):
         work = [part for count, part in ((counts["review"], f"review {_stories(counts['review'], 'built')}"),
                                           (counts["blocked"], f"answer {_stories(counts['blocked'], 'blocked')}"))
                 if count]
-        return _reply("owl", f"{' and '.join(work)} with /accio:owl.")
+        return _reply("owl", f"{' and '.join(work)} with /accio:owl.", needs_user=bool(counts["blocked"]))
     if counts["ready"]:
         return _reply("brew", f"build {_stories(counts['ready'], 'ready')} with {brew}.")
     if counts["backlog"]:
-        return _reply("prophecy", "plan the next iteration with /accio:prophecy.")
+        return _reply("prophecy", "plan the next iteration with /accio:prophecy.", needs_user=bool(dropped_deps))
     if not (accio / "design.md").is_file():
         return _reply("wand", "design what to build with /accio:wand.")
     if not status:
