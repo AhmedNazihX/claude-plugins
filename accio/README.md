@@ -7,6 +7,13 @@ nothing reaching your main branch until you say so.
 
 It is for a solo developer working on their own git repo.
 
+## Quick start
+
+Type `/accio`. It reads the board, runs the next step, then the one after, and stops only for real decisions: the
+design, an open question a story needs answered, a story that failed, a push or release, paid calls, safety
+overrides and commands it was refused. Typing it is your opt-in to each build it starts. That is one typed command
+per iteration; the single commands (`/accio:wand`, `/accio:brew` ...) still work.
+
 ## How it works
 
 | Step | You type | What happens |
@@ -56,7 +63,7 @@ claude plugin marketplace add AhmedNazihX/claude-plugins
 claude plugin install accio@nazihx
 ```
 
-Then, in your project, start a new Claude Code session and type `/accio:wand`. On first use it sets accio up
+Then, in your project, start a new Claude Code session and type `/accio`. On first use it sets accio up
 (`.accio/` and its git hooks).
 
 **Needs:** git, Python 3.9 or later (the scripts use only the standard library), and Claude Code with workflows on.

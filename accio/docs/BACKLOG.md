@@ -44,6 +44,7 @@ evals/                       (CI: the marketplace's .github/workflows/test.yml)
 | done | S-025 `map` and `vow` skills |
 | done | S-026 Skill evals and baseline cost |
 | deferred | S-027 `brew-by-hand`: v1.1 (decision 012) |
+| done | One command (iteration 7, story S-009 in `.accio/`): docs for `/accio` in DESIGN §§ 3, 4.1, 7.3 and the README |
 | todo (v2) | S-029 `howler`: CI after owl's push (owl starts it: S-003; live run S-003/10 still open) |
 
 ---
