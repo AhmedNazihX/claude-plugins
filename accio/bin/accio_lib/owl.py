@@ -344,7 +344,10 @@ def close(accio, answers, base, merged=(), culprit=None):
 
 
 def push_ok(accio, base):
-    """Write the one-time push token for base's head; returns {base, sha}."""
+    """Write the one-time push token for base's head; returns {base, sha, prev}.
+
+    prev is the old tip of origin/<base> as this checkout knows it (read before the push
+    moves it), or None when that ref does not exist."""
     run_dir = board.run_dir(accio)
     if runlock.is_held(run_dir):
         raise OwlError("a build is running (run/brew.lock); push after it ends and you have reviewed it")
@@ -353,9 +356,11 @@ def push_ok(accio, base):
     sha = found.stdout.strip()
     if found.returncode != 0 or not sha:
         raise OwlError(f"can't find the head of {base}")
+    old = _git(accio.parent, "rev-parse", "--verify", "--quiet", f"refs/remotes/origin/{base}")
+    prev = old.stdout.strip() if old.returncode == 0 and old.stdout.strip() else None
     try:
         run_dir.mkdir(parents=True, exist_ok=True)
         (run_dir / PUSH_TOKEN).write_text(sha + "\n", encoding="utf-8")
     except OSError as error:
         raise OwlError(f"cannot write {run_dir / PUSH_TOKEN}: {error}") from error
-    return {"base": base, "sha": sha}
+    return {"base": base, "sha": sha, "prev": prev}

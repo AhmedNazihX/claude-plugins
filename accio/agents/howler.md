@@ -36,7 +36,8 @@ branch, with a different `headSha`): `gh run list --workflow <workflowDatabaseId
 Call the failure `real` when that previous run failed the same job name at the same step name. Otherwise call it
 `first failure`.
 
-**6. Inside the pushed range or not.** With `<prev>` the commit of that previous run:
+**6. Inside the pushed range or not.** With no `<prev>` from the caller, use the commit of step 5's previous run as
+`<prev>` when it has one, and otherwise reports the range as unknown. With `<prev>`:
 - When `git merge-base --is-ancestor <prev> <sha>` is false, the report states the failing code lies outside the
   pushed range.
 - When it is true, look at the log tail. If it names a file path that is not in `git diff --name-only <prev> <sha>`,
