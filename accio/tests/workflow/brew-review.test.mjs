@@ -119,7 +119,7 @@ test('S-020/4 a question with no question file is written by prefect instead', a
     implement: async () => ({ status: 'NEEDS_CONTEXT', report: '/run/S-001/build-report.md' }),
     judge: async () => ({ kind: 'question', text: 'Email or SMS for the reset?', path: null }),
   }))
-  assert.match(prompt(calls, 'S-001 outcome'), /write this question: Email or SMS for the reset\?/)
+  assert.match(prompt(calls, 'S-001 outcome'), /never inside the worktree: Email or SMS for the reset\?/)
 })
 
 test('S-020/4 a question from headmaster blocks the story with its question file, written once', async () => {

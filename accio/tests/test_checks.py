@@ -220,6 +220,14 @@ class SnapshotTest(CheckTestBase):
         write(self.repo / "build" / "more.txt", "two\n")
         self.assertEqual(checks.compare(before, checks.snapshot(self.repo, "main"), skip=("build/**",))[0], [])
 
+    def test_another_storys_base_written_by_a_parallel_build_does_not_count(self):
+        self.check("S-001", "snapshot")
+        before = json.loads((self.accio / "run" / "S-001" / "main-snapshot.json").read_text(encoding="utf-8"))
+        write(self.accio / "run" / "S-002" / "base", "1" * 40 + "\n")  # portkey prepared S-002 meanwhile
+        write(self.accio / "run" / "S-001" / "base", "0" * 40 + "\n")
+        changed = checks.compare(before, checks.snapshot(self.repo, "main"), story_id="S-001")[0]
+        self.assertEqual(changed, [".accio/run/S-001/base"])
+
     def test_finders_ds_store_files_never_count(self):
         write(self.repo / ".DS_Store", "one")
         write(self.accio / ".DS_Store", "one")

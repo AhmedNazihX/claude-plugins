@@ -33,6 +33,7 @@ const HOUSE_ELF = 'accio:house-elf'
 const PREFECT = 'accio:prefect'
 const HEADMASTER = 'accio:headmaster'
 const QUESTIONS = '.accio/run/questions'
+const IN_MAIN = 'in the main checkout (your working folder), never inside the worktree'  // curfew refuses the worktree copy
 const ROLES = { examiner: 'spec reviewer', professor: 'code reviewer', auror: 'security reviewer' }
 const IMPLEMENT_STATUSES = ['DONE', 'DONE_WITH_CONCERNS', 'NEEDS_CONTEXT', 'BLOCKED']
 const SILENT = 'The builder (house-elf) stopped answering: it hit its turn limit (accio\'s stop at 2× its token budget), ' +
@@ -143,7 +144,7 @@ function judge(story, worktree, round, report, findings) {
   return call(
     `Step 5, judge story ${story.id}. The implementer returned NEEDS_CONTEXT; its report: ${report || 'none'}.` +
       `${about} The story: .accio/stories/${story.id}.md; worktree: ${worktree}. Rule from the story and the ` +
-      `design, or, if only the user can answer, write one question to ${QUESTIONS}/${story.id}.md. The workflow ` +
+      `design, or, if only the user can answer, write one question to ${QUESTIONS}/${story.id}.md ${IN_MAIN}. The workflow ` +
       'records the outcome. Reply {kind, text, path}.',
     { agentType: HEADMASTER, model: REVIEW_MODEL, schema: JUDGE_SCHEMA, label: label(story, 'judge', round) },
   )
@@ -153,7 +154,8 @@ async function record(story, worktree, outcome, question, asked) {
   const blocked = asked
     ? `It is BLOCKED: move it to blocked and record fail. headmaster already wrote the question to ` +
       `${QUESTIONS}/${story.id}.md; don't add one.`
-    : `It is BLOCKED: move it to blocked, record fail, and write this question: ${question}`
+    : `It is BLOCKED: move it to blocked, record fail, and write this question to ` +
+      `${QUESTIONS}/${story.id}.md ${IN_MAIN}: ${question}`
   const reply = await call(
     `Step 7, outcome of story ${story.id}. Worktree: ${worktree}. Panel: ${story.track}. ` +
       `${outcome === 'READY' ? 'It is READY: move it to review and record pass.' : blocked} ` +

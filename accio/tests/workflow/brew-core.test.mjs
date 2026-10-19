@@ -59,6 +59,15 @@ test('S-019/4 a child of a BLOCKED parent never starts', async () => {
   assert.match(calls.find((call) => call.label === 'S-001 outcome').prompt, /these checks fail: npm test/)
 })
 
+test('a blocked story\'s question goes to the main checkout, never into the worktree', async () => {
+  const { calls } = await runWorkflow('brew', happy([story('S-001')], {
+    'S-001 check': async () => ({ pass: false, failing: ['npm test'] }),
+  }))
+  const prompt = calls.find((call) => call.label === 'S-001 outcome').prompt
+  assert.match(prompt, /\.accio\/run\/questions\/S-001\.md in the main checkout/)
+  assert.match(prompt, /never inside the worktree/)
+})
+
 test('S-019/5 a ledger skip counts as passed and nothing is re-run', async () => {
   const stories = [story('S-001')]
   const { result, calls } = await runWorkflow('brew', happy(stories, { check: async () => ({ skipped: true }) }))

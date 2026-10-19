@@ -18,7 +18,8 @@ Scripts, not a model, decide these, so an agent's claim never does:
   MAX_LISTED_FILES) or its target (a symlink). After the story, any difference is `main_changed` (`HEAD` for a
   commit; `git refs`, `git config` or `git hooks` when those change), and a moved `origin/<base>` is
   `remote_moved`. `.accio/run/` is left out, since the run writes there, except `push-ok`, each story's `base` and
-  `allow-once.json` (owl's grants for one build), which nothing writes during a story. Times are recorded with `ctime`, which can't be set back.
+  `allow-once.json` (owl's grants for one build), which nothing writes during a story; another story's base,
+  written when a parallel build prepares it, is not watched. Times are recorded with `ctime`, which can't be set back.
   Paths matching config's `snapshot_skip` globs (another tool's files, such as `.remember/**`) are left out of the
   comparison; nothing under `.accio/` ever is (the skip list itself lives there). Finder's `.DS_Store` files never
   count, anywhere.
@@ -58,7 +59,9 @@ DATA_EXTENSIONS = frozenset({"json", "yaml", "yml", "toml", "csv", "tsv", "txt",
 ACCIO_FOLDER = ".accio"
 OS_FILES = frozenset({".DS_Store"})  # macOS Finder writes these whenever a folder is opened
 RUN_FOLDER = ".accio/run/"
-WATCHED_RUN_FILES = ("push-ok", "*/base", "allow-once.json")  # nothing writes these during a story
+BASE_NAME = "base"
+WATCHED_RUN_FILES = ("push-ok", f"*/{BASE_NAME}", "allow-once.json")  # nothing writes these during a story,
+# except another story's base in a parallel build (see `compare`)
 COMMIT_ID = re.compile(r"[0-9a-f]{40}|[0-9a-f]{64}")
 STORY_REFS = b"refs/heads/story/"  # story branches move with every checkpoint commit
 SNAPSHOT_NAME = "main-snapshot.json"
@@ -255,13 +258,21 @@ def _skipped(path, skip):
     return globs.matches_any(path, (*skip, *folders))
 
 
-def compare(before, after, skip=()):
+def _another_storys_base(path, story_id):
+    """Whether `path` is another story's `run/<ID>/base`: portkey writes it when a parallel build prepares that story."""
+    folder, _, name = path.removeprefix(RUN_FOLDER).partition("/")
+    return story_id is not None and path.startswith(RUN_FOLDER) and name == BASE_NAME and folder != story_id
+
+
+def compare(before, after, skip=(), story_id=None):
     """(paths that changed in the main checkout, `HEAD` for a commit; whether origin/<base> moved).
 
-    `skip` holds config's `snapshot_skip` globs: paths another tool keeps writing during a run.
+    `skip` holds config's `snapshot_skip` globs: paths another tool keeps writing during a run. With `story_id`,
+    only that story's own `run/<ID>/base` is watched; the other stories' base files change when they are prepared.
     """
     paths = sorted(path for path in set(before["dirty"]) | set(after["dirty"])
-                   if before["dirty"].get(path) != after["dirty"].get(path) and not _skipped(path, skip))
+                   if before["dirty"].get(path) != after["dirty"].get(path) and not _skipped(path, skip)
+                   and not _another_storys_base(path, story_id))
     moved_head = ["HEAD"] if before["head"] != after["head"] else []
     git_state = [name for name in sorted(after.get("git", {}))
                  if before.get("git", {}).get(name) != after["git"][name]]
@@ -306,7 +317,7 @@ def run(main, worktree, parsed_story, start, settings, before, run_dir):
     failing = sorted(_run_within_budget(worktree, scoped_to_diff(settings["checks"], changed), deadline))
     audited, weak_tests, audit_output = audit(worktree, start, run_dir, settings.get("mutation"), deadline)
     main_changed, remote_moved = compare(before, snapshot(main, settings["base_branch"]),
-                                         settings.get("snapshot_skip", ()))
+                                         settings.get("snapshot_skip", ()), pathlib.Path(run_dir).name)
     reply = {"failing": failing, "skipped": False,
              "out_of_bounds": out_of_bounds(changed, parsed_story.meta.get("files", ())),
              "untagged": untagged(parsed_story.dod, test_texts(worktree)), "weak_tests": weak_tests,
