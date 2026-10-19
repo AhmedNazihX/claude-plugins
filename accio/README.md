@@ -25,19 +25,22 @@ committed; the build's runtime state (`.accio/run/`) is ignored by git.
 
 accio's names come from a school of magic; each comes with a plain role.
 
-| Agent | Role | What it does |
-|---|---|---|
-| `portkey` | the setup clerk | takes the build lock, makes each story's worktree and brief |
-| `house-elf` | the builder | writes the story's tests and code, test-first |
-| `prefect` | the checker | runs the tests and accio's scripted checks; records the outcome |
-| `examiner` | the spec reviewer | checks every acceptance line is met and really tested |
-| `professor` | the code reviewer | looks for bugs, silent errors and code that's hard to change |
-| `auror` | the security reviewer | reviews changes that touch risky paths |
-| `headmaster` | the judge | settles a disagreement, or turns it into one question for you |
-| `quill` | the story writer | turns the design into small, testable story files |
-| `seeker` | the researcher | checks facts against live docs and the code |
-| `wandmaker` | the architect | proposes 2–3 designs with their trade-offs |
-| `librarian` | the doc reader | quotes the parts of a long document you need |
+| Agent | Model | Role | What it does |
+|---|---|---|---|
+| `portkey` | `haiku` | the setup clerk | takes the build lock, makes each story's worktree and brief |
+| `house-elf` | `sonnet` | the builder | writes the story's tests and code, test-first |
+| `prefect` | `haiku` | the checker | runs the tests and accio's scripted checks; records the outcome |
+| `examiner` | `sonnet` | the spec reviewer | checks every acceptance line is met and really tested |
+| `professor` | `sonnet` | the code reviewer | looks for bugs, silent errors and code that's hard to change |
+| `auror` | `sonnet` | the security reviewer | reviews changes that touch risky paths |
+| `headmaster` | `sonnet` | the judge | settles a disagreement, or turns it into one question for you |
+| `quill` | `sonnet` | the story writer | turns the design into small, testable story files |
+| `seeker` | `sonnet` | the researcher | checks facts against live docs and the code |
+| `wandmaker` | `opus` | the architect | proposes 2–3 designs with their trade-offs |
+| `librarian` | `haiku` | the doc reader | quotes the parts of a long document you need |
+| `howler` | `haiku` | the CI watcher | watches CI after a push and reports how it ended |
+
+Haiku runs the clerks that run scripts and read CI, Sonnet builds and reviews, and Opus is for the architect.
 
 | Guard | Role | What it does |
 |---|---|---|
