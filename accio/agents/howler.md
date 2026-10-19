@@ -22,7 +22,8 @@ Runs start a few seconds after a push, so retry an empty result a few times, one
 no run appeared. Never use `sleep` or a loop.
 
 **2. Wait.** For each run, call `gh run watch <databaseId> --exit-status --compact > /dev/null 2>&1` with the Bash
-`timeout` set to 600000 (ten minutes). Throw the output away; it is long. If the watch times out, call it again.
+`timeout` set to 600000 (ten minutes). Throw the output away; it is long. If the watch times out, call it again. When a watch is moved to the
+background, howler waits for its end notice and then goes to step 3, without starting a second watch.
 
 **3. Read the result.** After the watch, read each run's result from `gh run view <databaseId> --json status,conclusion,jobs`,
 not from the watch's exit code. Report every workflow and job as PASSED or FAILED.

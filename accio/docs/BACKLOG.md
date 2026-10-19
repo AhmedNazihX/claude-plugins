@@ -44,7 +44,7 @@ evals/                       (CI: the marketplace's .github/workflows/test.yml)
 | done | S-025 `map` and `vow` skills |
 | done | S-026 Skill evals and baseline cost |
 | deferred | S-027 `brew-by-hand`: v1.1 (decision 012) |
-| todo (v2) | S-029 `howler`: CI after owl's push |
+| todo (v2) | S-029 `howler`: CI after owl's push (owl starts it: S-003; live run S-003/10 still open) |
 
 ---
 
@@ -537,7 +537,7 @@ repo (`foreman/agents/ci-watcher.md`).
   branch name ever reach a command
 - [ ] S-029/3 (no test) calls a failure `real` when the previous run of the same workflow failed the same way, else
   `first failure`, and says when the failing code lies outside the pushed range (a stale base, or broken before)
-- [ ] S-029/4 (no test) `owl` launches it in the background right after its push, and its report reaches the user
+- [ ] S-029/4 (no test) (S-003: text and design done; live run open) `owl` launches it in the background right after its push, and its report reaches the user
   with the iteration's outcome
 - [ ] S-029/5 WHEN `howler` calls a tool THE SYSTEM SHALL allow only reads and `git rev-parse`, `git remote get-url`,
   `git diff --name-only`, `gh run list`, `gh run view` and `gh run watch` (curfew)

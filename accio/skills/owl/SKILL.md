@@ -2,7 +2,7 @@
 name: owl
 description: Review (owl): reviews accio's last build with the user. Shows each finished story and each blocked question from one short summary, takes one batch answer (accept, reject or drop each story, answer the questions, push or not), merges what was accepted, and records the iteration.
 when_to_use: When the user says "review the build", "what did brew do/build", "the build finished", "accept/reject/drop S-012", "answer the build's questions", "merge and push the build", or runs /accio:owl, in a repo with an .accio/ folder. Not for planning (prophecy), writing stories (sort), design (wand), building (/accio:brew), reviewing a code diff or PR, or merging a branch by hand.
-allowed-tools: Read, Glob, Bash(${CLAUDE_PLUGIN_ROOT}/bin/accio-summary *), Bash(${CLAUDE_PLUGIN_ROOT}/bin/accio-owl *), Bash(${CLAUDE_PLUGIN_ROOT}/bin/accio-merge *), Bash(${CLAUDE_PLUGIN_ROOT}/bin/accio-hooks verify), Bash(${CLAUDE_PLUGIN_ROOT}/bin/accio-hooks install)
+allowed-tools: Read, Glob, Agent, Bash(${CLAUDE_PLUGIN_ROOT}/bin/accio-summary *), Bash(${CLAUDE_PLUGIN_ROOT}/bin/accio-owl *), Bash(${CLAUDE_PLUGIN_ROOT}/bin/accio-merge *), Bash(${CLAUDE_PLUGIN_ROOT}/bin/accio-hooks verify), Bash(${CLAUDE_PLUGIN_ROOT}/bin/accio-hooks install)
 ---
 
 # owl: review the build
@@ -59,7 +59,11 @@ built again). It writes everything and makes one commit, `chore(accio): iteratio
 ## 6. Push, only on yes
 Run `accio-owl push-ok`, then `git push origin <base>` with the base it names; your permission prompt for the push
 is a deliberate last confirmation. If push-ok refuses (a build is running, or the checkout isn't on the base
-branch), say why and don't push; never switch branches yourself. If the push fails, show why; never force it.
+branch), say why and don't push; never switch branches yourself. If the push fails, show why; never force it, and don't start howler.
+
+After a successful push, without asking, call the Agent tool with `accio:howler` (it runs in the background). Its
+prompt holds the full sha and the base branch from `accio-owl push-ok`, the iteration number and the "What happened"
+line you are about to report. Then end the report; howler's own report arrives later.
 
 End in the report format:
 
