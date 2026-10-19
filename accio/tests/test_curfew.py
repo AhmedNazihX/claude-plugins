@@ -379,6 +379,45 @@ class OtherAgentsTest(CurfewTestBase):
         self.assert_denied("Read", {"file_path": "x"}, "accio:nobody", agent="accio:nobody")
 
 
+class HowlerTest(CurfewTestBase):
+    SHA = "a" * 40
+    OTHER = "b" * 40
+
+    def verdict(self, command):
+        return self.decision("Bash", self.bash(command), agent="accio:howler")[0]
+
+    def test_S_001_1_to_9_howlers_read_only_commands_are_allowed(self):
+        sha, other = self.SHA, self.OTHER
+        allowed = (  # the DoD line each command proves is its number
+            (1, f"gh run list --commit {sha} --json databaseId,workflowDatabaseId,headSha,status,conclusion,name"),
+            (2, "gh run list --workflow 123 --branch main --limit 5 --json databaseId,headSha,conclusion"),
+            (3, "gh run watch 123 --exit-status --compact > /dev/null 2>&1"),
+            (4, "gh run view 123 --json jobs"),
+            (5, "gh run view 123 --log-failed --job 456 | tail -60"),
+            (6, f"git merge-base --is-ancestor {sha} {other}"),
+            (7, f"git diff --name-only {sha} {other}"),
+            (8, "git rev-parse HEAD"),
+            (9, "git remote get-url origin"))
+        for line, command in allowed:
+            with self.subTest(line=f"S-001/{line}"):
+                self.assertEqual(self.verdict(command), "allow", command)
+
+    def test_S_001_10_to_20_everything_else_is_denied(self):
+        denied = ((10, "gh run rerun 1"), (11, "gh run cancel 1"), (12, "git log"), (13, "git push"),
+                  (14, "sleep 5"), (15, "cat x"), (16, "GH_PAGER=cat gh run list"),
+                  (17, "gh run view 1 -R x/y"), (18, "gh run view abc"),
+                  (19, "git diff --name-only --output=f"), (20, "gh run view 1 --json token"),
+                  (0, "gh run view 1 --json=jobs"), (0, "gh run view 1 > out.txt"), (0, "tail -f x"),
+                  (0, "gh run view 1 --log-failed | cat"), (0, "gh run view 1 --repo x/y"))
+        for line, command in denied:
+            with self.subTest(line=f"S-001/{line}", command=command):
+                self.assertEqual(self.verdict(command), "deny", command)
+
+    def test_S_001_17_the_reason_for_an_unknown_flag_names_the_command(self):
+        reason = self.assert_denied("Bash", self.bash("gh run view 1 -R x/y"), "howler", agent="accio:howler")
+        self.assertIn("gh run", reason)
+
+
 class AskRulesTest(CurfewTestBase):
     def setUp(self):
         super().setUp()

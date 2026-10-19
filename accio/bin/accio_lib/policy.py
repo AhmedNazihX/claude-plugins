@@ -59,7 +59,27 @@ AGENTS = {
     "wandmaker": Lists(writes=("run/wand/wandmaker-options.md",)),
     "quill": Lists(writes=("stories/S-*.md", "run/sort/quill-summary.md")),
     "librarian": Lists(),
+    "howler": Lists(bash="howler"),
 }
+
+HEX_SHA = r"[0-9a-f]{40}"
+NUMBER = r"\d+"
+RUN_JSON_FIELDS = frozenset({"databaseId", "workflowDatabaseId", "headSha", "headBranch", "status", "conclusion",
+                             "name", "workflowName", "displayTitle", "event", "number", "attempt", "createdAt",
+                             "startedAt", "updatedAt", "url", "jobs"})
+HOWLER_FORMS = (  # howler reads CI runs and compares commits; each is one exact shape (S-001)
+    bashpolicy.Form(("gh", "run", "list"), flags={"--commit": HEX_SHA, "--workflow": NUMBER,
+                                                  "--branch": r"\w[\w./-]*", "--limit": NUMBER},
+                    json_fields=RUN_JSON_FIELDS),
+    bashpolicy.Form(("gh", "run", "watch"), operands=(NUMBER,), flags={"--exit-status": None, "--compact": None}),
+    bashpolicy.Form(("gh", "run", "view"), operands=(NUMBER,), flags={"--log-failed": None, "--job": NUMBER},
+                    json_fields=RUN_JSON_FIELDS),
+    bashpolicy.Form(("git", "merge-base", "--is-ancestor"), operands=(HEX_SHA, HEX_SHA)),
+    bashpolicy.Form(("git", "diff", "--name-only"), operands=(HEX_SHA, HEX_SHA)),
+    bashpolicy.Form(("git", "rev-parse"), operands=("HEAD",)),
+    bashpolicy.Form(("git", "remote", "get-url"), operands=("origin",)),
+    bashpolicy.Form(("tail",), flags={}, operands=(r"-\d+",)),  # the end of a failed job's log
+)
 
 
 @dataclasses.dataclass(frozen=True)
@@ -180,6 +200,8 @@ def _house_elf_judge(worktree, ctx):
 # --- the other agents' Bash ----------------------------------------------------------------------------------------
 
 def _other_judge(agent, kind, ctx):
+    if kind == "howler":
+        return bashpolicy.Judge(agent=agent, forms=HOWLER_FORMS, bin_dir=ctx.bin_dir)
     if kind != "checks":
         return bashpolicy.Judge(agent=agent, scripts=SCRIPTS[kind], bin_dir=ctx.bin_dir)
     return bashpolicy.Judge(agent=agent, prefixes=_check_prefixes(ctx), read_only=True, git=bashpolicy.READ_ONLY_GIT,

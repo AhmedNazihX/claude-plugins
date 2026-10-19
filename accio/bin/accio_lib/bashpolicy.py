@@ -66,6 +66,41 @@ class Judge:
     worktree: pathlib.Path = None
     may_cd: bool = False
     script_args: dict = dataclasses.field(default_factory=dict)  # script -> pattern its arguments must match whole
+    forms: tuple = ()  # exact command shapes (`Form`) the agent may run, and nothing else
+
+
+@dataclasses.dataclass(frozen=True)
+class Form:
+    """One exact command shape: the `prefix` words, then each known flag (`flags` maps a flag to the pattern its
+    value must match whole, or None for a flag without a value; `--json` takes a comma list of `json_fields`),
+    then `operands` (patterns, in order). Any other word, `--flag=value` or abbreviation, fails."""
+    prefix: tuple
+    operands: tuple = ()
+    flags: dict = dataclasses.field(default_factory=dict)
+    json_fields: frozenset = frozenset()
+
+    def matches(self, words):
+        words = list(words)
+        if tuple(words[:len(self.prefix)]) != self.prefix:
+            return False
+        rest, found, index = words[len(self.prefix):], [], 0
+        while index < len(rest):
+            word = rest[index]
+            if word == "--json" and self.json_fields:
+                index += 1
+                if index >= len(rest) or not all(f in self.json_fields for f in rest[index].split(",")):
+                    return False
+            elif word in self.flags:
+                pattern = self.flags[word]
+                if pattern is not None:
+                    index += 1
+                    if index >= len(rest) or not re.fullmatch(pattern, rest[index]):
+                        return False
+            else:
+                found.append(word)
+            index += 1
+        return len(found) == len(self.operands) and all(
+            re.fullmatch(pattern, word) for pattern, word in zip(self.operands, found))
 
 
 def command_prefixes(commands, where):
@@ -112,6 +147,8 @@ def _judge_segment(words, judge):
 def _judge_program(words, judge):
     program = words[0]
     if _is_listed(words, judge) or _is_script(words, judge) or (program == "cd" and judge.may_cd):
+        return None
+    if any(form.matches(words) for form in judge.forms):
         return None
     if program == "git" and judge.git:
         return _git(words, judge)
