@@ -203,7 +203,7 @@ class SnapshotTest(CheckTestBase):
 
     def test_a_skipped_path_another_tool_writes_does_not_count(self):
         write(self.repo / ".env", "KEY=one\n")
-        write(self.repo / ".remember" / ".gitignore", "*\n")  # ignores itself: git status shows one `.remember/` entry
+        write(self.repo / ".remember" / ".gitignore", "*\n")  # like the remember plugin's: git lists each file
         write(self.repo / ".remember" / "now.md", "one\n")
         self.check("S-001", "snapshot")
         before = json.loads((self.accio / "run" / "S-001" / "main-snapshot.json").read_text(encoding="utf-8"))
@@ -212,6 +212,13 @@ class SnapshotTest(CheckTestBase):
         write(self.repo / ".env", "KEY=two\n")
         changed = checks.compare(before, checks.snapshot(self.repo, "main"), skip=(".remember/**",))[0]
         self.assertEqual(changed, [".env"])
+
+    def test_a_folder_skip_covers_a_folder_git_lists_as_one_entry(self):
+        write(self.repo / "build" / "out.txt", "one\n")  # the repo's .gitignore holds `build/`: one `build` entry
+        self.check("S-001", "snapshot")
+        before = json.loads((self.accio / "run" / "S-001" / "main-snapshot.json").read_text(encoding="utf-8"))
+        write(self.repo / "build" / "more.txt", "two\n")
+        self.assertEqual(checks.compare(before, checks.snapshot(self.repo, "main"), skip=("build/**",))[0], [])
 
     def test_a_skip_never_hides_accios_own_files(self):
         self.check("S-001", "snapshot")

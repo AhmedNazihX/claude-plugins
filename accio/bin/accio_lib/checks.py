@@ -239,8 +239,14 @@ def snapshot(main, base_branch):
 
 
 def _skipped(path, skip):
-    """Whether config's `snapshot_skip` covers `path`; accio's own files (`.accio/`) are always watched."""
-    return not (path == ACCIO_FOLDER or path.startswith(f"{ACCIO_FOLDER}/")) and globs.matches_any(path, skip)
+    """Whether config's `snapshot_skip` covers `path`; accio's own files (`.accio/`) are always watched.
+
+    `dir/**` also covers `dir` itself: git lists a folder ignored as a whole as one entry.
+    """
+    if path == ACCIO_FOLDER or path.startswith(f"{ACCIO_FOLDER}/"):
+        return False
+    folders = tuple(pattern[:-len("/**")] for pattern in skip if pattern.endswith("/**"))
+    return globs.matches_any(path, (*skip, *folders))
 
 
 def compare(before, after, skip=()):
