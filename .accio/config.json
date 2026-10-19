@@ -1,7 +1,7 @@
 {
   "checks": [
     {
-      "command": "python3 -m unittest discover -s accio/tests",
+      "command": "python3 accio/tests/run_tests.py",
       "glob": "accio/**"
     },
     {
