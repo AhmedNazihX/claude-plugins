@@ -151,6 +151,66 @@ class ReviewPackageTest(unittest.TestCase):
         self.assertIn("--since", result.stderr)
         self.assertEqual(self.brief("--review", "--since", git(self.repo, "rev-parse", "main"))["risky"], False)
 
+    def fix_review(self, branch="fix/login-typo", acceptance="- the typo is gone\n- nothing else changes\n"):
+        """S-013: run `--review --fix-branch` on a branch with one commit off main; acceptance None = no file."""
+        self.story()  # gives the repo its .accio/stories folder
+        if git(self.repo, "branch", "--list", branch) == "" and branch != "nope":
+            git(self.repo, "checkout", "-q", "-b", branch)
+            write(self.repo / "src" / "a.py", "value = 3\n")
+            git(self.repo, "add", "src")  # not .accio/, which belongs to no branch
+            git(self.repo, "commit", "-q", "-m", "fix the typo")
+            git(self.repo, "checkout", "-q", "main")
+        path = self.base / "acceptance.md"
+        path.unlink(missing_ok=True)
+        if acceptance is not None:
+            write(path, acceptance)
+        return subprocess.run([sys.executable, "-I", str(BRIEF), "--review", "--fix-branch", branch,
+                               "--acceptance", str(path)], cwd=self.repo, stdin=subprocess.DEVNULL,
+                              capture_output=True, text=True, check=False)
+
+    def test_S_013_1_a_branch_that_is_not_a_story_gets_a_review_package(self):
+        result = self.fix_review()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        reply = json.loads(result.stdout)
+        self.assertEqual(reply["head"], git(self.repo, "rev-parse", "fix/login-typo"))
+        self.assertTrue(pathlib.Path(reply["package"]).is_file())
+        self.assertIn("+value = 3", pathlib.Path(reply["diff"]).read_text(encoding="utf-8"))
+
+    def test_S_013_2_the_package_holds_the_diff_the_acceptance_list_and_three_findings_paths(self):
+        reply = json.loads(self.fix_review().stdout)
+        text = pathlib.Path(reply["package"]).read_text(encoding="utf-8")
+        self.assertIn(reply["diff"], text)
+        self.assertIn("## Acceptance list\n- the typo is gone", text)
+        self.assertNotIn("Definition of Done", text)
+        for who in ("professor", "auror", "examiner"):
+            self.assertIn(str(self.accio / "run" / "fix-login-typo" / f"{who}-findings.md"), text)
+
+    def test_S_013_3_a_missing_or_empty_acceptance_file_writes_nothing(self):
+        for content in (None, "", "  \n"):
+            with self.subTest(content):
+                result = self.fix_review(acceptance=content)
+                self.assertEqual(result.returncode, 1)
+                self.assertIn("acceptance file", result.stderr)
+                self.assertNotIn("Traceback", result.stderr)
+                self.assertFalse((self.accio / "run").exists())
+
+    def test_S_013_1_a_story_branch_or_unknown_branch_is_refused(self):
+        git(self.repo, "branch", "story/S-009")
+        for branch in ("story/S-009", "nope"):
+            with self.subTest(branch):
+                result = self.fix_review(branch)
+                self.assertEqual(result.returncode, 1)
+                self.assertIn("accio-brief:", result.stderr)
+
+    def test_S_013_4_a_story_review_reads_as_before(self):
+        self.story()
+        self.brief()
+        self.build()
+        text = self.package()[1]
+        self.assertIn("## Definition of Done\n- S-001/1", text)
+        self.assertIn("the implementer's report:", text)
+        self.assertIn("Write them to `", text)
+
     def test_a_git_failure_is_a_plain_error_not_a_traceback(self):
         self.story()
         self.brief()
