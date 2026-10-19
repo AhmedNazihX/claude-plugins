@@ -63,7 +63,7 @@ jobs:
         with:
           node-version: "22"
       - name: Python tests
-        run: python3 -m unittest discover -s tests -v
+        run: python3 tests/run_tests.py --verbose
       - name: Workflow tests
         run: node --test 'tests/workflow/**/*.test.mjs'
 

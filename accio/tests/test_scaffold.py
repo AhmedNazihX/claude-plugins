@@ -36,7 +36,7 @@ class CiConfigTest(unittest.TestCase):
         runs = [line.strip() for line in lines if line.strip().startswith("run:")]
         matrix = [line.strip() for line in lines if line.strip().startswith("os:")]
         self.assertEqual(matrix, ["os: [ubuntu-latest, macos-latest]"])
-        for command in ("python3 -m unittest", "node --test 'tests/workflow/**/*.test.mjs'"):
+        for command in ("python3 tests/run_tests.py", "node --test 'tests/workflow/**/*.test.mjs'"):
             self.assertTrue(any(command in run for run in runs), f"no run: step runs {command}")
 
 
