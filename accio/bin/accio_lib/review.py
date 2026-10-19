@@ -10,7 +10,7 @@
 import re
 import subprocess
 
-from accio_lib import brief, checks, globs
+from accio_lib import brief, checks, globs, summary
 
 REFERENCES = brief.BIN.parent / "references"
 CHECKLISTS = REFERENCES / "checklists"
@@ -24,6 +24,7 @@ CHECKLIST_WORDS = {
 RISK_WORD_SPLIT = re.compile(r"[\s,\-]+")
 DIFF_NAME = "review.diff"
 PACKAGE_NAME = "review-package.md"
+REVIEWERS = ("professor", "auror", "examiner")
 
 
 def _git(worktree, *args):
@@ -75,17 +76,64 @@ def package(accio, parsed, worktree, settings, since=None):
     except checks.CheckError as error:
         raise brief.BriefError(f"can't tell where {story_id}'s diff starts: {error}") from error
     origin = _fix_start(worktree, since, start) if since else start
+    facts = _diff_facts(worktree, run_dir, origin, head, settings, parsed.meta.get("risk"))
+    text = _render(parsed, accio, worktree, {
+        **facts, "is_fix": bool(since), "findings": run_dir / "<reviewer>-findings.md"})
+    return _write(run_dir, text, facts)
+
+
+def _diff_facts(worktree, run_dir, origin, head, settings, risk):
+    """Write the diff; return what the package says about it."""
     changed = _git(worktree, "diff", "--name-only", "-z", "--no-renames", origin, head).split("\0")
     risky_files = [path for path in changed if path and globs.matches_any(path, settings["risky_paths"])]
-    picked = checklists(parsed.meta.get("risk"), bool(risky_files))
     diff = brief.write_file(run_dir / DIFF_NAME,
                             _git(worktree, "diff", "--no-color", "--no-ext-diff", "--no-textconv", origin, head))
-    text = _render(parsed, accio, worktree, {
-        "head": head, "origin": origin, "diff": diff, "is_fix": bool(since),
-        "shortstat": _git(worktree, "diff", "--shortstat", origin, head).strip() or "no changes",
-        "risky_files": risky_files, "checklists": picked, "findings": run_dir / "<reviewer>-findings.md"})
+    return {"head": head, "origin": origin, "diff": diff, "risky_files": risky_files,
+            "checklists": checklists(risk, bool(risky_files)),
+            "shortstat": _git(worktree, "diff", "--shortstat", origin, head).strip() or "no changes"}
+
+
+def _write(run_dir, text, facts):
     target = brief.write_file(run_dir / PACKAGE_NAME, text)
-    return {"package": str(target), "diff": str(diff), "head": head, "risky": bool(risky_files) or SECURITY in picked}
+    return {"package": str(target), "diff": str(facts["diff"]), "head": facts["head"],
+            "risky": bool(facts["risky_files"]) or SECURITY in facts["checklists"]}
+
+
+def _read_acceptance(path):
+    try:
+        text = path.read_text(encoding="utf-8").strip()
+    except (OSError, UnicodeDecodeError) as error:
+        raise brief.BriefError(f"cannot read the acceptance file {path}: {error}") from error
+    if not text:
+        raise brief.BriefError(f"the acceptance file {path} is empty; list what the fix must do")
+    return text
+
+
+def package_fix(accio, main, branch, acceptance, settings):
+    """The package for a direct fix: a branch that is not a story, its acceptance list in place of the DoD."""
+    text = _read_acceptance(acceptance)
+    if re.fullmatch(r"story/S-\d+", branch):
+        raise brief.BriefError(f"{branch} is a story branch; review it with `accio-brief <ID> --review`")
+    if not _succeeds(main, "rev-parse", "--verify", "--quiet", f"refs/heads/{branch}"):
+        raise brief.BriefError(f"there is no branch {branch} in {main}")
+    head = _git(main, "rev-parse", f"refs/heads/{branch}").strip()
+    origin = _git(main, "merge-base", settings["base_branch"], head).strip()
+    name = re.sub(r"[^A-Za-z0-9._-]+", "-", branch).strip("-") or "fix"
+    run_dir = accio / "run" / name
+    facts = _diff_facts(main, run_dir, origin, head, settings, None)
+    findings = "\n".join(f"- `{run_dir / f'{who}-findings.md'}`" for who in REVIEWERS)
+    base = settings["base_branch"]
+    values = {
+        "story_id": name, "title": "direct fix", "worktree": main, "branch": branch, "head": head,
+        "scope": f"Review the whole fix: the diff from `{origin}` (where the branch leaves `{base}`) to `{head}`.",
+        "diff": facts["diff"], "shortstat": facts["shortstat"], "template": REFERENCES / "findings-template.md",
+        "source_line": "- This is a direct fix, not a story: there is no story file or implementer's report.",
+        "findings_line": f"Each reviewer writes to their own file:\n{findings}\nIn the format of "
+                         f"`{REFERENCES / 'findings-template.md'}`.",
+        "criteria_heading": "Acceptance list", "dod": text, "files_heading": "Files changed",
+        "files": "- see the diff", "risky_files": brief.bullets(f"`{path}`" for path in facts["risky_files"]),
+        "checklists": ", ".join(f"`{CHECKLISTS / n}`" for n in facts["checklists"]) or "none"}
+    return _write(run_dir, brief.fill("review-package.md", values), facts)
 
 
 def _render(parsed, accio, worktree, facts):
@@ -97,6 +145,11 @@ def _render(parsed, accio, worktree, facts):
     return brief.fill("review-package.md", {
         **brief.common(parsed, worktree, accio), "scope": scope, "head": facts["head"], "diff": facts["diff"],
         "shortstat": facts["shortstat"], "findings": facts["findings"],
+        "criteria_heading": "Definition of Done", "files_heading": "Files the story may change (plus their tests)",
+        "source_line": f"- The story: `{accio / 'stories' / (parsed.meta['id'] + '.md')}`; the implementer's report: "
+                       f"`{accio / 'run' / parsed.meta['id'] / summary.REPORT_NAME}`",
+        "findings_line": f"Write them to `{facts['findings']}` (your name in place of `<reviewer>`), in the format "
+                         f"of `{REFERENCES / 'findings-template.md'}`.",
         "template": REFERENCES / "findings-template.md", "dod": brief.dod_lines(parsed),
         "files": brief.bullets(f"`{path}`" for path in parsed.meta.get("files", ())),
         "risky_files": brief.bullets(f"`{path}`" for path in facts["risky_files"]), "checklists": listed,

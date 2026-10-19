@@ -7,6 +7,8 @@ With --fix: write run/<ID>/fix-brief.md listing only the given findings; the wor
 Prints {"worktree", "brief", "base"} as JSON (portkey's reply).
 With --review: write run/<ID>/review.diff and review-package.md for the reviewers; --since <commit> limits the diff
 to a fix round's. Prints {"package", "diff", "head", "risky"}; the worktree is not touched.
+With --review --fix-branch <branch> --acceptance <file> (no ID): the same package for a direct fix on a branch that
+is not a story, with the acceptance list in place of the DoD and a findings path for each reviewer.
 """
 import argparse
 import json
@@ -29,6 +31,8 @@ def run(args):
     main, accio = paths.main_root(), paths.accio_dir()
     if main is None or accio is None:
         raise brief.BriefError("no .accio/ folder in this repo; run accio's setup first")
+    if args.fix_branch:
+        return review.package_fix(accio, main, args.fix_branch, args.acceptance, config.load(accio))
     if not story.STORY_ID.match(args.id):
         raise brief.BriefError(f"a story id looks like S-012, got {args.id!r}")
     story_path = accio / "stories" / f"{args.id}.md"
@@ -59,7 +63,9 @@ def run(args):
 
 def main(argv=None):
     parser = argparse.ArgumentParser(prog="accio-brief", description=__doc__)
-    parser.add_argument("id")
+    parser.add_argument("id", nargs="?")
+    parser.add_argument("--fix-branch")
+    parser.add_argument("--acceptance", type=pathlib.Path)
     parser.add_argument("--parent")
     modes = parser.add_mutually_exclusive_group()
     modes.add_argument("--fix", action="append", type=pathlib.Path, default=[])
@@ -68,6 +74,11 @@ def main(argv=None):
     args = parser.parse_args(argv)
     if args.since and not args.review:
         parser.error("--since goes with --review")
+    if args.fix_branch or args.acceptance:
+        if not (args.review and args.fix_branch and args.acceptance) or args.id or args.since or args.parent:
+            parser.error("a direct fix review is: --review --fix-branch <branch> --acceptance <file>, with no story id")
+    elif not args.id:
+        parser.error("a story id is required")
     try:
         print(json.dumps(run(args)))
     except (brief.BriefError, story.StoryError, config.ConfigError, globs.GlobError, runlock.LockError) as error:
