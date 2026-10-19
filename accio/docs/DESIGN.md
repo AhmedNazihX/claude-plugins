@@ -78,8 +78,14 @@ wand ──► sort ──► ┌──────────── one iterat
                    │ (plan, go)  (build)  (review)  (retro v2)│
                    └─────────────────────────────────────────┘
 any time: map (board) · vow (record a decision)
+one command: /accio runs whichever step the board says is next, and repeats (§ 7.3)
 v1.1:     reparo (quick fix) · lumos (explain) · telescope (research)
 ```
+
+You can run each step by hand (`/accio:wand`, `/accio:brew` and so on), or type `/accio` once. `/accio` asks
+`accio-board next --json` for the step, runs that step's skill in the same chat, and repeats while the step needs no
+decision. Typing `/accio` is the user's opt-in to every build it starts, and the build's end notice wakes the chat so
+it goes on to `owl` (spikes S1 and S2, S-014).
 
 ### 3.1 Design: `wand`
 **Input:** `intent.md` or the user's idea, plus the existing code if there is any.
@@ -240,6 +246,7 @@ Each skill keeps its SKILL.md under about 80 lines, with details in `references/
 
 | Skill | Phase | User-facing? | Version |
 |---|---|---|---|
+| `accio` | the conductor: runs the next step and repeats | yes (stops only at real decisions, § 7.3) | v1 |
 | `wand` | design | yes | v1 |
 | `sort` | planning | yes (summary) | v1 |
 | `prophecy` | iteration planning, checkpoint 1 | yes | v1 |
@@ -468,13 +475,25 @@ Next: /accio:owl
 ```
 
 ### 7.3 User touchpoints (decision 005)
-- **Ask the user at:**
-  - `wand` (design questions)
-  - `prophecy` (go)
-  - `owl` (accept, reject or drop; answers; push)
-- **Never mid-build.**
-- **An honest count per iteration:** k grilling questions plus "go" at `prophecy`, typing `/accio:brew`, the run
-  permission (once, if "don't ask again" is chosen), and one `owl` batch: about 4 + k. Each second pass adds 2.
+- **One typed command per iteration: `/accio`.** It carries the work from wherever the board stands to the push.
+  The spikes of S-014 found `/accio` starts the build itself (typing it is the opt-in) and that the build's end
+  notice wakes the chat, so it goes on to `owl` with no message from the user. Each spike fallback would have added
+  one typed command: one to start the build, one to wake after the build. Neither is needed. The single commands
+  (`/accio:wand`, `/accio:brew` ...) still work, each typed by hand.
+- **`/accio` stops only where the decision is the user's:**
+  - the design (`wand`'s interview, one question at a time)
+  - a real open question a story needs before it can be built (`prophecy`)
+  - a story that failed: blocked with a question `/accio` can't answer, or rejected by review
+  - push and release
+  - paid calls above $0
+  - safety overrides
+  - commands `curfew` denied
+- **It does not stop** to ask "go" (the plan's low-stakes defaults are taken and reported) or to accept a story that
+  passed every check and review (it is merged into main locally and reported). **Never mid-build.**
+- **An honest count per iteration:** one typed `/accio`, plus the answers to k real questions (design, open
+  questions, failed stories) and the push. Each second pass adds one `/accio`. Run by hand, the old count holds:
+  about 4 + k (k grilling questions, "go" at `prophecy`, typing `/accio:brew`, the run permission, one `owl`
+  batch).
   First use also needs a one-time setup: the git hooks, and approving the workflow once with "don't ask again"
   (§ 12.1), plus one snippet to paste in a lefthook or pre-commit repo.
 - **Always ask** (at `owl`): push, paid calls above $0, needs-user, safety overrides, a missing hook marker, and
