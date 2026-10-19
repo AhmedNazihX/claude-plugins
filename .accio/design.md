@@ -233,6 +233,11 @@ gaps in accio, not in the story:
 - R4 `accio-brief --review` can make a review package for a branch that is not a story (a direct fix), given a short
   acceptance list, so professor, auror and examiner review it as they would a story. Owner: the user as accio's
   maintainer.
+- R5 brew honours `wip` from `config.json` (DESIGN § 5.2); today `workflows/brew.js` fixes it at 3. Owner: the user
+  (iteration 2 set `wip: 1` and still built 3 at once).
+- R6 The main snapshot forgives another story's `run/<ID>/base` only when accio's own prepare step wrote it during
+  the run, not any change to it (accio 0.1.5 forgives every change; the push security review flagged it). Owner: the
+  user (keeps the tamper check whole with parallel builds).
 
 ### Out of scope
 - Changing which checks run inside a build, or their time budget.
@@ -262,6 +267,16 @@ gaps in accio, not in the story:
    review-package template, tests. Needs: none. Risk: none. Checked by: a unittest that builds a package for a
    non-story branch with an acceptance file and checks it holds the diff path, the acceptance list and the findings
    paths.
+5. **brew honours wip.** The load step (`accio-board ready --json`) returns `wip` from config, and `brew.js` uses it
+   instead of its fixed `WIP = 3`. Files: `accio/bin/accio-board`, `accio/workflows/brew.js`, `accio/tests/test_board.py`,
+   `accio/tests/workflow/brew-core.test.mjs`. Needs: none. Risk: none. Checked by: a unittest that `ready --json`
+   gives the config's `wip` (3 when unset), and a workflow test where `wip: 1` never has two stories in progress.
+6. **Only accio's own base writes are forgiven.** `accio-brief` appends each `run/<ID>/base` it writes to a log in
+   `.accio/run/` (watched by the snapshot itself); `checks.compare` forgives another story's base change only when
+   the log holds that write with the same content. Files: `accio/bin/accio_lib/brief.py`,
+   `accio/bin/accio_lib/checks.py`, `accio/tests/test_checks.py`, `accio/tests/test_brief.py`. Needs: none.
+   Risk: security (a tamper check). Checked by: unittests where another story's base written by `accio-brief`
+   doesn't count, the same file written by hand does, and an edited log counts as a change.
 
 ### Evidence
 - The unittests above.
