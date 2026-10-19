@@ -122,15 +122,16 @@ prophecy → brew → owl), so they have to remember the order and keep coming b
 ### Requirements
 - R1 One entry command, `/accio`, that reads the board and runs the next step. Owner: the user (no more remembering
   the order).
-- R2 It keeps going through steps that need no decision: design → stories → plan, "go" → build, build → review.
-  Owner: the user ("I don't have to keep calling everything").
-- R3 It stops only where the decision is the user's:
+- R2 It keeps going through steps that need no decision: design → stories → plan → build → review → the next plan.
+  Owner: the user ("I don't have to keep calling everything"; "try not to get blocked on me going forward").
+- R3 It stops only where the decision is the user's (decision 004):
   - **the design:** wand's interview, one question at a time, as today
-  - **the plan:** one message with the batch and its defaults, ending with "go". This stays a stop because the
-    user's "go" is also their opt-in to the build (spike S1).
-  - **a real open question** a story needs before it can be built
-  - **owl's always-ask items:** accept or reject, push, paid calls, safety overrides, denied commands
-  Owner: the user (keeps the safety model, DESIGN § 7.3).
+  - **a real open question** a story needs before it can be built (prophecy's step 4, items 1 and 2)
+  - **a story that failed:** blocked with a question the conductor can't answer from the story, or rejected by review
+  - **push and release**, paid calls, safety overrides, and commands curfew denied
+  It does **not** stop for "go" (the plan's low-stakes defaults are taken and reported) or to accept a story that
+  passed every check and review (it is accepted and merged into main locally, and reported). Typing `/accio` is the
+  user's opt-in to every build it starts. Owner: the user (keeps the safety model's hard stops, DESIGN § 7.3).
 - R4 One copy of the "what's next" rule. Today it's written twice: in `accio/hooks/session_start.py:42-63` and in
   `accio/skills/map/SKILL.md:20-26`. Owner: the user as accio's maintainer (a third copy would drift).
 
@@ -153,8 +154,8 @@ text only follows it. The single commands (`/accio:wand`, `/accio:brew` …) kee
 it and carries on to the stories when the design is committed.
 
 **Two things aren't documented, so each gets a spike** (a short hands-on test) before we rely on it:
-- **S1:** can a skill start the build (the `Workflow` tool, `accio:brew`) after the user's "go"? If not, the go
-  message says "type `/accio:brew`": one typed command per iteration.
+- **S1:** can a skill start the build (the `Workflow` tool, `accio:brew`) when the plan is recorded, with `/accio`
+  as the opt-in? If not, the plan's message says "type `/accio:brew`": one typed command per iteration.
 - **The wake (S2, S3 or S5):** does the chat continue by itself when the build ends? S2 tests the build's own report,
   S3 an `asyncRewake` hook that exits 2 when `run/brew.lock` is free, S5 one long blocking wait call. If none works,
   the user types `/accio` after the build, and it picks up at the review.
@@ -171,8 +172,8 @@ Each fallback costs the user one typed command, never a skipped safety check.
    stories, all done) and checks `step` and `auto`; a test fails if the rule list is still in `map` or the hook.
 2. **Spikes S1 and the wake (S2, S3, S5), by hand.** Results go in Review notes and decide parts 3 and 4. Files: none
    (notes only). Needs: none. Risk: none.
-   Checked by: S1 passes when `run/brew.lock` and the run's `journal.jsonl` appear after "go"; a wake spike passes
-   when owl starts with no message from the user.
+   Checked by: S1 passes when `run/brew.lock` and the run's `journal.jsonl` appear after the plan is recorded, with
+   no message from the user; a wake spike passes when owl starts with no message from the user.
 3. **The `/accio` conductor skill.** About 40 lines. Files: `accio/skills/accio/SKILL.md`, `accio/tests/` checks.
    Needs: 1, 2. Risk: none.
    Checked by: an eval in a fixture repo with a design and no stories shows `/accio` runs `accio-board next`, then
@@ -180,8 +181,17 @@ Each fallback costs the user one typed command, never a skipped safety check.
 4. **Step endings.** When `/accio` is driving, each step ends with "next: <step> (accio carries on)"; run alone, it
    keeps "/accio:X". Files: `accio/skills/{wand,sort,prophecy,owl}/SKILL.md`. Needs: 3. Risk: none.
    Checked by: the part 3 eval's no-"type /accio:X" check.
-5. **Docs.** DESIGN.md §§ 3, 4.1 and 7.3 (the new touchpoint count), the README's quick start, and BACKLOG. Files:
-   `accio/docs/DESIGN.md`, `accio/README.md`, `accio/docs/BACKLOG.md`. Needs: 3, 4. Risk: none.
+5. **Fewer stops (decision 004).** When `/accio` is driving: prophecy records the plan without asking "go" when no
+   story needs a real decision (dropped deps or an unclear DoD), taking and reporting the low-stakes defaults; owl
+   accepts every READY story (it passed its checks and reviews), merges it locally, and asks only about blocked
+   stories it can't answer, and the push. `accio-board next` gives `auto: true` for prophecy and owl in those cases.
+   Run alone, both skills keep today's stops. Files: `accio/skills/{prophecy,owl}/SKILL.md`,
+   `accio/bin/accio_lib/nextstep.py`, tests. Needs: 1, 3. Risk: none.
+   Checked by: unittests on `accio-board next` (a plan with no open question and a review with only READY stories
+   give `auto: true`; a dropped dep or a BLOCKED story gives `auto: false`); an eval where `/accio` with one READY
+   story runs `accio-merge` without a user message (tool order).
+6. **Docs.** DESIGN.md §§ 3, 4.1 and 7.3 (the new touchpoint count), the README's quick start, and BACKLOG. Files:
+   `accio/docs/DESIGN.md`, `accio/README.md`, `accio/docs/BACKLOG.md`. Needs: 3, 4, 5. Risk: none.
    Checked by: by hand, § 7.3 matches the stops in R3.
 
 ### Evidence
@@ -194,3 +204,69 @@ Each fallback costs the user one typed command, never a skipped safety check.
 - S1 and the wake spikes (part 2). Their results may add one typed command each.
 - After compaction only the first 5,000 tokens of each skill survive. One long chat may lose the conductor's text
   after an iteration or two; a new `/accio` recovers, because it re-reads the board.
+
+## Lessons from iteration 1
+
+### Outcome
+After this ships, a build in a new or freshly set-up repo can't silently skip its tests, a rebuilt story never hands
+back its old unreviewed work as done, and a direct fix to accio gets accio's own reviewers. We'd know because the next
+iteration has no stop caused by any of these three, and a direct fix's review comes from `accio-brief --review`
+instead of a hand-written package.
+
+### Who and why
+The user, building accio with accio. Iteration 1's first story (S-001) needed four builds; three of the causes were
+gaps in accio, not in the story:
+- `.accio/config.json` had no `checks`, so the checker ran nothing and curfew refused the builder's own test run; it
+  handed in code it had never run.
+- On a rebuild, the builder found its earlier commit on `story/S-001`, saw its tests pass, and handed it back unchanged.
+- Fixes to accio made outside a story (snapshot_skip, the brief's Context, `.DS_Store`) needed review packages written
+  by hand so professor and auror could review them.
+
+### Requirements
+- R1 A build refuses to start when no `checks` are set, and says in plain words how to add them. Owner: the user (a
+  build with no checks looks green but proves nothing).
+- R2 setup (`wand`'s first run) proposes the check commands from the repo (CI workflow, package scripts, test folders)
+  and writes them into `config.json`. Owner: the user (so R1 never stops a first build).
+- R3 When a story's branch already holds commits from an earlier build, the brief says so plainly: they were not
+  accepted, and why (the review notes or the answered question). Owner: the user (no more rebuilds that change
+  nothing).
+- R4 `accio-brief --review` can make a review package for a branch that is not a story (a direct fix), given a short
+  acceptance list, so professor, auror and examiner review it as they would a story. Owner: the user as accio's
+  maintainer.
+
+### Out of scope
+- Changing which checks run inside a build, or their time budget.
+- Reviewing changes that never reach a branch.
+
+### Design
+- **R1** in `accio-board ready` (the brew load step) and `prophecy`'s go: no `checks` → a plain refusal naming
+  `config.json` and an example entry.
+- **R2** in `wand`'s setup step: a small script reads `.github/workflows/*.yml` `run:` lines, `package.json` scripts and
+  common test commands, proposes them, and wand writes the ones the user keeps.
+- **R3** in `accio-brief`: when `story/<ID>` has commits past its recorded base, add a "## Your earlier work" section
+  listing them, saying they were not accepted, with the review notes and answered question beside it.
+- **R4** in `accio-brief --review --fix-branch <branch> --acceptance <file>`: the same review-package template with the
+  acceptance list in place of the DoD.
+
+### What we build
+1. **No build without checks.** Files: `accio/bin/accio_lib/plan.py` or the `ready` path, `accio/skills/prophecy/SKILL.md`,
+   tests. Needs: none. Risk: none. Checked by: a unittest where `ready` with empty `checks` exits with the plain
+   message and changes nothing.
+2. **Setup proposes checks.** Files: a new `accio/bin/accio_lib/checkfinder.py`, `accio/skills/wand/SKILL.md`, tests.
+   Needs: 1. Risk: none. Checked by: unittests on fixture repos (a GitHub workflow, a package.json, a pytest folder)
+   that give the expected check list.
+3. **The brief names earlier work.** Files: `accio/bin/accio_lib/brief.py`, `accio/bin/accio_lib/templates/brief.md`,
+   tests. Needs: none. Risk: none. Checked by: a unittest where a story branch with one old commit gets a brief with
+   "## Your earlier work" naming that commit and saying it was not accepted.
+4. **Review packages for direct fixes.** Files: `accio/bin/accio_lib/review.py`, `accio/bin/accio-brief`, the
+   review-package template, tests. Needs: none. Risk: none. Checked by: a unittest that builds a package for a
+   non-story branch with an acceptance file and checks it holds the diff path, the acceptance list and the findings
+   paths.
+
+### Evidence
+- The unittests above.
+- The next iteration's builds: no stop from empty checks, no unchanged rebuild, and the next direct fix reviewed from a
+  generated package.
+
+### Open questions
+none
