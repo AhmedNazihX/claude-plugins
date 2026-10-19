@@ -12,5 +12,8 @@
       "command": "bash git-guardrails/tests/test-guards.sh",
       "glob": "git-guardrails/**"
     }
+  ],
+  "snapshot_skip": [
+    ".remember/**"
   ]
 }
