@@ -134,6 +134,10 @@ class HowlerTest(unittest.TestCase):
     def test_S_002_6_failed_job_log(self):
         self.check("--log-failed --job", "| tail -60")
 
+    def test_S_018_4_no_prev_from_caller_uses_previous_run_commit_else_unknown(self):
+        self.check("no `<prev>` from the caller", "commit of step 5's previous run",
+                   "otherwise reports the range as unknown")
+
     def test_S_002_7_real_or_first_failure(self):
         self.check("`real`", "`first failure`", "workflowDatabaseId", "base branch", "headSha",
                    "same job name at the same step name")

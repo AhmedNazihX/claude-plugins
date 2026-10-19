@@ -62,8 +62,8 @@ is a deliberate last confirmation. If push-ok refuses (a build is running, or th
 branch), say why and don't push; never switch branches yourself. If the push fails, show why; never force it, and don't start howler.
 
 After a successful push, without asking, call the Agent tool with `accio:howler` (it runs in the background). Its
-prompt holds the full sha and the base branch from `accio-owl push-ok`, the iteration number and the "What happened"
-line you are about to report. Then end the report; howler's own report arrives later.
+prompt holds the full sha, the base branch and `prev` from `accio-owl push-ok`, the iteration number and the "What
+happened" line you are about to report. When `prev` is `null`, tell howler there is no previous pushed commit. Then end the report; howler's own report arrives later.
 
 End in the report format:
 

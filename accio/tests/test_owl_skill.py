@@ -34,6 +34,12 @@ class OwlHowlerTest(unittest.TestCase):
         self.assertIn("don't start howler", text)
         self.assertLess(text.index("git push origin"), text.index("accio:howler"))
 
+    def test_S_018_3_prompt_holds_prev_and_says_what_to_tell_howler_when_null(self):
+        text = step_6()
+        for phrase in ("`prev`", "`null`", "no previous pushed commit"):
+            with self.subTest(phrase):
+                self.assertIn(phrase, text)
+
     def test_S_003_4_agent_is_an_allowed_tool(self):
         line = next(l for l in skill_text().splitlines() if l.startswith("allowed-tools:"))
         tools = [t.strip() for t in line.removeprefix("allowed-tools:").split(",")]
