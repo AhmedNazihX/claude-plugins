@@ -220,13 +220,40 @@ class SnapshotTest(CheckTestBase):
         write(self.repo / "build" / "more.txt", "two\n")
         self.assertEqual(checks.compare(before, checks.snapshot(self.repo, "main"), skip=("build/**",))[0], [])
 
-    def test_another_storys_base_written_by_a_parallel_build_does_not_count(self):
+    def snap_before(self):
         self.check("S-001", "snapshot")
-        before = json.loads((self.accio / "run" / "S-001" / "main-snapshot.json").read_text(encoding="utf-8"))
-        write(self.accio / "run" / "S-002" / "base", "1" * 40 + "\n")  # portkey prepared S-002 meanwhile
+        return json.loads((self.accio / "run" / "S-001" / "main-snapshot.json").read_text(encoding="utf-8"))
+
+    def changed_for_s001(self, before):
+        return checks.compare(before, checks.snapshot(self.repo, "main"), story_id="S-001")[0]
+
+    def test_S_016_2_another_storys_base_in_the_log_is_forgiven(self):
+        before = self.snap_before()
+        write(self.accio / "run" / "S-002" / "base", "1" * 40 + "\n")
+        write(self.accio / "run" / "base-writes.log", "S-002 " + "1" * 40 + "\n")
         write(self.accio / "run" / "S-001" / "base", "0" * 40 + "\n")
-        changed = checks.compare(before, checks.snapshot(self.repo, "main"), story_id="S-001")[0]
-        self.assertEqual(changed, [".accio/run/S-001/base"])
+        self.assertEqual(self.changed_for_s001(before), [".accio/run/S-001/base"])
+
+    def test_S_016_3_another_storys_base_not_in_the_log_counts(self):
+        before = self.snap_before()
+        write(self.accio / "run" / "S-002" / "base", "1" * 40 + "\n")
+        write(self.accio / "run" / "base-writes.log", "S-002 " + "2" * 40 + "\n")
+        self.assertEqual(self.changed_for_s001(before), [".accio/run/S-002/base"])
+
+    def test_S_016_4_lines_appended_to_the_log_do_not_count(self):
+        write(self.accio / "run" / "base-writes.log", "S-009 " + "9" * 40 + "\n")
+        before = self.snap_before()
+        write(self.accio / "run" / "base-writes.log", "S-009 " + "9" * 40 + "\nS-002 " + "1" * 40 + "\n")
+        self.assertEqual(self.changed_for_s001(before), [])
+
+    def test_S_016_5_a_rewritten_or_deleted_log_counts(self):
+        log = self.accio / "run" / "base-writes.log"
+        write(log, "S-009 " + "9" * 40 + "\n")
+        before = self.snap_before()
+        write(log, "S-009 " + "8" * 40 + "\n")
+        self.assertEqual(self.changed_for_s001(before), [".accio/run/base-writes.log"])
+        log.unlink()
+        self.assertEqual(self.changed_for_s001(before), [".accio/run/base-writes.log"])
 
     def test_finders_ds_store_files_never_count(self):
         write(self.repo / ".DS_Store", "one")
