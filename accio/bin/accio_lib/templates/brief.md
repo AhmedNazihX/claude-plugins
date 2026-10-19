@@ -1,7 +1,7 @@
 # Brief: $story_id $title
 
 You implement this one story. Read only this brief; everything you need is here.
-$notes
+$notes$earlier
 
 ## Context
 $context

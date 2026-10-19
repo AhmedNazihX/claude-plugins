@@ -185,6 +185,41 @@ class BriefTest(unittest.TestCase):
         self.assertNotIn("Use the mailer", text)
         self.assertNotIn("S-001/1 WHEN", text)
 
+    def earlier_text(self, **story_args):
+        if story_args:
+            self.add_story("S-001", **story_args)
+        self.brief("S-001")
+        worktree = self.wt_root / "S-001"
+        write(worktree / "src" / "new.py", "y = 2\n")
+        commit_all(worktree, "old unreviewed work")
+        return pathlib.Path(self.brief("S-001")["brief"]).read_text(encoding="utf-8")
+
+    # S-012/1
+    def test_S_012_1_commits_past_the_base_are_listed(self):
+        text = self.earlier_text()
+        section = text.split("## Your earlier work", 1)[1].split("\n## ", 1)[0]
+        self.assertIn("old unreviewed work", section)
+        self.assertIn(self.head("story/S-001")[:7], section)
+
+    # S-012/2
+    def test_S_012_2_the_section_says_the_commits_were_not_accepted(self):
+        text = self.earlier_text()
+        section = text.split("## Your earlier work", 1)[1].split("\n## ", 1)[0]
+        self.assertIn("not accepted", section)
+
+    # S-012/3
+    def test_S_012_3_review_notes_and_the_answer_sit_beside_the_section(self):
+        text = self.earlier_text(notes="The link must expire.", blocked="Expire?\n\nAnswer: Yes.")
+        section = text.split("## Your earlier work", 1)[1].split("\n## Definition of Done", 1)[0]
+        self.assertIn("The link must expire.", section)
+        self.assertIn("Answer: Yes.", section)
+
+    # S-012/4
+    def test_S_012_4_no_commits_past_the_base_leaves_the_section_out(self):
+        self.brief("S-001")
+        text = pathlib.Path(self.brief("S-001")["brief"]).read_text(encoding="utf-8")
+        self.assertNotIn("Your earlier work", text)
+
     def test_a_rebase_already_in_progress_is_left_alone(self):
         self.brief("S-001")
         worktree = self.wt_root / "S-001"

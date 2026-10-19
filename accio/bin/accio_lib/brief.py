@@ -167,6 +167,27 @@ def dod_lines(parsed):
     return "\n".join(f"- {line.id} {'(no test) ' if not line.testable else ''}{line.text}" for line in parsed.dod)
 
 
+def earlier_commits(worktree, onto, old_base):
+    """One line per commit on the story branch past its base (the rebased `onto`, else the recorded old base)."""
+    for base in (onto, old_base):
+        if base and _git(worktree, "merge-base", "--is-ancestor", base, "HEAD", check=False).returncode == 0:
+            return tuple(_git(worktree, "log", "--format=%h %s", f"{base}..HEAD").stdout.splitlines())
+    return ()
+
+
+def earlier_work(parsed, worktree, onto, old_base):
+    """The "Your earlier work" section: a rebuild's old commits, not accepted, and why (S-012)."""
+    commits = earlier_commits(worktree, onto, old_base)
+    if not commits:
+        return ""
+    reasons = [f"### {name}\n{text}" for name in ("Review notes", "Blocked question")
+               for text in filter(None, [story.section(parsed, name)])]
+    return ("\n## Your earlier work\nThis branch already holds commits from an earlier build. They were not "
+            "accepted, so do not hand them back as done. Check each against the Definition of Done and the "
+            "reasons below, then fix or redo what falls short.\n" + bullets(f"`{line}`" for line in commits)
+            + "".join(f"\n\n{reason}" for reason in reasons) + "\n")
+
+
 def render_brief(parsed, accio, worktree, onto, checks, reuse_files, notes):
     dod = dod_lines(parsed)
     reuse = [*filter(None, [story.section(parsed, "Reuse")]), *(f"`{path}`" for path in reuse_files)]
@@ -178,7 +199,8 @@ def render_brief(parsed, accio, worktree, onto, checks, reuse_files, notes):
               "review_notes": story.section(parsed, "Review notes") or "none",
               "answered": "".join(f"\n## The question from the last build, and its answer\n{text}\n"
                                   for text in filter(None, [story.section(parsed, "Blocked question")])),
-              "notes": "".join(f"\n## Before you start\n{note}\n" for note in notes)}
+              "notes": "".join(f"\n## Before you start\n{note}\n" for note in notes),
+              "earlier": earlier_work(parsed, worktree, onto, recorded_base(accio / "run" / parsed.meta["id"]))}
     return fill("brief.md", values)
 
 
