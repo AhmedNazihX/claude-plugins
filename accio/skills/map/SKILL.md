@@ -1,8 +1,8 @@
 ---
 name: map
 description: Board (map): shows accio's board (the stories in each column, from a script, without changing anything), what the last build left stuck, and the next step.
-when_to_use: When the user asks "show the board", "where are we", "what's the status of the stories", "what's next", "is the build still running", or runs /accio:map, in a repo with an .accio/ folder. Not for planning (prophecy), building (/accio:brew) or reviewing (owl).
-allowed-tools: Read, Glob, Bash(${CLAUDE_PLUGIN_ROOT}/bin/accio-board board --print), Bash(${CLAUDE_PLUGIN_ROOT}/bin/accio-board status)
+when_to_use: When the user asks "show the board", "where are we", "what's the status of the stories", "what's next", "is the build still running", or runs /accio:map, in a repo with an .accio/ folder. Not for planning (prophecy), building or reviewing (owl).
+allowed-tools: Read, Glob, Bash(${CLAUDE_PLUGIN_ROOT}/bin/accio-board board --print), Bash(${CLAUDE_PLUGIN_ROOT}/bin/accio-board status), Bash(${CLAUDE_PLUGIN_ROOT}/bin/accio-board next)
 ---
 
 # map: show the board
@@ -17,14 +17,9 @@ command by its full path (`${CLAUDE_PLUGIN_ROOT}/bin/accio-board …`), with no 
 2. Show the board as it is.
 3. Read `.accio/run/stuck.json` (skip this if it doesn't exist): each entry is a build agent that froze on a
    permission question. Name its `agent_type`, `tool` and `detail`, one line each.
-4. Say the next step in one line, from the first rule that applies:
-   - a story in Doing: a build is under way; wait for it, then `/accio:owl`
-   - stories in Review or Blocked: `/accio:owl`
-   - stories in Ready: `/accio:brew`
-   - stories in Backlog: `/accio:prophecy`
-   - otherwise (no stories, or all done or dropped): `/accio:sort` to turn more of the design into stories, or
-     `/accio:wand` when `.accio/design.md` doesn't exist (Glob)
+4. Run `accio-board next` and say its sentence as the next step, in one line. The script holds the rule; don't
+   restate it.
 
    If no tool named `Workflow` appears anywhere in your tools, including tools listed only by name, workflows are
-   switched off, and accio's build needs them: in place of `/accio:brew`, say to turn them on (the
-   `disableWorkflows` setting off, the `CLAUDE_CODE_DISABLE_WORKFLOWS` variable unset) and then type `/accio:brew`.
+   switched off, and accio's build needs them: where the sentence says to build, say to turn them on instead (the
+   `disableWorkflows` setting off, the `CLAUDE_CODE_DISABLE_WORKFLOWS` variable unset), then build.
