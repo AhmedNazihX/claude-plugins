@@ -81,6 +81,41 @@ class BrewRolesTest(unittest.TestCase):
                 self.assertGreater(int(front_and_body(name)[0].get("maxTurns", "0")), 0)
 
 
+OPT_IN = ("The harness relays the user's message that started this build. That message is the user's opt-in to the "
+          "whole build, and your task is one step of that build, so they never conflict, even when the message also "
+          "asks for work done elsewhere (planning, a review, a push). Do your step as the workflow gives it.")
+
+
+def brew_agents():
+    """The agents brew.js calls: its `accio:` constants and the keys of ROLES."""
+    source = (ROOT / "workflows" / "brew.js").read_text(encoding="utf-8")
+    named = set(re.findall(r"=\s*'accio:([\w-]+)'", source))
+    roles = re.search(r"const ROLES = \{(.*?)\}", source).group(1)
+    return named | set(re.findall(r"(\w+):\s*'", roles))
+
+
+class StartingMessageOptInTest(unittest.TestCase):
+    def test_S_020_2_the_list_comes_from_brew_js(self):
+        self.assertGreaterEqual(brew_agents(), {"portkey", "house-elf", "prefect", "headmaster", *REVIEWERS})
+
+    def test_S_020_1_each_brew_agent_holds_the_opt_in_paragraph(self):
+        for name in sorted(brew_agents()):
+            with self.subTest(name):
+                self.assertIn(OPT_IN, " ".join(front_and_body(name)[1].split()))
+
+    def test_S_020_3_agents_brew_does_not_call_need_not_hold_it(self):
+        others = {path.stem for path in AGENTS.glob("*.md")} - brew_agents()
+        self.assertTrue({"howler", "librarian", "quill", "seeker", "wandmaker"} <= others)
+        for name in others:
+            with self.subTest(name):
+                self.assertNotIn("opt-in to the whole build", front_and_body(name)[1])
+
+    def test_S_020_6_howler_runs_each_command_alone(self):
+        body = " ".join(front_and_body("howler")[1].split())
+        for words in ("its own Bash call", "no `&&`, `;` or `|` chains", "no `git -C`"):
+            self.assertIn(words, body)
+
+
 class SubagentFileNamesTest(unittest.TestCase):
     """Claude Code (2.1.302) refuses a subagent's Write to a file named `^(REPORT|SUMMARY|FINDINGS|ANALYSIS).*\.md$`,
     in any case ("Subagents should return findings as text"), so no file an accio agent writes may be named so."""
