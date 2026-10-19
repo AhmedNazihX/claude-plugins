@@ -62,6 +62,7 @@ RUN_FOLDER = ".accio/run/"
 BASE_NAME = "base"
 WATCHED_RUN_FILES = ("push-ok", f"*/{BASE_NAME}", "allow-once.json")  # nothing writes these during a story,
 # except another story's base in a parallel build (see `compare`)
+BASE_WRITES_LOG = "base-writes.log"  # `accio-brief` appends `<ID> <full sha>` per base it writes; only appends are fine
 COMMIT_ID = re.compile(r"[0-9a-f]{40}|[0-9a-f]{64}")
 STORY_REFS = b"refs/heads/story/"  # story branches move with every checkpoint commit
 SNAPSHOT_NAME = "main-snapshot.json"
@@ -237,10 +238,24 @@ def _watched_run_files(main):
     return {str(path.relative_to(main)): _record(main, "run", str(path.relative_to(main))) for path in found}
 
 
+def _read_text(path):
+    try:
+        return path.read_text(encoding="utf-8")
+    except OSError:
+        return ""
+
+
+def _base_contents(main):
+    """Each story's `run/<ID>/base` content, so a forgiven change can be matched to the log."""
+    run = pathlib.Path(main) / RUN_FOLDER
+    return {path.parent.name: _read_text(path).strip() for path in run.glob(f"*/{BASE_NAME}") if path.is_file()}
+
+
 def snapshot(main, base_branch):
     dirty = {path: _record(main, code, path) for code, path in merge.status_entries(main)
              if not path.startswith(RUN_FOLDER) and path != RUN_FOLDER.rstrip("/")}
     return {"head": _ref(main, "HEAD"), "dirty": {**dirty, **_watched_run_files(main)}, "git": _git_state(main),
+            "bases": _base_contents(main), "base writes": _read_text(pathlib.Path(main) / RUN_FOLDER / BASE_WRITES_LOG),
             "origin": _ref(main, f"refs/remotes/origin/{base_branch}")}
 
 
@@ -258,25 +273,43 @@ def _skipped(path, skip):
     return globs.matches_any(path, (*skip, *folders))
 
 
-def _another_storys_base(path, story_id):
-    """Whether `path` is another story's `run/<ID>/base`: portkey writes it when a parallel build prepares that story."""
+def _base_owner(path):
+    """The story ID when `path` is a `run/<ID>/base`, else None."""
+    if not path.startswith(RUN_FOLDER):
+        return None
     folder, _, name = path.removeprefix(RUN_FOLDER).partition("/")
-    return story_id is not None and path.startswith(RUN_FOLDER) and name == BASE_NAME and folder != story_id
+    return folder if name == BASE_NAME else None
+
+
+def _forgiven_base(path, story_id, after):
+    """Whether `path` is another story's base that accio's prepare step wrote: the log has its ID and new content."""
+    owner = _base_owner(path)
+    if story_id is None or owner is None or owner == story_id:
+        return False
+    content = after.get("bases", {}).get(owner)
+    return bool(content) and f"{owner} {content}" in after.get("base writes", "").splitlines()
+
+
+def _log_rewritten(before, after):
+    """Whether the base-writes log lost or changed a line (lines appended are fine)."""
+    return not after.get("base writes", "").startswith(before.get("base writes", ""))
 
 
 def compare(before, after, skip=(), story_id=None):
     """(paths that changed in the main checkout, `HEAD` for a commit; whether origin/<base> moved).
 
     `skip` holds config's `snapshot_skip` globs: paths another tool keeps writing during a run. With `story_id`,
-    only that story's own `run/<ID>/base` is watched; the other stories' base files change when they are prepared.
+    another story's `run/<ID>/base` is forgiven only when the base-writes log holds its new content (accio's own
+    prepare wrote it); the log itself counts only when a line was removed or rewritten.
     """
     paths = sorted(path for path in set(before["dirty"]) | set(after["dirty"])
                    if before["dirty"].get(path) != after["dirty"].get(path) and not _skipped(path, skip)
-                   and not _another_storys_base(path, story_id))
+                   and not _forgiven_base(path, story_id, after))
+    log = [f"{RUN_FOLDER}{BASE_WRITES_LOG}"] if _log_rewritten(before, after) else []
     moved_head = ["HEAD"] if before["head"] != after["head"] else []
     git_state = [name for name in sorted(after.get("git", {}))
                  if before.get("git", {}).get(name) != after["git"][name]]
-    return moved_head + git_state + paths, before["origin"] != after["origin"]
+    return moved_head + git_state + sorted(paths + log), before["origin"] != after["origin"]
 
 
 # --- the whole check -----------------------------------------------------------------------------------------------

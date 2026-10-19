@@ -80,6 +80,17 @@ class BriefTest(unittest.TestCase):
         self.assertEqual(self.head("story/S-002"), self.head("story/S-001"))
         self.assertEqual(reply["base"], self.head("story/S-001"))
 
+    def test_S_016_1_each_base_write_is_logged_and_earlier_lines_kept(self):
+        self.brief("S-001")
+        self.add_story("S-002")
+        self.brief("S-002")
+        first = self.head("main")
+        write(self.repo / "docs.md", "main moved\n")
+        commit_all(self.repo, "main moves on")
+        self.brief("S-001")
+        log = (self.accio / "run" / "base-writes.log").read_text(encoding="utf-8").splitlines()
+        self.assertEqual(log, [f"S-001 {first}", f"S-002 {first}", f"S-001 {self.head('main')}"])
+
     # S-007/2
     def test_S_007_2_reuses_the_branch_and_rebases_it_on_base(self):
         self.brief("S-001")

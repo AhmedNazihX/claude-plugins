@@ -65,7 +65,14 @@ def _branch_exists(main, branch):
 
 
 def _record_base(run_dir, onto):
+    from accio_lib import checks  # late: checks imports this module
     write_file(run_dir / BASE_RECORD, onto + "\n")
+    log = run_dir.parent / checks.BASE_WRITES_LOG
+    try:
+        with log.open("a", encoding="utf-8") as handle:
+            handle.write(f"{run_dir.name} {onto}\n")
+    except OSError as error:
+        raise BriefError(f"cannot write {log}: {error}") from error
 
 
 def recorded_base(run_dir):
