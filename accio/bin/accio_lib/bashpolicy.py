@@ -120,6 +120,10 @@ def check(command, judge, start_in=None):
     """Why this command is denied, or None. With `start_in`, it must start in that folder (house-elf)."""
     if "$(" in command or "`" in command:
         return "a command substitution ($(…)) or backticks can't be checked; run the inner command on its own."
+    if judge.forms:
+        reason = _forms_shape(command)
+        if reason:
+            return reason
     segments = list(shellwords.segments(command))
     operator = next((segment.operator for segment in segments if segment.operator not in SPLIT_OPERATORS), None)
     if operator:
@@ -136,6 +140,48 @@ def check(command, judge, start_in=None):
     return _redirects(command, redirect_base)
 
 
+NULL_REDIRECT = [(">", "/dev/null"), (">&", "1")]  # `> /dev/null 2>&1`
+
+
+def _forms_shape(command):
+    """For an agent limited to `forms`: one command, or one command piped into `tail -60`. The only redirect is
+    `> /dev/null 2>&1` after `gh run watch`; `tail` takes none (so `tail -60 < file` can't read a file)."""
+    groups, redirect_target = [([], [])], False
+    for token in shellwords.tokens(command.strip()):
+        words, redirects = groups[-1]
+        if token.kind == "input":
+            return "a heredoc or here-string isn't allowed here."
+        if token.kind == "word":
+            if redirect_target:
+                redirects[-1] = (redirects[-1][0], token.value)
+                redirect_target = False
+            else:
+                words.append(token.value)
+        elif "<" in token.value or ">" in token.value:
+            redirects.append((token.value, ""))
+            redirect_target = True
+        elif token.value == "|":
+            groups.append(([], []))
+        else:
+            return f"the shell operator `{token.value.strip() or 'newline'}` isn't allowed; run one command, or pipe it into `tail -60`."
+    return _forms_groups(groups)
+
+
+def _forms_groups(groups):
+    if len(groups) > 2:
+        return "only one pipe is allowed, into `tail -60`."
+    for index, (words, redirects) in enumerate(groups):
+        if not words:
+            return "an empty command around a pipe isn't allowed."
+        is_tail = words[0] == "tail"
+        if (index > 0) != is_tail:
+            return "`tail -60` is allowed only on the right of a pipe, and a pipe only into `tail -60`."
+        allows_null = words[:3] == ["gh", "run", "watch"]
+        if redirects and not (allows_null and redirects == NULL_REDIRECT):
+            return "the only redirect allowed is `> /dev/null 2>&1`, after `gh run watch`."
+    return None
+
+
 def _judge_segment(words, judge):
     program_words = program_part(words)
     if len(program_words) < len(words) and not _is_listed(words, judge):
@@ -150,6 +196,9 @@ def _judge_program(words, judge):
         return None
     if any(form.matches(words) for form in judge.forms):
         return None
+    if judge.forms:
+        return (f"`{' '.join(words)}` isn't on accio:{judge.agent}'s exact list (each flag and value is checked). "
+                "Ask for it at owl.")
     if program == "git" and judge.git:
         return _git(words, judge)
     if program in READ_ONLY_PROGRAMS and judge.read_only:

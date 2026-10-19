@@ -63,22 +63,22 @@ AGENTS = {
 }
 
 HEX_SHA = r"[0-9a-f]{40}"
-NUMBER = r"\d+"
+NUMBER = r"[0-9]+"  # ASCII digits only (`\d` would take other scripts' digits)
+WORD = r"[A-Za-z0-9._/][A-Za-z0-9._/-]*"  # a branch, or a git word such as HEAD or origin; never starts with `-`
 RUN_JSON_FIELDS = frozenset({"databaseId", "workflowDatabaseId", "headSha", "headBranch", "status", "conclusion",
-                             "name", "workflowName", "displayTitle", "event", "number", "attempt", "createdAt",
-                             "startedAt", "updatedAt", "url", "jobs"})
+                             "name", "jobs"})
 HOWLER_FORMS = (  # howler reads CI runs and compares commits; each is one exact shape (S-001)
     bashpolicy.Form(("gh", "run", "list"), flags={"--commit": HEX_SHA, "--workflow": NUMBER,
-                                                  "--branch": r"\w[\w./-]*", "--limit": NUMBER},
+                                                  "--branch": WORD, "--limit": NUMBER},
                     json_fields=RUN_JSON_FIELDS),
     bashpolicy.Form(("gh", "run", "watch"), operands=(NUMBER,), flags={"--exit-status": None, "--compact": None}),
     bashpolicy.Form(("gh", "run", "view"), operands=(NUMBER,), flags={"--log-failed": None, "--job": NUMBER},
                     json_fields=RUN_JSON_FIELDS),
     bashpolicy.Form(("git", "merge-base", "--is-ancestor"), operands=(HEX_SHA, HEX_SHA)),
     bashpolicy.Form(("git", "diff", "--name-only"), operands=(HEX_SHA, HEX_SHA)),
-    bashpolicy.Form(("git", "rev-parse"), operands=("HEAD",)),
-    bashpolicy.Form(("git", "remote", "get-url"), operands=("origin",)),
-    bashpolicy.Form(("tail",), flags={}, operands=(r"-\d+",)),  # the end of a failed job's log
+    bashpolicy.Form(("git", "rev-parse"), operands=(WORD,)),
+    bashpolicy.Form(("git", "remote", "get-url"), operands=(WORD,)),
+    bashpolicy.Form(("tail", "-60")),  # the end of a failed job's log; bashpolicy allows it only after a pipe
 )
 
 
