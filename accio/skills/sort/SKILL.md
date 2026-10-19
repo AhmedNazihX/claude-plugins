@@ -59,3 +59,7 @@ What happened: <n> stories written from the design (<IDs>), committed | written 
 What I need from you: <nothing | the fix> — then /accio:prophecy to plan the first iteration
 My recommendation: <one line>
 ```
+
+When the `accio` conductor skill was loaded earlier in this chat and has not finished, `/accio` is driving: the
+second line says `next: prophecy (accio carries on)` instead of the "/accio:prophecy" hand-over. When this skill
+runs alone, keep the "/accio:prophecy" ending above.

@@ -81,3 +81,7 @@ My recommendation: <one line>
 
 When workflows are off, the second line says to turn them on first, then type `/accio:brew`. Never start the build yourself: typing the
 command is the user's opt-in.
+
+When the `accio` conductor skill was loaded earlier in this chat and has not finished, `/accio` is driving: typing
+`/accio` was the opt-in, so the second line says `next: brew (accio carries on)` instead of the "/accio:brew"
+hand-over, and the conductor starts the build. When this skill runs alone, keep the "/accio:brew" ending above.
