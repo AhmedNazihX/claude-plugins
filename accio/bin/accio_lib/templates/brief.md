@@ -3,6 +3,9 @@
 You implement this one story. Read only this brief; everything you need is here.
 $notes
 
+## Context
+$context
+
 ## Where you work
 - Worktree: `$worktree` (branch `$branch`, starting from `$base`)
 - Your first command: `$claim_command`
@@ -28,3 +31,4 @@ $scripts
 
 ## Review notes
 $review_notes
+$answered

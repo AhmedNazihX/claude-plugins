@@ -28,6 +28,7 @@ Use the mailer in src/mail.py.
 ## Review notes
 {notes}
 ## Blocked question
+{blocked}
 """
 
 
@@ -47,8 +48,8 @@ class BriefTest(unittest.TestCase):
     def tearDown(self):
         self.tmp.cleanup()
 
-    def add_story(self, story_id, notes=""):
-        write(self.accio / "stories" / f"{story_id}.md", STORY.format(id=story_id, notes=notes))
+    def add_story(self, story_id, notes="", blocked=""):
+        write(self.accio / "stories" / f"{story_id}.md", STORY.format(id=story_id, notes=notes, blocked=blocked))
 
     def brief(self, *args, check=True):
         result = subprocess.run([sys.executable, "-I", str(BRIEF), *args], cwd=self.repo,
@@ -153,6 +154,17 @@ class BriefTest(unittest.TestCase):
             self.assertIn(expected, text)
         self.assertNotIn("npm test", text)
 
+    def test_the_brief_carries_the_storys_context(self):
+        text = pathlib.Path(self.brief("S-001")["brief"]).read_text(encoding="utf-8")
+        context = text.split("## Context", 1)[1].split("\n## ", 1)[0]
+        self.assertIn("Users forget passwords.", context)
+
+    def test_an_answered_blocked_question_reaches_the_brief(self):
+        self.add_story("S-001", blocked="Should the link expire?\n\nAnswer: Yes, after 15 minutes.")
+        text = pathlib.Path(self.brief("S-001")["brief"]).read_text(encoding="utf-8")
+        self.assertIn("Should the link expire?", text)
+        self.assertIn("Answer: Yes, after 15 minutes.", text)
+
     def test_S_007_4_existing_files_are_listed_as_code_to_reuse(self):
         reply = self.brief("S-001")
         text = pathlib.Path(reply["brief"]).read_text(encoding="utf-8")
@@ -235,7 +247,7 @@ class BriefTest(unittest.TestCase):
         self.assertEqual(git(self.wt_root / "S-001", "branch", "--show-current"), "story/S-001")
 
     def test_a_folder_in_files_keeps_every_check(self):
-        write(self.accio / "stories" / "S-003.md", STORY.format(id="S-003", notes="").replace(
+        write(self.accio / "stories" / "S-003.md", STORY.format(id="S-003", notes="", blocked="").replace(
             "files: [src/a.py, src/new.py]", "files: [web/, src/a.py]"))
         text = pathlib.Path(self.brief("S-003")["brief"]).read_text(encoding="utf-8")
         self.assertIn("npm test", text)
@@ -244,7 +256,7 @@ class BriefTest(unittest.TestCase):
     def test_paths_in_commands_are_shell_quoted(self):
         spaced = pathlib.Path(self.tmp.name).resolve() / "My Projects"
         repo = init_repo(spaced / "app")
-        write(repo / ".accio" / "stories" / "S-001.md", STORY.format(id="S-001", notes=""))
+        write(repo / ".accio" / "stories" / "S-001.md", STORY.format(id="S-001", notes="", blocked=""))
         result = subprocess.run([sys.executable, "-I", str(BRIEF), "S-001"], cwd=repo, capture_output=True, text=True)
         self.assertEqual(result.returncode, 0, result.stderr)
         reply = json.loads(result.stdout)
@@ -264,7 +276,7 @@ class BriefTest(unittest.TestCase):
             result = self.brief(bad, "--fix", "x", check=False)
             self.assertNotEqual(result.returncode, 0, bad)
             self.assertNotIn("Traceback", result.stderr)
-        write(self.accio / "stories" / "S-005.md", STORY.format(id="S-006", notes=""))
+        write(self.accio / "stories" / "S-005.md", STORY.format(id="S-006", notes="", blocked=""))
         self.assertIn("S-006", self.brief("S-005", check=False).stderr)
 
     def test_a_fix_brief_needs_the_worktree(self):
