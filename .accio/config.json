@@ -15,6 +15,5 @@
   ],
   "snapshot_skip": [
     ".remember/**"
-  ],
-  "wip": 1
+  ]
 }
