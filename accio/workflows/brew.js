@@ -10,7 +10,7 @@ export const meta = {
 }
 
 // accio's build (DESIGN § 3.4, § 12.6; decision 010). The script reads no files: accio's agents run accio's
-// scripts and reply in JSON. At most WIP stories are in progress; a stacked child waits for its parents to reach
+// scripts and reply in JSON. At most `wip` (from config.json) stories are in progress; a stacked child waits for its parents to reach
 // READY and gives its slot to another story meanwhile, and never starts when a parent ends BLOCKED. A story a crash
 // left in Doing resumes at check or prepare. portkey takes the run lock at load and releases it in `finally`;
 // every step refreshes it (a board move, or prefect's and house-elf's `accio-board refresh`). The run returns the
@@ -23,7 +23,7 @@ export const meta = {
 // a ruling gets one more try, a question blocks the story. house-elf's `maxTurns` is the 2× budget stop (S-001).
 // Every label starts with the story id: accio-cost ties usage to stories by it.
 
-const WIP = 3
+const DEFAULT_WIP = 3  // used only when the load reply carries no usable wip
 const STALL_MS = 20 * 60 * 1000
 const MAX_FIX_ROUNDS = 2
 const REVIEW_MODEL = 'sonnet'
@@ -51,7 +51,10 @@ const STORY_SCHEMA = {
 }
 const LOAD_SCHEMA = {
   type: 'object',
-  properties: { locked: { type: 'boolean' }, stories: { type: 'array', items: STORY_SCHEMA }, error: { type: 'string' } },
+  properties: {
+    locked: { type: 'boolean' }, wip: { type: 'integer' },
+    stories: { type: 'array', items: STORY_SCHEMA }, error: { type: 'string' },
+  },
   required: ['locked', 'stories'],
 }
 const PREPARE_SCHEMA = {
@@ -329,7 +332,7 @@ function parentState(story, inRun, outcomes) {
   return waiting.every((parent) => outcomes.get(parent) === 'READY') ? 'go' : 'wait'
 }
 
-async function schedule(stories) {
+async function schedule(stories, wip) {
   const inRun = new Set(stories.map((story) => story.id))
   const outcomes = new Map()
   const rows = []
@@ -337,7 +340,7 @@ async function schedule(stories) {
   const running = new Map()
   while (pending.length || running.size) {
     for (const story of [...pending]) {
-      if (running.size >= WIP) break
+      if (running.size >= wip) break
       const state = parentState(story, inRun, outcomes)
       if (state === 'wait') continue
       pending.splice(pending.indexOf(story), 1)
@@ -385,7 +388,8 @@ phase('Load')
 const loaded = await call(
   'Step 0, load. Follow your step 0: take the lock, verify the hooks, list the stories with ' +
     '`accio-board ready --json --resume`, and take a fresh snapshot for each story resumed at check. ' +
-    'Reply {"locked": true, "stories": [...]} with each story\'s id, title, track, parents, resume and worktree. ' +
+    'Reply {"locked": true, "wip": <the "wip" number it printed>, "stories": [...]} with each story\'s id, title, ' +
+    'track, parents, resume and worktree. ' +
     'If taking the lock fails, reply {"locked": false, "stories": [], "error": "..."}; if a script fails after ' +
     'the lock was taken, reply {"locked": true, "stories": [], "error": "..."}.',
   { agentType: PORTKEY, model: 'haiku', schema: LOAD_SCHEMA, label: 'load', phase: 'Load' },
@@ -401,7 +405,7 @@ let rows = []
 try {
   if (!loaded.error) {
     phase('Build')
-    rows = await schedule(loaded.stories)
+    rows = await schedule(loaded.stories, loaded.wip >= 1 ? loaded.wip : DEFAULT_WIP)
   }
 } finally {
   phase('Finish')

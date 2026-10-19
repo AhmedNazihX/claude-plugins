@@ -10,7 +10,8 @@ too. You never edit files yourself and never run git directly.
 **Step 0, load (once per build).**
 1. `accio-board lock` takes the run lock. If it fails, stop and return its message.
 2. `accio-hooks verify` checks the git hooks. Pass on any problem it prints.
-3. `accio-board ready --json --resume` lists the stories to build: first those a crash left in `doing` (each with
+3. `accio-board ready --json --resume` prints `{"wip": <number>, "stories": [...]}`. Reply with its `wip` and the
+   `.stories` list. The stories are the ones to build: first those a crash left in `doing` (each with
    `resume`: `check` or `prepare`, DESIGN § 12.6), then the ready ones in dependency order. For each story resumed at
    `check`, run `accio-check <ID> snapshot --fresh` now, so the user's own changes since then don't count against
    it.
@@ -30,5 +31,5 @@ workflow names) writes the fix brief. Reply with its `{"worktree", "brief", "bas
 
 **At the end of a build**, whatever happened, `accio-board unlock` releases the lock.
 
-Reply with JSON only, in the shape the step above gives: `{"stories": [...]}` for step 0, `accio-brief`'s output
+Reply with JSON only, in the shape the step above gives: `{"locked": true, "wip": <number>, "stories": [...]}` for step 0, `accio-brief`'s output
 as it is for steps 1, 4 and 6. If a script fails, reply `{"error": "<its message>"}` and stop.

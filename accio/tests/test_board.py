@@ -48,7 +48,18 @@ class BoardTest(unittest.TestCase):
         return result
 
     def ready(self):
-        return json.loads(self.board("ready", "--json").stdout)
+        return json.loads(self.board("ready", "--json").stdout)["stories"]
+
+    def test_S_015_1_ready_json_is_an_object_with_wip_from_the_config_and_the_stories(self):
+        self.config(wip=1)
+        self.add("S-001")
+        reply = json.loads(self.board("ready", "--json").stdout)
+        self.assertEqual(set(reply), {"wip", "stories"})
+        self.assertEqual(reply["wip"], 1)
+        self.assertEqual([item["id"] for item in reply["stories"]], ["S-001"])
+
+    def test_S_015_2_wip_is_3_when_the_config_sets_none(self):
+        self.assertEqual(json.loads(self.board("ready", "--json").stdout)["wip"], 3)
 
     def test_S_010_1_ready_refuses_without_checks_and_names_config_json_with_an_example(self):
         for text in (None, "{}", json.dumps({"checks": []})):
@@ -239,7 +250,7 @@ class BoardTest(unittest.TestCase):
         write(self.repo / "work.py", "x = 1\n")
         commit_all(self.repo, "S-002 work")
         git(self.repo, "checkout", "-q", "main")
-        listed = json.loads(self.board("ready", "--json", "--resume").stdout)
+        listed = json.loads(self.board("ready", "--json", "--resume").stdout)["stories"]
         self.assertEqual({item["id"]: item["resume"] for item in listed},
                          {"S-001": "prepare", "S-002": "check", "S-003": None})
         self.assertEqual([item["id"] for item in listed][:2], ["S-001", "S-002"])
@@ -257,7 +268,7 @@ class BoardTest(unittest.TestCase):
         worktree = paths.worktree_root(self.repo) / "S-002"
         git(self.repo, "worktree", "add", "-q", str(worktree), "-b", "story/S-002", "story/S-001")
         write(self.accio / "run" / "S-002" / "base", git(self.repo, "rev-parse", "story/S-001") + "\n")
-        listed = {item["id"]: item for item in json.loads(self.board("ready", "--json", "--resume").stdout)}
+        listed = {item["id"]: item for item in json.loads(self.board("ready", "--json", "--resume").stdout)["stories"]}
         self.assertEqual((listed["S-001"]["resume"], listed["S-002"]["resume"]), ("check", "prepare"))
         self.assertEqual(listed["S-002"]["worktree"], str(worktree))
 

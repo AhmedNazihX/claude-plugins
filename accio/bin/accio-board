@@ -61,7 +61,7 @@ def cmd_ready(args, accio):
     if args.resume:
         batch = [*board.resumed(stories, status, paths.main_root(), accio, settings["base_branch"]), *batch]
     if args.json:
-        print(json.dumps(batch, indent=2))
+        print(json.dumps({"wip": settings["wip"], "stories": batch}, indent=2))
     else:
         for item in batch:
             print(f"{item['id']}  level {item['level']}  {item['title']}")
