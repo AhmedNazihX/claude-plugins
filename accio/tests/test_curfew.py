@@ -379,6 +379,129 @@ class OtherAgentsTest(CurfewTestBase):
         self.assert_denied("Read", {"file_path": "x"}, "accio:nobody", agent="accio:nobody")
 
 
+class HowlerTest(CurfewTestBase):
+    SHA = "a" * 40
+    OTHER = "b" * 40
+
+    def verdict(self, command):
+        return self.decision("Bash", self.bash(command), agent="accio:howler")[0]
+
+    def allowed(self, command):
+        self.assertEqual(self.verdict(command), "allow", command)
+
+    def denied(self, command):
+        self.assertEqual(self.verdict(command), "deny", command)
+
+    def test_S_001_1_run_list_by_commit_is_allowed(self):
+        self.allowed(f"gh run list --commit {self.SHA} --json databaseId,workflowDatabaseId,headSha,status,"
+                     "conclusion,name")
+
+    def test_S_001_2_run_list_by_workflow_and_branch_is_allowed(self):
+        self.allowed("gh run list --workflow 123 --branch main --limit 5 --json databaseId,headSha,conclusion")
+
+    def test_S_001_3_run_watch_with_the_null_redirect_is_allowed(self):
+        self.allowed("gh run watch 123 --exit-status --compact > /dev/null 2>&1")
+
+    def test_S_001_4_run_view_json_jobs_is_allowed(self):
+        self.allowed("gh run view 123 --json jobs")
+
+    def test_S_001_5_failed_log_piped_into_tail_60_is_allowed(self):
+        self.allowed("gh run view 123 --log-failed --job 456 | tail -60")
+
+    def test_S_001_6_merge_base_is_ancestor_is_allowed(self):
+        self.allowed(f"git merge-base --is-ancestor {self.SHA} {self.OTHER}")
+
+    def test_S_001_7_diff_name_only_is_allowed(self):
+        self.allowed(f"git diff --name-only {self.SHA} {self.OTHER}")
+
+    def test_S_001_8_rev_parse_head_is_allowed(self):
+        self.allowed("git rev-parse HEAD")
+
+    def test_S_001_9_remote_get_url_origin_is_allowed(self):
+        self.allowed("git remote get-url origin")
+
+    def test_S_001_10_run_rerun_is_denied(self):
+        self.denied("gh run rerun 1")
+
+    def test_S_001_11_run_cancel_is_denied(self):
+        self.denied("gh run cancel 1")
+
+    def test_S_001_12_git_log_is_denied(self):
+        self.denied("git log")
+
+    def test_S_001_13_git_push_is_denied(self):
+        self.denied("git push")
+
+    def test_S_001_14_sleep_is_denied(self):
+        self.denied("sleep 5")
+
+    def test_S_001_15_cat_is_denied(self):
+        self.denied("cat x")
+
+    def test_S_001_16_a_variable_before_the_command_is_denied(self):
+        self.denied("GH_PAGER=cat gh run list")
+
+    def test_S_001_17_an_unknown_flag_is_denied_and_named(self):
+        self.denied("gh run view 1 -R x/y")
+        reason = self.assert_denied("Bash", self.bash("gh run view 1 -R x/y"), "howler", agent="accio:howler")
+        self.assertIn("gh run view", reason)
+        self.assertIn("-R", reason)
+
+    def test_S_001_18_a_run_id_that_is_not_digits_is_denied(self):
+        self.denied("gh run view abc")
+
+    def test_S_001_19_git_diff_output_flag_is_denied(self):
+        self.denied("git diff --name-only --output=f")
+
+    def test_S_001_20_a_json_field_outside_the_set_is_denied(self):
+        self.denied("gh run view 1 --json token")
+        self.denied("gh run view 1 --json jobs,token")
+        self.denied("gh run view 1 --json url")
+
+    def test_S_001_21_other_agents_keep_their_decisions(self):
+        script = shlex.quote(str(ROOT / "bin" / "accio-board"))
+        self.assert_allowed("Bash", self.bash(f"{script} ready --json"), agent="accio:portkey")
+        self.assert_denied("Bash", self.bash("gh run list"), "gh run", agent="accio:portkey")
+        self.assert_denied("Bash", self.bash("ls"), "Bash", agent="accio:quill")
+        self.assert_denied("Bash", self.bash("git rev-parse HEAD"), "Bash", agent="accio:examiner")
+        self.assert_allowed("Bash", self.in_worktree("python3 -m unittest"), agent="accio:prefect")
+        self.assert_allowed("Write", {"file_path": str(self.run_dir / "questions" / "S-001.md"), "content": "x"},
+                            agent="accio:headmaster")
+
+    def test_howler_tail_is_only_tail_60_after_a_pipe_with_no_redirect(self):
+        for command in ("tail -60 < some-file", "tail -60", "tail -60 some-file", "tail -61",
+                        "gh run view 1 --log-failed | tail -60 < some-file",
+                        "gh run view 1 --log-failed | tail -60 > out.txt", "gh run view 1 | tail -f",
+                        "gh run view 1 | tail -n 60", "gh run view 1 | tail -100", "tail -f x"):
+            with self.subTest(command=command):
+                self.denied(command)
+
+    def test_howler_redirect_only_after_run_watch_and_only_to_null(self):
+        for command in ("gh run watch 1 > out.txt", "gh run watch 1 > /dev/null", "gh run view 1 > /dev/null 2>&1",
+                        "git rev-parse HEAD > /dev/null", "gh run watch 1 2>&1", "gh run view 1 < x",
+                        "gh run watch 1 > /dev/null 2>&1 > out.txt"):
+            with self.subTest(command=command):
+                self.denied(command)
+
+    def test_howler_pipe_only_into_tail_and_no_other_operator(self):
+        for command in ("gh run view 1 | cat", "gh run view 1 --log-failed | tail -60 | tail -60",
+                        "git rev-parse HEAD && git rev-parse HEAD", "git rev-parse HEAD; git rev-parse HEAD",
+                        "git rev-parse HEAD || git rev-parse HEAD", "gh run view 1 &", "git rev-parse $" "(echo HEAD)",
+                        "gh run view 1 --json=jobs", "gh run view 1 --repo x/y", "gh run view ١"):
+            with self.subTest(command=command):
+                self.denied(command)
+
+    def test_howler_values_follow_the_fixed_patterns(self):
+        for command in ("gh run list --commit abc", f"gh run list --commit {'A' * 40}",
+                        "gh run list --limit x", "gh run list --branch 'a b'", "gh run list --branch --json",
+                        "git rev-parse --git-dir", "git remote get-url -v", "git rev-parse HEAD~1",
+                        f"git merge-base --is-ancestor {self.SHA}", "gh run list --json"):
+            with self.subTest(command=command):
+                self.denied(command)
+        self.allowed("gh run list --branch feature/a-b_c.1")
+        self.allowed("gh run list --json name,jobs,headBranch")
+
+
 class AskRulesTest(CurfewTestBase):
     def setUp(self):
         super().setUp()
