@@ -59,17 +59,38 @@ class NextStepTest(unittest.TestCase):
         self.add("S-001", "done")
         self.check("done", False)
         self.add("S-002", "backlog")
-        self.check("prophecy", False)
+        self.check("prophecy", True)
         self.add("S-003", "ready")
         self.check("brew", True)
         self.add("S-004", "blocked")
         self.check("owl", False)
         self.add("S-004", "review")
-        self.check("owl", False)
+        self.check("owl", True)
         self.add("S-005", "doing")
         self.check("brew", True)
         runlock.take(self.accio / "run")
         self.check("wait", False)
+
+    def test_S_008_1_prophecy_is_auto_when_the_plan_has_no_dropped_dep(self):
+        self.add("S-001", "done")
+        self.add("S-002", "backlog")
+        self.check("prophecy", True)
+
+    def test_S_008_2_prophecy_is_not_auto_when_the_plan_has_a_dropped_dep(self):
+        self.add("S-001", "dropped")
+        write(self.accio / "stories" / "S-002.md",
+              story_text("S-002", "backlog").replace("track: story\n", "track: story\ndeps: [S-001]\n"))
+        self.check("prophecy", False)
+
+    def test_S_008_3_owl_is_auto_when_the_review_has_only_ready_stories(self):
+        self.add("S-001", "review")
+        self.add("S-002", "review")
+        self.check("owl", True)
+
+    def test_S_008_4_owl_is_not_auto_when_the_review_holds_a_blocked_story(self):
+        self.add("S-001", "review")
+        self.add("S-002", "blocked")
+        self.check("owl", False)
 
     def test_S_005_2_workflows_off_changes_the_sentence_not_the_step(self):
         reply = nextstep.next_step(self.accio, {"S-001": "ready"}, True)

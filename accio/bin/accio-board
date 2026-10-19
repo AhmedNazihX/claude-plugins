@@ -111,8 +111,9 @@ def cmd_status(_args, accio):
 
 
 def cmd_next(args, accio):
-    _, status = _loaded(accio)
-    reply = nextstep.next_step(accio, status, bool(os.environ.get("CLAUDE_CODE_DISABLE_WORKFLOWS")))
+    stories, status = _loaded(accio)
+    dropped = plan.propose(stories, status, config.load(accio))["dropped_deps"] if "backlog" in status.values() else ()
+    reply = nextstep.next_step(accio, status, bool(os.environ.get("CLAUDE_CODE_DISABLE_WORKFLOWS")), dropped)
     print(json.dumps(reply, indent=2) if args.json else reply["sentence"])
 
 

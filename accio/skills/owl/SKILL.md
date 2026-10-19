@@ -17,8 +17,7 @@ script exits with an `accio-…:` error, say it in plain words and stop: nothing
 1. `accio-hooks verify`. A missing, broken or switched-off hook, or an error from verify itself, becomes a question
    in step 2 (fix it as verify says, or carry on without that check); never stop on it. Any other note: one line.
 2. `accio-summary --latest` writes `.accio/run/owl.md`. If it says a build is running, say to review after it ends,
-   and stop. Read only owl.md: never the reports, diffs or story files. With no finished story and no question,
-   say there is nothing to review, and stop.
+   and stop. Read only owl.md: never reports, diffs or story files. With nothing to review, say so and stop.
 
 ## 2. Ask for one batch answer
 Show owl.md as it is, then ask for everything in one message, as `${CLAUDE_SKILL_DIR}/references/batch-answer.md`
@@ -30,8 +29,8 @@ shows:
   next build only), allow from now on (every story, every build), or no
 - each hook problem from step 1, and whether to push to the base branch after the merge
 
-If the request already answers all of this, don't ask: go to step 3. Ask again only about what is missing or
-unclear. Before the answer, run nothing but the step-1 scripts and `accio-owl check` (it writes nothing).
+If the request already answers all of this, go to step 3; ask only about what is missing or unclear. Before the
+answer, run nothing but the step-1 scripts and `accio-owl check` (it writes nothing).
 
 ## 3. Check the answer
 If the user chose to re-install hooks, run `accio-hooks install`, then `accio-hooks verify`; for lefthook or the
@@ -76,5 +75,6 @@ My recommendation: <one line>
 If the user asked to build the answered stories now, the second line says to type `/accio:brew`.
 
 When the `accio` conductor skill was loaded earlier in this chat and has not finished, `/accio` is driving: the
-second line says `next: prophecy (accio carries on)` instead of the "/accio:prophecy" hand-over. When this skill
-runs alone, keep the "/accio:prophecy" ending above.
+second line says `next: prophecy (accio carries on)`; with only READY stories in owl.md (no question, no hook
+problem) skip step 2: accept all, run steps 3-5, report the accepts in one line; never reject or drop for the user.
+Push (step 6), `needs_user` and failed merges stay stops. When this skill runs alone, keep step 2 and its ending.
