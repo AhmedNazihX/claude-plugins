@@ -250,7 +250,7 @@ class PlanTest(unittest.TestCase):
         self.assertEqual(reply["returned"], ["S-001"])
         self.assertEqual(story.parse(self.accio / "stories" / "S-001.md").meta["status"], "backlog")
         self.assertIn(str(self.accio / "stories" / "S-001.md"), reply["files"])
-        self.assertEqual([item["id"] for item in json.loads(self.board("ready", "--json").stdout)], ["S-002"])
+        self.assertEqual([item["id"] for item in json.loads(self.board("ready", "--json").stdout)["stories"]], ["S-002"])
 
     def test_S_021_4_an_iteration_planned_but_not_built_is_planned_again_in_place(self):
         self.add("S-001")

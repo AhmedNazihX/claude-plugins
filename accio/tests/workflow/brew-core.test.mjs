@@ -191,3 +191,28 @@ test('S-019/3 stories that can never start are still reported, never dropped', a
   assert.match(result, /S-001 Story S-001\s+NOT STARTED\s+its parent never finished/)
   assert.match(result, /S-002 Story S-002\s+NOT STARTED\s+its parent never finished/)
 })
+
+test('S-015/3 the load schema accepts wip with the stories, and portkey is told to reply with both', async () => {
+  const { calls } = await runWorkflow('brew', async (call) => (call.label === 'load'
+    ? { locked: true, wip: 2, stories: [] } : { done: true }))
+  assert.match(calls[0].prompt, /"wip"/)
+  const text = readFileSync(join(AGENTS, 'portkey.md'), 'utf8')
+  assert.match(text, /"wip"/)
+  assert.match(text, /\.stories/)
+})
+
+test('S-015/4 a load step that returns wip 1 never has two stories in progress at once', async () => {
+  const stories = [story('S-001'), story('S-002'), story('S-003')]
+  let active = 0
+  let peak = 0
+  const base = happy(stories)
+  const { calls } = await runWorkflow('brew', async (call) => {
+    if (call.label === 'load') return { locked: true, wip: 1, stories }
+    const id = call.label.split(' ')[0]
+    if (call.label === `${id} prepare`) { active += 1; peak = Math.max(peak, active); await sleep(5) }
+    if (call.label === `${id} outcome`) active -= 1
+    return base(call)
+  })
+  assert.equal(peak, 1)
+  assert.equal(calls.filter((call) => call.label.endsWith(' prepare')).length, 3)
+})
