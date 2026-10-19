@@ -2,7 +2,7 @@
 name: wand
 description: Design (wand): designs what to build with the user. Sets accio up, interviews the user one question at a time (every requirement needs an owner; the outcome question is always settled), has seeker check the facts and wandmaker propose 2–3 options, settles the choice, records each decision, then writes and commits .accio/design.md.
 when_to_use: When the user wants to design or start a new project or feature, "plan the architecture", "help me design X", "I want to build …", "build a tool/app/service that …", "write the design", "add a design note for …", or runs /accio:wand, in a git repo. It records the design's decisions itself. Not for turning a design into stories (sort), planning an iteration (prophecy), building (/accio:brew) or reviewing (owl).
-allowed-tools: Read, Glob, Grep, Write, Edit, Agent, Bash(${CLAUDE_PLUGIN_ROOT}/bin/accio-board init), Bash(${CLAUDE_PLUGIN_ROOT}/bin/accio-board record-design), Bash(${CLAUDE_PLUGIN_ROOT}/bin/accio-hooks install), Bash(${CLAUDE_PLUGIN_ROOT}/bin/accio-vow *)
+allowed-tools: Read, Glob, Grep, Write, Edit, Agent, Bash(${CLAUDE_PLUGIN_ROOT}/bin/accio-board init), Bash(${CLAUDE_PLUGIN_ROOT}/bin/accio-board record-design), Bash(${CLAUDE_PLUGIN_ROOT}/bin/accio-hooks install), Bash(${CLAUDE_PLUGIN_ROOT}/bin/accio-vow *), Bash(python3 ${CLAUDE_PLUGIN_ROOT}/bin/accio_lib/checkfinder.py)
 ---
 
 # wand: design what to build
@@ -17,6 +17,13 @@ agents one at a time.
 Run `accio-board init` (it changes nothing once accio is set up), then `accio-hooks install` (accio's git hooks: no
 secrets in commits, no unconfirmed pushes). Whatever install prints or exits with (a snippet to paste, a warning,
 hooks switched off), tell the user in one line, as a statement with its fix (never a question), and go on.
+
+**Check commands.** So a build never skips its tests, find the commands that check this repo: run
+`python3 ${CLAUDE_PLUGIN_ROOT}/bin/accio_lib/checkfinder.py` (it reads the `run:` lines of `.github/workflows/*.yml`
+that hold `test`, `lint`, `check`, `pytest`, `unittest` or `build`, the test and lint scripts in `package.json`, and
+pytest folders; it writes nothing). Skip this when `.accio/config.json` already has `checks`. Show the user the
+proposed commands and ask which to keep. Add only the kept ones to `checks` in `.accio/config.json` (Edit; each is
+`{"command": …, "glob": "**"}`). If it finds nothing, say so in one line and write nothing.
 
 **New design or design note.** If `.accio/design.md` exists, this run adds a **design note**: one new `## <Feature>`
 section at the end, with Edit; never Write the file, never change the rest of it.
