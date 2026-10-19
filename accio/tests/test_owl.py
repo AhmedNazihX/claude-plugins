@@ -367,6 +367,18 @@ class OwlTest(unittest.TestCase):
         self.assertIn("build is running", result.stderr)
         self.assertFalse((self.run_dir / "push-ok").exists())
 
+    def test_S_018_1_push_ok_prints_prev_as_the_old_remote_tip(self):
+        old = git(self.repo, "rev-parse", "main")
+        git(self.repo, "update-ref", "refs/remotes/origin/main", old)
+        reply = self.owl("push-ok")
+        self.assertEqual(reply["prev"], old)
+        self.assertEqual(set(reply), {"base", "sha", "prev"})
+
+    def test_S_018_2_push_ok_prints_prev_null_without_a_remote_ref_and_writes_the_token(self):
+        reply = self.owl("push-ok")
+        self.assertIsNone(reply["prev"])
+        self.assertEqual((self.run_dir / "push-ok").read_text().strip(), reply["sha"])
+
     def test_push_ok_needs_the_main_checkout_on_base(self):
         git(self.repo, "switch", "-q", "-c", "feature")
         result = self.owl("push-ok", check=False)
