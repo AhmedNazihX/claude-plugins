@@ -85,3 +85,13 @@ command is the user's opt-in.
 When the `accio` conductor skill was loaded earlier in this chat and has not finished, `/accio` is driving: typing
 `/accio` was the opt-in, so the second line says `next: brew (accio carries on)` instead of the "/accio:brew"
 hand-over, and the conductor starts the build. When this skill runs alone, keep the "/accio:brew" ending above.
+
+## When /accio drives: fewer stops
+Only when the conductor is driving, the step 4 and 5 questions shrink, but real decisions stay:
+- Items 1 and 2 of step 4 (a dropped dependency, an unclear DoD line or two possible behaviours) are still asked,
+  one at a time. Only the model can judge a DoD line, so when one is unclear, ask.
+- With no item 1 or 2 open, don't ask item 3 or "go": take the low-stakes defaults without asking, write them into
+  the story files as step 4 says, run step 6 and name the defaults you took in the "What happened" line ("I assumed
+  A, B and C").
+- A refusal from `accio-board go` (build running, no `checks`, cannot write) is still a stop.
+When this skill runs alone, keep every question above.
