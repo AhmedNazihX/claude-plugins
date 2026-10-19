@@ -20,7 +20,7 @@ Scripts, not a model, decide these, so an agent's claim never does:
   `remote_moved`. `.accio/run/` is left out, since the run writes there, except `push-ok`, each story's `base` and
   `allow-once.json` (owl's grants for one build), which nothing writes during a story. Times are recorded with `ctime`, which can't be set back.
   Paths matching config's `snapshot_skip` globs (another tool's files, such as `.remember/**`) are left out of the
-  comparison; accio's own run files never are.
+  comparison; nothing under `.accio/` ever is (the skip list itself lives there).
   **Limit:** the snapshot file lives in `.accio/run/` too, so code the story runs could rewrite it; like curfew
   (DESIGN § 6), this catches mistakes and leaves a trail, not a determined agent.
 - **diff start:** the base `accio-brief` recorded for the story (its parent's head when stacked), when it is a full
@@ -53,6 +53,7 @@ CODE_EXTENSIONS = frozenset({"py", "js", "jsx", "ts", "tsx", "mjs", "cjs", "go",
                              "mm", "dart", "lua", "clj", "hs", "ml", "fs", "r", "jl", "sh", "bash", "bats", "zsh"})
 DATA_EXTENSIONS = frozenset({"json", "yaml", "yml", "toml", "csv", "tsv", "txt", "xml", "html", "md", "snap", "plist",
                              "golden", "ini", "cfg", "png", "jpg", "jpeg", "gif", "svg", "pdf"})  # fixtures
+ACCIO_FOLDER = ".accio"
 RUN_FOLDER = ".accio/run/"
 WATCHED_RUN_FILES = ("push-ok", "*/base", "allow-once.json")  # nothing writes these during a story
 COMMIT_ID = re.compile(r"[0-9a-f]{40}|[0-9a-f]{64}")
@@ -238,8 +239,8 @@ def snapshot(main, base_branch):
 
 
 def _skipped(path, skip):
-    """Whether config's `snapshot_skip` covers `path`; accio's own run files are always watched."""
-    return not path.startswith(RUN_FOLDER) and globs.matches_any(path, skip)
+    """Whether config's `snapshot_skip` covers `path`; accio's own files (`.accio/`) are always watched."""
+    return not (path == ACCIO_FOLDER or path.startswith(f"{ACCIO_FOLDER}/")) and globs.matches_any(path, skip)
 
 
 def compare(before, after, skip=()):

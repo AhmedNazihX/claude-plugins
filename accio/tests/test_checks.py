@@ -203,6 +203,7 @@ class SnapshotTest(CheckTestBase):
 
     def test_a_skipped_path_another_tool_writes_does_not_count(self):
         write(self.repo / ".env", "KEY=one\n")
+        write(self.repo / ".remember" / ".gitignore", "*\n")  # ignores itself: git status shows one `.remember/` entry
         write(self.repo / ".remember" / "now.md", "one\n")
         self.check("S-001", "snapshot")
         before = json.loads((self.accio / "run" / "S-001" / "main-snapshot.json").read_text(encoding="utf-8"))
@@ -212,12 +213,14 @@ class SnapshotTest(CheckTestBase):
         changed = checks.compare(before, checks.snapshot(self.repo, "main"), skip=(".remember/**",))[0]
         self.assertEqual(changed, [".env"])
 
-    def test_a_skip_never_hides_accios_own_run_files(self):
+    def test_a_skip_never_hides_accios_own_files(self):
         self.check("S-001", "snapshot")
         before = json.loads((self.accio / "run" / "S-001" / "main-snapshot.json").read_text(encoding="utf-8"))
         write(self.accio / "run" / "push-ok", "abc\n")
+        write(self.accio / "config.json", '{"snapshot_skip": ["**"]}')
         changed = checks.compare(before, checks.snapshot(self.repo, "main"), skip=("**", ".accio/**"))[0]
         self.assertIn(".accio/run/push-ok", changed)
+        self.assertIn(".accio/config.json", changed)
 
     def test_a_recorded_base_that_isnt_an_ancestor_is_not_trusted(self):
         run_dir = self.accio / "run" / "S-001"
