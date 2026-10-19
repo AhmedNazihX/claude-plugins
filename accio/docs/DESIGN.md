@@ -508,7 +508,8 @@ Next: /accio:owl
 
 ## 9. Testing and evals (decision 006)
 
-- **Scripts:** `unittest`, with fixtures. These cover stacking in `ready --json`, the `dropped` status, the
+- **Scripts:** `unittest`, with fixtures, run by `python3 tests/run_tests.py` (each test file in its own process, up
+  to 8 at once; S-017). `unittest discover -s tests` still works. These cover stacking in `ready --json`, the `dropped` status, the
   DoD-tag check, and `accio-merge` finding the breaking story.
 - **Hooks:** payload tests that pipe JSON in and expect exit 2 or a pass. They cover the safe-alternative text, a
   secret-shaped value that must never be echoed, `curfew`'s claim, its one write exception, its allow list,

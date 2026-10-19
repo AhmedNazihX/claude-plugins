@@ -92,7 +92,7 @@ accio is developed here, in the `nazihx` marketplace repo:
 
 - `docs/DESIGN.md` (how it works and why), `docs/BACKLOG.md` (the stories it was built from) and
   `docs/decisions/` (numbered decision records).
-- Tests, from this folder: `python3 -m unittest discover -s tests` and
+- Tests, from this folder: `python3 tests/run_tests.py` (runs each test file in its own process, side by side) and
   `node --test 'tests/workflow/**/*.test.mjs'`. CI runs them on Linux and macOS.
 - Skill evals: `claude plugin eval` with free graders only; see `evals/README.md`. In CI they run only by hand.
 - Layout: `skills/` (the commands), `agents/` (see "Who does what"), `workflows/brew.js` (the build), `hooks/` (the
