@@ -220,6 +220,16 @@ class SnapshotTest(CheckTestBase):
         write(self.repo / "build" / "more.txt", "two\n")
         self.assertEqual(checks.compare(before, checks.snapshot(self.repo, "main"), skip=("build/**",))[0], [])
 
+    def test_finders_ds_store_files_never_count(self):
+        write(self.repo / ".DS_Store", "one")
+        write(self.accio / ".DS_Store", "one")
+        self.check("S-001", "snapshot")
+        before = json.loads((self.accio / "run" / "S-001" / "main-snapshot.json").read_text(encoding="utf-8"))
+        write(self.repo / ".DS_Store", "two")
+        write(self.accio / ".DS_Store", "two")
+        write(self.repo / "src" / ".DS_Store", "new")
+        self.assertEqual(checks.compare(before, checks.snapshot(self.repo, "main"))[0], [])
+
     def test_a_skip_never_hides_accios_own_files(self):
         self.check("S-001", "snapshot")
         before = json.loads((self.accio / "run" / "S-001" / "main-snapshot.json").read_text(encoding="utf-8"))

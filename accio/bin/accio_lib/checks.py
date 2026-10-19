@@ -20,7 +20,8 @@ Scripts, not a model, decide these, so an agent's claim never does:
   `remote_moved`. `.accio/run/` is left out, since the run writes there, except `push-ok`, each story's `base` and
   `allow-once.json` (owl's grants for one build), which nothing writes during a story. Times are recorded with `ctime`, which can't be set back.
   Paths matching config's `snapshot_skip` globs (another tool's files, such as `.remember/**`) are left out of the
-  comparison; nothing under `.accio/` ever is (the skip list itself lives there).
+  comparison; nothing under `.accio/` ever is (the skip list itself lives there). Finder's `.DS_Store` files never
+  count, anywhere.
   **Limit:** the snapshot file lives in `.accio/run/` too, so code the story runs could rewrite it; like curfew
   (DESIGN § 6), this catches mistakes and leaves a trail, not a determined agent.
 - **diff start:** the base `accio-brief` recorded for the story (its parent's head when stacked), when it is a full
@@ -36,6 +37,7 @@ Scripts, not a model, decide these, so an agent's claim never does:
 import hashlib
 import os
 import pathlib
+import posixpath
 import re
 import shlex
 import subprocess
@@ -54,6 +56,7 @@ CODE_EXTENSIONS = frozenset({"py", "js", "jsx", "ts", "tsx", "mjs", "cjs", "go",
 DATA_EXTENSIONS = frozenset({"json", "yaml", "yml", "toml", "csv", "tsv", "txt", "xml", "html", "md", "snap", "plist",
                              "golden", "ini", "cfg", "png", "jpg", "jpeg", "gif", "svg", "pdf"})  # fixtures
 ACCIO_FOLDER = ".accio"
+OS_FILES = frozenset({".DS_Store"})  # macOS Finder writes these whenever a folder is opened
 RUN_FOLDER = ".accio/run/"
 WATCHED_RUN_FILES = ("push-ok", "*/base", "allow-once.json")  # nothing writes these during a story
 COMMIT_ID = re.compile(r"[0-9a-f]{40}|[0-9a-f]{64}")
@@ -241,8 +244,11 @@ def snapshot(main, base_branch):
 def _skipped(path, skip):
     """Whether config's `snapshot_skip` covers `path`; accio's own files (`.accio/`) are always watched.
 
-    `dir/**` also covers `dir` itself: git lists a folder ignored as a whole as one entry.
+    `dir/**` also covers `dir` itself: git lists a folder ignored as a whole as one entry. The operating system's
+    own files (`OS_FILES`, e.g. Finder's `.DS_Store`) never count, wherever they are.
     """
+    if posixpath.basename(path) in OS_FILES:
+        return True
     if path == ACCIO_FOLDER or path.startswith(f"{ACCIO_FOLDER}/"):
         return False
     folders = tuple(pattern[:-len("/**")] for pattern in skip if pattern.endswith("/**"))
