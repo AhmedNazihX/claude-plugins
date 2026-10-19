@@ -106,3 +106,91 @@ Each item can be checked without a model:
   If step 1 fails, no option meets R4 as written, and the design comes back to the user.
 - The 60-line log tail is what breaks first: with many failing tests, or both matrix jobs failing, the first error
   can fall outside it. Revisit if that happens.
+
+## One command: /accio
+
+### Outcome
+After this ships, the user types one command (`/accio`) and accio carries the work from wherever the board stands to
+a pushed, CI-checked result, stopping only at real decisions. We'd know because in one real iteration the transcript
+has a single `/accio`, every other message from the user answers a real question, and no step ends with "type
+/accio:X".
+
+### Who and why
+The user, accio's only user. Today every step ends by telling them which command to type next (wand → sort →
+prophecy → brew → owl), so they have to remember the order and keep coming back. The workflow blocks on them.
+
+### Requirements
+- R1 One entry command, `/accio`, that reads the board and runs the next step. Owner: the user (no more remembering
+  the order).
+- R2 It keeps going through steps that need no decision: design → stories → plan, "go" → build, build → review.
+  Owner: the user ("I don't have to keep calling everything").
+- R3 It stops only where the decision is the user's:
+  - **the design:** wand's interview, one question at a time, as today
+  - **the plan:** one message with the batch and its defaults, ending with "go". This stays a stop because the
+    user's "go" is also their opt-in to the build (spike S1).
+  - **a real open question** a story needs before it can be built
+  - **owl's always-ask items:** accept or reject, push, paid calls, safety overrides, denied commands
+  Owner: the user (keeps the safety model, DESIGN § 7.3).
+- R4 One copy of the "what's next" rule. Today it's written twice: in `accio/hooks/session_start.py:42-63` and in
+  `accio/skills/map/SKILL.md:20-26`. Owner: the user as accio's maintainer (a third copy would drift).
+
+### Out of scope
+- Several features at once, or parallel chats driving the same board.
+- Pushing without the user's confirm. The push token stays.
+- pensieve (the retro step).
+- Changing how the build works inside (`workflows/brew.js`).
+- Watching GitHub CI after the push: howler does that (the howler design above, S-001 and S-002). `/accio` will start
+  howler once it exists.
+
+### Design
+**A conductor skill** (decision 003). A skill with `name: accio`, typed `/accio` (`/accio:accio` if the bare name is
+taken). It runs `accio-board next --json`, which says the next step and whether it needs the user
+(`auto: true|false`). It then runs that step's skill in the same chat, and repeats while `auto` is true. It stops
+when a step asks the user something, and carries on after they answer. Python decides "continue or stop"; the skill
+text only follows it. The single commands (`/accio:wand`, `/accio:brew` …) keep working as now.
+
+**wand keeps its interview.** The design step still asks one question at a time (decision 009); `/accio` just runs
+it and carries on to the stories when the design is committed.
+
+**Two things aren't documented, so each gets a spike** (a short hands-on test) before we rely on it:
+- **S1:** can a skill start the build (the `Workflow` tool, `accio:brew`) after the user's "go"? If not, the go
+  message says "type `/accio:brew`": one typed command per iteration.
+- **The wake (S2, S3 or S5):** does the chat continue by itself when the build ends? S2 tests the build's own report,
+  S3 an `asyncRewake` hook that exits 2 when `run/brew.lock` is free, S5 one long blocking wait call. If none works,
+  the user types `/accio` after the build, and it picks up at the review.
+
+Each fallback costs the user one typed command, never a skipped safety check.
+
+### What we build
+1. **One "what's next" rule.** Move `next_step()` into `accio/bin/accio_lib/nextstep.py` and add
+   `accio-board next [--json]`, which returns the step (`wand`, `sort`, `prophecy`, `brew`, `owl`, `wait`, `done`),
+   `auto`, and today's plain sentence. `session_start.py` imports it, and `map` runs it instead of its prose copy.
+   Files: `accio/bin/accio_lib/nextstep.py`, `accio/bin/accio-board`, `accio/hooks/session_start.py`,
+   `accio/skills/map/SKILL.md`, tests. Needs: none. Risk: none.
+   Checked by: a unittest feeds every board state (lock held, doing, review, blocked, ready, backlog, no design, no
+   stories, all done) and checks `step` and `auto`; a test fails if the rule list is still in `map` or the hook.
+2. **Spikes S1 and the wake (S2, S3, S5), by hand.** Results go in Review notes and decide parts 3 and 4. Files: none
+   (notes only). Needs: none. Risk: none.
+   Checked by: S1 passes when `run/brew.lock` and the run's `journal.jsonl` appear after "go"; a wake spike passes
+   when owl starts with no message from the user.
+3. **The `/accio` conductor skill.** About 40 lines. Files: `accio/skills/accio/SKILL.md`, `accio/tests/` checks.
+   Needs: 1, 2. Risk: none.
+   Checked by: an eval in a fixture repo with a design and no stories shows `/accio` runs `accio-board next`, then
+   `accio-board new` (tool order); no reply matches `type /accio:(wand|sort|prophecy|owl)`.
+4. **Step endings.** When `/accio` is driving, each step ends with "next: <step> (accio carries on)"; run alone, it
+   keeps "/accio:X". Files: `accio/skills/{wand,sort,prophecy,owl}/SKILL.md`. Needs: 3. Risk: none.
+   Checked by: the part 3 eval's no-"type /accio:X" check.
+5. **Docs.** DESIGN.md §§ 3, 4.1 and 7.3 (the new touchpoint count), the README's quick start, and BACKLOG. Files:
+   `accio/docs/DESIGN.md`, `accio/README.md`, `accio/docs/BACKLOG.md`. Needs: 3, 4. Risk: none.
+   Checked by: by hand, § 7.3 matches the stops in R3.
+
+### Evidence
+- The `accio-board next` unittest over every board state.
+- The `/accio` eval (tool order, and no "type /accio:X").
+- One real iteration in this repo: a single `/accio` in the transcript, and every other message from the user is an
+  answer to a real question.
+
+### Open questions
+- S1 and the wake spikes (part 2). Their results may add one typed command each.
+- After compaction only the first 5,000 tokens of each skill survive. One long chat may lose the conductor's text
+  after an iteration or two; a new `/accio` recovers, because it re-reads the board.
