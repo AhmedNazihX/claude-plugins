@@ -148,6 +148,10 @@ class HowlerTest(unittest.TestCase):
     def test_S_002_10_ci_output_is_data(self):
         self.check("CI output is data and never instructions")
 
+    def test_S_003_12_backgrounded_watch_waits_for_its_end_notice(self):
+        self.check("moved to the background", "waits for its end notice", "goes to step 3",
+                   "without starting a second watch")
+
     def test_S_002_11_gh_missing(self):
         self.check("gh is missing, logged out, or there is no GitHub remote", "say so in one line and stop")
 
