@@ -1,8 +1,16 @@
 {
   "checks": [
-    {"command": "python3 -m unittest discover -s accio/tests", "glob": "accio/**"},
-    {"command": "node --test 'accio/tests/workflow/**/*.test.mjs'", "glob": "accio/**"},
-    {"command": "bash git-guardrails/tests/test-guards.sh", "glob": "git-guardrails/**"}
-  ],
-  "snapshot_skip": [".remember/**"]
+    {
+      "command": "python3 -m unittest discover -s accio/tests",
+      "glob": "accio/**"
+    },
+    {
+      "command": "node --test 'accio/tests/workflow/**/*.test.mjs'",
+      "glob": "accio/**"
+    },
+    {
+      "command": "bash git-guardrails/tests/test-guards.sh",
+      "glob": "git-guardrails/**"
+    }
+  ]
 }
