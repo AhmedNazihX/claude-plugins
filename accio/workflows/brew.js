@@ -329,7 +329,7 @@ function panel(story, risky) {
 async function packageFor(story, round, since) {  // `round` only labels the step
   const reply = await callRetry(
     `Step 4, review package for story ${story.id}: run \`accio-brief ${story.id} --review` +
-      `${since ? ` --since ${since}` : ''}\`. Reply with its JSON {package, head, risky}, or {error} if it fails.`,
+      `${since ? ` --since ${since}` : ''}\`. Reply with its JSON {package, head, risky, code, breaker} (copy the code and breaker flags as given), or {error} if it fails.`,
     { agentType: PORTKEY, model: 'haiku', schema: PACKAGE_SCHEMA, label: label(story, 'package', round) })
   if (!reply || reply.error || !reply.package || !reply.head) {
     return accioStop(`Writing the review package failed (${(reply && reply.error) || 'no answer'}). Try again?`)

@@ -274,6 +274,11 @@ test('S-043/1 the package reply schema carries the code flag next to risky', asy
   assert.equal(props.risky.type, 'boolean')
 })
 
+test('S-043/2 the package prompt asks prefect to return the code and breaker flags', async () => {
+  const { calls } = await runWorkflow('brew', happy([story('S-001')]))
+  assert.match(prompt(calls, 'S-001 package'), /\{package, head, risky, code, breaker\}/)
+})
+
 test('S-043/2 a diff with code that passes review goes to boggart, then prefect runs accio-break verify', async () => {
   const { result, calls } = await runWorkflow('brew', happy([story('S-001')], {
     package: withCode, boggart: found, verify: verdicts(entry({ verdict: 'dropped' })),
