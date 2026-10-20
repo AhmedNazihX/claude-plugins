@@ -416,5 +416,94 @@ class OwlTest(unittest.TestCase):
         self.assertIn("main", result.stderr)
 
 
+def finding(fid, severity="major", status="open", ruling=None):
+    ruled = f"  ruling: {ruling}\n" if ruling else ""
+    return f"- id: {fid}\n  status: {status}\n  severity: {severity}\n  claim: c\n{ruled}"
+
+
+class LogTest(unittest.TestCase):
+    """S-048: the iteration's `## Findings and blocks`, on the same repo as OwlTest."""
+    setUp = OwlTest.setUp
+    tearDown = OwlTest.tearDown
+
+    def fix_round(self, number, text, name="examiner-findings.md", sid="S-001"):
+        write(self.run_dir / sid / f"fix-{number}" / name, text)
+
+    def close_log(self, **kwargs):
+        from accio_lib import owl
+        answers = owl.Answers(accept=("S-001", "S-002"), reject=(("S-004", "no"),), drop=(("S-007", "gone"),),
+                              answer=(("S-003", "Email only"),))
+        return owl.close(self.accio, answers, "main", ("S-001", "S-002"), None, **kwargs)
+
+    def log(self):
+        text = (self.accio / "iterations" / "1.md").read_text()
+        return text.split("## Findings and blocks")[1].split("\n## ")[0]
+
+    def test_S_048_1_fix_copies_the_findings_into_the_next_round_folder(self):
+        from accio_lib import brief
+        source = self.accio / "run" / "S-001" / "examiner-findings.md"
+        write(source, finding("examiner-1"))
+        parsed = story.parse(self.accio / "stories" / "S-001.md")
+        for expected in ("fix-1", "fix-2"):
+            text = brief.read_findings([source])
+            brief.render_fix(parsed, self.accio, self.worktree, text)
+            self.assertEqual((self.accio / "run" / "S-001" / expected / "examiner-findings.md").read_text().strip(),
+                             finding("examiner-1").strip())
+
+    def test_S_048_2_each_finding_and_block_gets_one_line(self):
+        self.fix_round(1, finding("examiner-1") + finding("examiner-2", "minor"))
+        write(self.run_dir / "S-001" / "examiner-findings.md", finding("examiner-1", status="open"))
+        write(self.run_dir / "questions" / "S-003.md", "(accio): prefect gave no answer twice\nmore\n")
+        self.close_log()
+        log = self.log()
+        self.assertIn("- S-001 examiner-1 major: open", log)
+        self.assertIn("- S-001 examiner-2 minor: fixed in round 1", log)
+        self.assertIn("- S-003 blocked (accio): prefect gave no answer twice", log)
+        self.assertNotIn("more", log)
+
+    def test_S_048_3_a_finding_gone_from_the_last_files_is_fixed_in_the_round_that_held_it(self):
+        self.fix_round(1, finding("examiner-1"))
+        self.fix_round(2, finding("examiner-1") + finding("examiner-3", "critical"))
+        write(self.run_dir / "S-001" / "examiner-findings.md", "No findings.\n")
+        self.close_log()
+        self.assertIn("- S-001 examiner-1 major: fixed in round 2", self.log())
+        self.assertIn("- S-001 examiner-3 critical: fixed in round 2", self.log())
+
+    def test_S_048_3_a_finding_marked_resolved_is_fixed_too(self):
+        self.fix_round(1, finding("examiner-1"))
+        write(self.run_dir / "S-001" / "examiner-findings.md", finding("examiner-1", status="resolved"))
+        self.close_log()
+        self.assertIn("- S-001 examiner-1 major: fixed in round 1", self.log())
+
+    def test_S_048_4_a_dismissed_finding_records_the_ruling(self):
+        self.fix_round(1, finding("examiner-1"))
+        write(self.run_dir / "S-001" / "examiner-findings.md",
+              finding("examiner-1", status="dismissed", ruling="the story allows it"))
+        self.close_log()
+        self.assertIn("- S-001 examiner-1 major: dismissed: the story allows it", self.log())
+
+    def test_S_048_5_a_finding_still_in_the_last_files_is_open(self):
+        self.fix_round(1, finding("professor-1", "critical"), name="professor-findings.md")
+        write(self.run_dir / "S-001" / "professor-findings.md", finding("professor-1", "critical"))
+        self.close_log()
+        self.assertIn("- S-001 professor-1 critical: open", self.log())
+
+    def test_S_048_6_lines_from_the_caller_join_the_log_and_a_second_pass_keeps_them(self):
+        self.close_log(lines=["S-005 boggart break outside the DoD: reset mail repeats"])
+        self.assertIn("- S-005 boggart break outside the DoD: reset mail repeats", self.log())
+        from accio_lib import owl
+        text = (self.accio / "iterations" / "1.md").read_text()
+        again = owl._log_text(self.accio, {"S-001": None}, text, ["S-006 another: x"])
+        self.assertIn("- S-005 boggart break outside the DoD: reset mail repeats", again)
+        self.assertIn("- S-006 another: x", again)
+
+    def test_S_048_7_the_question_files_are_deleted_after_the_log(self):
+        write(self.run_dir / "questions" / "S-005.md", "Kept?\n")
+        self.close_log()
+        self.assertIn("- S-003 blocked (user): Email or SMS for the reset?", self.log())
+        self.assertIn("- S-005 blocked (user): Kept?", self.log())
+        self.assertEqual(list((self.run_dir / "questions").glob("*.md")), [])
+
+
 if __name__ == "__main__":
     unittest.main()

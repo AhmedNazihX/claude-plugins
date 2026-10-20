@@ -227,8 +227,29 @@ def render_brief(parsed, accio, worktree, onto, checks, reuse_files, notes):
     return fill("brief.md", values)
 
 
+class FindingsText(str):
+    """The text of one findings file, remembering the file's name so a fix round can keep a copy of it."""
+    name = ""
+
+
+def next_fix_dir(run_dir):
+    """run/<ID>/fix-<N>/ with N one past the highest round kept so far."""
+    rounds = [int(path.name[4:]) for path in run_dir.glob("fix-*") if path.name[4:].isdigit()]
+    return run_dir / f"fix-{max(rounds, default=0) + 1}"
+
+
+def copy_findings(run_dir, findings):
+    """Keep the findings a fix round was given in run/<ID>/fix-<N>/ (owl's log reads them); returns the folder."""
+    target = next_fix_dir(run_dir)
+    for index, text in enumerate(findings, 1):
+        name = getattr(text, "name", "") if isinstance(text, FindingsText) else ""
+        write_file(target / (name or f"given-{index}-findings.md"), str(text) + "\n")
+    return target
+
+
 def render_fix(parsed, accio, worktree, findings):
     files = parsed.meta.get("files", ())
+    copy_findings(accio / "run" / parsed.meta["id"], findings)
     checks = scoped_checks(config.load(accio)["checks"], files)
     values = {**common(parsed, worktree, accio), "findings": "\n\n".join(findings),
               "story_brief": accio / "run" / parsed.meta["id"] / "brief.md",
@@ -250,7 +271,9 @@ def read_findings(paths_given):
     texts = []
     for path in paths_given:
         try:
-            texts.append(path.read_text(encoding="utf-8").strip())
+            text = FindingsText(path.read_text(encoding="utf-8").strip())
+            text.name = path.name
+            texts.append(text)
         except (OSError, UnicodeDecodeError) as error:
             raise BriefError(f"cannot read the findings file {path}: {error}") from error
     return tuple(texts)
