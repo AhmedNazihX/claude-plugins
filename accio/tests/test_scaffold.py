@@ -53,12 +53,12 @@ class HooksFailClosedTest(unittest.TestCase):
     def _find(self, script):
         return [(e, h) for e, h in self.entries if h["command"].endswith(f'/hooks/{script}"')]
 
-    def test_S_028_1_guards_and_curfew_block_on_failure(self):
+    def test_S_033_1_no_hook_has_on_failure(self):
         for script, count in (("protego.py", 1), ("fidelius.py", 1), ("curfew.py", 2)):
             found = self._find(script)
             self.assertEqual(len(found), count, script)
-            for event, hook in found:
-                self.assertEqual(hook.get("onFailure"), "block", f"{script} in {event}")
+        for event, hook in self.entries:
+            self.assertNotIn("onFailure", hook, f"{hook['command']} in {event}")
         self.assertEqual({e for e, _ in self._find("curfew.py")}, {"PreToolUse", "PermissionRequest"})
 
     def test_S_028_2_doc_size_and_session_start_have_no_on_failure(self):

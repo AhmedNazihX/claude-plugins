@@ -546,5 +546,44 @@ class AskRulesTest(CurfewTestBase):
         self.assertIn(".claude/settings.json", result.stdout)
 
 
+class CurfewStartupCrashTest(unittest.TestCase):
+    """S-033: curfew with an unimportable `accio_lib` (a copy of curfew beside a broken library)."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        base = pathlib.Path(self.tmp.name).resolve()
+        (base / "hooks").mkdir()
+        (base / "bin" / "accio_lib").mkdir(parents=True)
+        (base / "hooks" / "curfew.py").write_text(CURFEW.read_text(encoding="utf-8"), encoding="utf-8")
+        (base / "bin" / "accio_lib" / "__init__.py").write_text("raise ImportError('broken update')\n",
+                                                                 encoding="utf-8")
+        self.script = base / "hooks" / "curfew.py"
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def run_curfew(self, **fields):
+        payload = {"hook_event_name": "PreToolUse", "tool_name": "Bash", "tool_input": {"command": "ls"},
+                   "cwd": self.tmp.name, **fields}
+        result = subprocess.run([sys.executable, "-I", str(self.script)], input=json.dumps(payload),
+                                capture_output=True, text=True, check=False)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        return result.stdout
+
+    def test_S_033_2_accio_agent_is_denied_with_the_error(self):
+        out = json.loads(self.run_curfew(agent_type="accio:house-elf", agent_id="a1"))["hookSpecificOutput"]
+        self.assertEqual(out["permissionDecision"], "deny")
+        self.assertIn("ImportError", out["permissionDecisionReason"])
+        self.assertIn("broken update", out["permissionDecisionReason"])
+
+    def test_S_033_3_main_chat_and_other_agents_get_no_answer(self):
+        self.assertEqual(self.run_curfew().strip(), "")
+        self.assertEqual(self.run_curfew(agent_type="other:agent", agent_id="a2").strip(), "")
+
+    def test_S_033_4_permission_request_gets_no_answer(self):
+        self.assertEqual(self.run_curfew(hook_event_name="PermissionRequest", agent_type="accio:house-elf",
+                                         agent_id="a1").strip(), "")
+
+
 if __name__ == "__main__":
     unittest.main()
