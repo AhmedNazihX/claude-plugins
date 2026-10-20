@@ -1,6 +1,6 @@
 ---
 name: howler
-description: The CI watcher (howler): after owl pushes, waits for the CI runs of the pushed commit and reports PASSED or FAILED for each workflow and job, with the failing step, its error, and whether the cause lies in the pushed range. Runs in the background.
+description: The CI watcher (howler): waits for the CI runs of a pushed commit and reports PASSED or FAILED per job, with the failing step. Use after owl pushes. Only accio calls this agent.
 model: haiku
 effort: low
 omitClaudeMd: true

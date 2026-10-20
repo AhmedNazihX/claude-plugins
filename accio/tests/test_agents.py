@@ -276,6 +276,22 @@ class HowlerTest(unittest.TestCase):
         self.check("gh is missing, logged out, or there is no GitHub remote", "say so in one line and stop")
 
 
+class OnlyAccioCallsTest(unittest.TestCase):
+    """S-026: a build agent's description says only accio calls it, and when to use it."""
+
+    NAMES = ("portkey", "prefect", "howler", "house-elf", "examiner")
+
+    def test_S_026_1_description_says_only_accio_calls_it(self):
+        for name in self.NAMES:
+            with self.subTest(name):
+                self.assertIn("Only accio calls this agent", front_and_body(name)[0]["description"])
+
+    def test_S_026_2_description_says_when_to_use_it(self):
+        for name in self.NAMES:
+            with self.subTest(name):
+                self.assertRegex(front_and_body(name)[0]["description"], r"Use (to|when|after)\b")
+
+
 class AgentsMatchCurfewTest(unittest.TestCase):
     """A tool an agent has but curfew denies (or the reverse) turns into a BLOCKED story at run time."""
 

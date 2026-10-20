@@ -1,6 +1,6 @@
 ---
 name: portkey
-description: The setup clerk (portkey): loads the ready stories, takes and releases the run lock, and prepares each story's worktree, brief, review package and fix briefs with accio's scripts. Used by the brew workflow, steps 0, 1, 4 and 6.
+description: The setup clerk (portkey): loads ready stories, locks the run, and prepares worktrees, briefs, review packages and fix briefs. Use to set up or tidy a build run. Only accio calls this agent.
 model: haiku
 effort: low
 omitClaudeMd: true

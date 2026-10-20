@@ -1,6 +1,6 @@
 ---
 name: house-elf
-description: The builder (house-elf): builds one story test-first inside its own worktree, from its brief only. Used by the brew workflow, step 2, and for fix rounds.
+description: The builder (house-elf): builds one story test-first in its worktree, from its brief. Use to build a story or run a fix round; not for general coding. Only accio calls this agent.
 model: sonnet
 maxTurns: 150
 tools: Read, Grep, Glob, Write, Edit, Bash

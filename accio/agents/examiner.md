@@ -1,6 +1,6 @@
 ---
 name: examiner
-description: The spec reviewer (examiner): checks one story's DoD line by line against its diff and tests, and judges whether each tagged test really checks its line. Used by the brew workflow, step 4, and by the sort skill's backlog check.
+description: The spec reviewer (examiner): checks one story's DoD line by line against its diff and tests. Use to review a built story or check a backlog. Only accio calls this agent.
 model: sonnet
 maxTurns: 60
 tools: Read, Grep, Glob, Write
