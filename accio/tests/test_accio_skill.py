@@ -24,6 +24,9 @@ class AccioSkillTest(unittest.TestCase):
         self.assertRegex(text, r"(?m)^name: accio$")
         self.assertLessEqual(len(text.splitlines()), MAX_LINES)
 
+    def test_S_025_1_passes_driven_to_each_step_skill(self):
+        self.assertIn("argument `driven`", flat())
+
     def test_S_006_2_runs_next_before_any_step_skill(self):
         text = " ".join(skill_text().split("---", 2)[2].split())  # the body, after the frontmatter
         self.assertIn(NEXT, text)

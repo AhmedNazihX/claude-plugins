@@ -17,8 +17,8 @@ with no variables and no `&&` or `;` chains.
 2. Do the step, then go back to 1. Never decide the step yourself and never skip step 1 after a step ends.
 
 ## The step
-- `wand`, `sort`, `prophecy`, `owl`: load that step's skill with the Skill tool (`accio:<step>`) and follow it in
-  this chat.
+- `wand`, `sort`, `prophecy`, `owl`: load that step's skill with the Skill tool (`accio:<step>`, with the argument `driven`) and
+  follow it in this chat.
 - `brew`: load `accio:brew` and start the build yourself with the Workflow tool, but only when the user typed
   `/accio` or asked in their own words to build. A bare "continue" is not that opt-in: say the plan is ready and
   ask them to type `/accio` or say "start the build".

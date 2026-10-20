@@ -74,7 +74,7 @@ My recommendation: <one line>
 
 If the user asked to build the answered stories now, the second line says to type `/accio:brew`.
 
-When the `accio` conductor skill was loaded earlier in this chat and has not finished, `/accio` is driving: the
+When ARGUMENTS says `driven`, `/accio` is driving: the
 second line says `next: prophecy (accio carries on)`; with only READY stories in owl.md (no question, no hook
 problem) skip step 2: accept all, run steps 3-5, report the accepts in one line; never reject or drop for the user.
-Push (step 6), `needs_user` and failed merges stay stops. When this skill runs alone, keep step 2 and its ending.
+Push (step 6), `needs_user` and failed merges stay stops. With no `driven` argument this skill runs alone: keep every question, step 2 and its ending.
