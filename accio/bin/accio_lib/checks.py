@@ -59,6 +59,7 @@ DATA_EXTENSIONS = frozenset({"json", "yaml", "yml", "toml", "csv", "tsv", "txt",
                              "golden", "ini", "cfg", "png", "jpg", "jpeg", "gif", "svg", "pdf"})  # fixtures
 ACCIO_FOLDER = ".accio"
 OS_FILES = frozenset({".DS_Store"})  # macOS Finder writes these whenever a folder is opened
+PLAYWRIGHT_FOLDER = ".playwright-mcp"  # the Playwright MCP server logs pages and console here on every session
 RUN_FOLDER = ".accio/run/"
 BASE_NAME = "base"
 WATCHED_RUN_FILES = ("push-ok", f"*/{BASE_NAME}", "allow-once.json")  # nothing writes these during a story,
@@ -276,6 +277,8 @@ def _skipped(path, skip):
         return True
     if path == ACCIO_FOLDER or path.startswith(f"{ACCIO_FOLDER}/"):
         return False
+    if path == PLAYWRIGHT_FOLDER or path.startswith(f"{PLAYWRIGHT_FOLDER}/"):
+        return True
     folders = tuple(pattern[:-len("/**")] for pattern in skip if pattern.endswith("/**"))
     return globs.matches_any(path, (*skip, *folders))
 

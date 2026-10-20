@@ -69,15 +69,41 @@ def _check_mutation(value):
     return None if "{diff}" in value["command"] else "command must contain {diff}, where the story's diff file goes"
 
 
+PREVIEW_KEYS = {"command", "url", "test_data", "login", "env"}
+LOGIN_KEYS = {"username_env", "password_env"}
+
+
+def _check_login(login):
+    shape = 'login must be {"username_env": "<variable name>", "password_env": "<variable name>"}'
+    if not isinstance(login, dict):
+        return shape
+    values = sorted(set(login) & {"username", "password"})
+    if values:
+        return (f"login must not hold a {' or '.join(values)} value; name the environment variables that hold "
+                f"them: {shape}")
+    if set(login) != LOGIN_KEYS or not all(isinstance(name, str) and name.strip() for name in login.values()):
+        return shape
+    return None
+
+
 def _check_preview(value):
     if value is None:
         return None
-    shape = 'must be {"command": "<starts the app>", "url": "http://..."}'
-    if not isinstance(value, dict) or set(value) != {"command", "url"}:
+    shape = 'must be {"command": "<starts the app>", "url": "http://...", "test_data": true}'
+    if not isinstance(value, dict) or not {"command", "url"} <= set(value) or set(value) - PREVIEW_KEYS:
         return shape
-    if not all(isinstance(value[key], str) and value[key].strip() for key in value):
+    if not all(isinstance(value[key], str) and value[key].strip() for key in ("command", "url")):
         return shape
-    return None if value["url"].startswith(("http://", "https://")) else "url must start with http:// or https://"
+    if not value["url"].startswith(("http://", "https://")):
+        return "url must start with http:// or https://"
+    if "test_data" in value and not isinstance(value["test_data"], bool):
+        return "test_data must be true or false"
+    env = value.get("env", {})
+    if not isinstance(env, dict) or not all(isinstance(k, str) and k.strip() and isinstance(v, str)
+                                            for k, v in env.items()):
+        return 'env must be an object of variable names and string values, like {"PORT": "3000"}'
+    problem = _check_login(value["login"]) if "login" in value else None
+    return f"preview {problem}" if problem else None
 
 
 CHECKERS = {
