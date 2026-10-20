@@ -1,7 +1,7 @@
 ---
 name: wand
-description: Design (wand): designs what to build with the user. Sets accio up, interviews the user one question at a time (every requirement needs an owner; the outcome question is always settled), has seeker check the facts and wandmaker propose 2–3 options, settles the choice, records each decision, then writes and commits .accio/design.md.
-when_to_use: When the user wants to design or start a new project or feature, "plan the architecture", "help me design X", "I want to build …", "build a tool/app/service that …", "write the design", "add a design note for …", or runs /accio:wand, in a git repo. It records the design's decisions itself. Not for turning a design into stories (sort), planning an iteration (prophecy), building (/accio:brew) or reviewing (owl).
+description: Design (wand): interviews the user one question at a time, checks the facts, settles the choice and writes .accio/design.md.
+when_to_use: When the user wants to design a new project or feature ("help me design X", "plan the architecture", "write the design", "add a design note for …", "I want to build …"), or runs /accio:wand, in a git repo. Not for stories (sort), planning an iteration (prophecy), building (/accio:brew) or reviewing (owl).
 allowed-tools: Read, Glob, Grep, Write, Edit, Agent, Bash(${CLAUDE_PLUGIN_ROOT}/bin/accio-board init), Bash(${CLAUDE_PLUGIN_ROOT}/bin/accio-board record-design), Bash(${CLAUDE_PLUGIN_ROOT}/bin/accio-hooks install), Bash(${CLAUDE_PLUGIN_ROOT}/bin/accio-vow *), Bash(python3 ${CLAUDE_PLUGIN_ROOT}/bin/accio_lib/checkfinder.py)
 ---
 
@@ -14,7 +14,10 @@ and run again; `accio-hooks` never stops wand. Call
 agents one at a time.
 
 ## 1. Set up
-Run `accio-board init` (it changes nothing once accio is set up), then `accio-hooks install` (accio's git hooks: no
+If the repo has no `.accio/` and the user did not type `/accio:wand` or `/accio` (a plain "I want to build …" can
+start wand), ask once before setting up: "This adds an `.accio/` folder and git hooks (no secrets in commits, no
+unconfirmed pushes) to this repo. Set accio up?" Wait for the answer; on no, stop and change nothing. Then run
+`accio-board init` (it changes nothing once accio is set up), then `accio-hooks install` (accio's git hooks: no
 secrets in commits, no unconfirmed pushes). Whatever install prints or exits with (a snippet to paste, a warning,
 hooks switched off), tell the user in one line, as a statement with its fix (never a question), and go on.
 

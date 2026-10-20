@@ -1,7 +1,7 @@
 ---
 name: accio
-description: The conductor (accio): one command that carries the work from wherever the board stands to a pushed, CI-checked result. It reads accio's next step, runs that step's skill in this chat (design, stories, plan, build, review) and repeats, stopping only at real decisions.
-when_to_use: When the user runs /accio, or says "continue", "carry on", "what's next, do it", or "take it from here" in a repo with an .accio/ folder or a design to start from. Not for running one named step by hand (the step skills do that).
+description: The conductor (accio): carries the work from wherever the board stands to a pushed, CI-checked result, running each step's skill and stopping only at real decisions.
+when_to_use: When the user runs /accio, or says "continue", "carry on" or "take it from here" in a repo with an .accio/ folder or a design to start from. Not for one named step (the step skills do that) or for only showing status (map).
 allowed-tools: Read, Skill, Workflow, Bash(${CLAUDE_PLUGIN_ROOT}/bin/accio-board next *)
 ---
 

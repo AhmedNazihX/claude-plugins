@@ -126,5 +126,20 @@ class WandScriptsTest(unittest.TestCase):
         self.assertIn("build is running", self.board("record-design", check=False).stderr)
 
 
+class WandAsksFirstTest(unittest.TestCase):
+    def step_1(self):
+        text = (ROOT / "skills" / "wand" / "SKILL.md").read_text(encoding="utf-8")
+        return " ".join(text.split("## 1. Set up", 1)[1].split("**Check commands.**", 1)[0].split())
+
+    def test_S_030_2_step_1_asks_once_before_setting_up_unless_the_user_typed_the_command(self):
+        text = self.step_1()
+        init_at = text.index("accio-board init")
+        before = text[:init_at]
+        for phrase in ("no `.accio/`", "/accio:wand", "/accio", "ask once", "hooks"):
+            with self.subTest(phrase):
+                self.assertIn(phrase, before)
+        self.assertIn("no", before.lower())
+
+
 if __name__ == "__main__":
     unittest.main()
