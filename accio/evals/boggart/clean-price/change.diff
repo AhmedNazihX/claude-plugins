@@ -8,7 +8,7 @@
 +    return float(text.replace(",", ""))
 --- a/test_price.py
 +++ b/test_price.py
-@@ -1,4 +1,12 @@
+@@ -1,5 +1,9 @@
  from price import parse_price
 
 
