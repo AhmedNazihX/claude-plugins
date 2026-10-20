@@ -11,12 +11,29 @@ Six small cases for `agents/boggart.md` (S-042; research in `docs/research/break
 
 For each case:
 
-1. In a scratch git repo, make `.accio/stories/` and `.accio/run/<ID>/`, copy `story.md` in as the story, and put
-   the story and `change.diff` together in a file as the review package. Apply the diff's "before" side to commit a
-   base, then the diff for the head (or run boggart on the diff text alone and skip `accio-break`; the claim and
-   the repro are what you grade).
-2. Run the `accio:boggart` agent on that package (Task tool, or `claude --agent accio:boggart`).
-3. Open the repros it wrote under `run/<ID>/boggart/` and its JSON reply.
+1. In a scratch git repo, make `.accio/stories/` and `.accio/run/<ID>/`, copy `story.md` in as the story (it has
+   accio frontmatter, so `story.parse` accepts it), and put the story and `change.diff` together in a file as the
+   review package. The `change.diff` files apply with `git apply --check`: the `break-*` and `clean-average` /
+   `clean-paginate` diffs add new files to an empty repo; the `*price` diffs change `price.py` and
+   `test_price.py`, so commit those two files as the base first (the diff's `-` and context lines). Commit the
+   base, then apply the diff for the head (or run boggart on the diff text alone and skip `accio-break`; the claim
+   and the repro are what you grade).
+2. Give the scratch repo `.accio/config.json`. `accio-break` needs a `breaker` command (with `{file}` where the
+   repro's path goes), and every entry in `checks` needs a `glob`:
+
+   ```json
+   {
+     "breaker": {"command": "python3 -m pytest -q {file}"},
+     "checks": [{"command": "python3 -m pytest -q", "glob": "**/*.py"}]
+   }
+   ```
+
+3. Run boggart as the plugin agent `accio:boggart`. An installed accio from before S-052 lets boggart do nothing
+   under curfew, and curfew sees the agent as `accio:boggart` only when it runs as a plugin agent. So start
+   `claude -p --plugin-dir <a copy of accio from main>` in the scratch repo, and have its Workflow run an
+   `agent()` of type `accio:boggart`. Give the prompt (the review package) on stdin: a `--allowedTools` list
+   swallows a prompt given after it.
+4. Open the repros it wrote under `run/<ID>/boggart/` and its JSON reply.
 
 ## Grade
 

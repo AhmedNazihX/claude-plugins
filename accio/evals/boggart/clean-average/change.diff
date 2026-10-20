@@ -1,6 +1,6 @@
 --- /dev/null
 +++ b/stats.py
-@@ -0,0 +1,7 @@
+@@ -0,0 +1,6 @@
 +def average(values):
 +    """Mean of `values`; 0.0 when it is empty."""
 +    values = list(values)
@@ -9,7 +9,7 @@
 +    return sum(values) / len(values)
 --- /dev/null
 +++ b/test_stats.py
-@@ -0,0 +1,10 @@
+@@ -0,0 +1,9 @@
 +from stats import average
 +
 +

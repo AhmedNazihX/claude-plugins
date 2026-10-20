@@ -1,6 +1,6 @@
 --- /dev/null
 +++ b/pager.py
-@@ -0,0 +1,10 @@
+@@ -0,0 +1,7 @@
 +def paginate(items, page, size):
 +    """Return the items of page `page` (from 1). The last page holds the remainder; out of range gives []."""
 +    pages = -(-len(items) // size)
@@ -10,7 +10,7 @@
 +    return items[start:start + size]
 --- /dev/null
 +++ b/test_pager.py
-@@ -0,0 +1,14 @@
+@@ -0,0 +1,13 @@
 +from pager import paginate
 +
 +
