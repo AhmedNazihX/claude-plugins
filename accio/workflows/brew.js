@@ -110,18 +110,30 @@ async function call(prompt, opts) {
   }
 }
 
+const failed = (reply) => !reply || Boolean(reply.error)
+const ACCIO = 'accio'  // the cause of a block that is accio's own failure, not the story's
+
+// accio's own agents (portkey, prefect, the reviewers, headmaster) get one more try on a null or {error} reply, labelled
+// "<ID> <step> retry" so accio-cost ties it to the story (S-035/1, /2). The second reply stands, whatever it is.
+async function callRetry(prompt, opts) {
+  const first = await call(prompt, opts)
+  if (!failed(first)) return first
+  return call(prompt, { ...opts, label: `${opts.label} retry` })
+}
+
 const label = (story, step, round) => `${story.id} ${step}${round ? ` r${round}` : ''}`
 const rulingNote = (ruling) => (ruling ? ` The judge ruled: ${ruling}` : '')
 const addRuling = (earlier, ruling) => [earlier, ruling].filter(Boolean).join(' ')
 // A step that ends the story; `asked` when headmaster already wrote the question file.
-const stop = (question, asked = false) => ({ stop: true, question, asked })
+const stop = (question, asked = false, cause = '') => ({ stop: true, question, asked, cause })
+const accioStop = (question) => stop(question, false, ACCIO)
 
 function parentFlag(story) {
   return story.parents.length ? ` --parent story/${story.parents[story.parents.length - 1]}` : ''
 }
 
 function prepare(story) {
-  return call(
+  return callRetry(
     `Step 1, prepare story ${story.id}. Run, in order: \`accio-board move ${story.id} doing\`, ` +
       `\`accio-brief ${story.id}${parentFlag(story)}\`, \`accio-check ${story.id} snapshot\`. ` +
       'Reply with {worktree, brief, base} from accio-brief, or {error} if a script fails.',
@@ -138,7 +150,7 @@ function implement(story, prepared, model, ruling) {
 }
 
 function check(story, worktree, round) {
-  return call(
+  return callRetry(
     `Step 3, check story ${story.id}. Worktree: ${worktree}. Panel: ${story.track}. Follow your step 3. Reply ` +
       'with accio-check\'s JSON, or {"skipped": true} when the ledger says skip, or {error}.',
     { agentType: PREFECT, model: 'haiku', schema: CHECK_SCHEMA, label: label(story, 'check', round) },
@@ -148,7 +160,7 @@ function check(story, worktree, round) {
 function judge(story, worktree, round, report, findings) {
   const about = findings.length
     ? ` It was fixing these findings and says one conflicts with the story: ${findings.join(', ')}.` : ''
-  return call(
+  return callRetry(
     `Step 5, judge story ${story.id}. The implementer returned NEEDS_CONTEXT; its report: ${report || 'none'}.` +
       `${about} The story: .accio/stories/${story.id}.md; worktree: ${worktree}. Rule from the story and the ` +
       `design, or, if only the user can answer, write one question to ${QUESTIONS}/${story.id}.md ${IN_MAIN}. The workflow ` +
@@ -157,21 +169,22 @@ function judge(story, worktree, round, report, findings) {
   )
 }
 
-async function record(story, worktree, outcome, question, asked) {
+async function record(story, worktree, outcome, question, asked, cause = '') {
   const blocked = asked
     ? `It is BLOCKED: move it to blocked and record fail. headmaster already wrote the question to ` +
       `${QUESTIONS}/${story.id}.md; don't add one.`
     : `It is BLOCKED: move it to blocked, record fail, and write this question to ` +
       `${QUESTIONS}/${story.id}.md ${IN_MAIN}: ${question}`
-  const reply = await call(
+  const why = cause ? ` The cause is ${cause}: it is accio's own failure, not the story's.` : ''
+  const reply = await callRetry(
     `Step 7, outcome of story ${story.id}. Worktree: ${worktree}. Panel: ${story.track}. ` +
       'First compute the ledger key as in step 3 (the same worktree and panel). ' +
-      `${outcome === 'READY' ? 'It is READY: move it to review and record pass.' : blocked} ` +
+      `${outcome === 'READY' ? 'It is READY: move it to review and record pass.' : blocked}${why} ` +
       'Reply {"done": true} or {error}.',
     { agentType: PREFECT, model: 'haiku', schema: OUTCOME_SCHEMA, label: label(story, 'outcome') })
   const recorded = Boolean(reply && reply.done && !reply.error)
   const note = recorded ? '' : 'the board was not updated; the next brew resumes it'
-  return { id: story.id, title: story.title, outcome, question: question || '', note }
+  return { id: story.id, title: story.title, outcome, question: question || '', cause, note }
 }
 
 // --- building: implement or fix, with the judge on NEEDS_CONTEXT ----------------------------------------------
@@ -192,7 +205,7 @@ async function build(story, worktree, round, attempt, findings = [], earlier = '
   if (!first || first.status !== 'NEEDS_CONTEXT') return settle(first, earlier)
   const judged = await judge(story, worktree, round, first.report, findings)
   if (!judged || !judged.text) {
-    return stop(`The builder (house-elf) needs context (see ${first.report || 'its report'}) and the judge (headmaster) didn't answer. Try again?`)
+    return accioStop(`The builder (house-elf) needs context (see ${first.report || 'its report'}) and the judge (headmaster) didn't answer. Try again?`)
   }
   if (judged.kind === 'question') return stop(judged.text, Boolean(judged.path))
   const ruling = addRuling(earlier, judged.text)
@@ -205,12 +218,12 @@ async function build(story, worktree, round, attempt, findings = [], earlier = '
 
 async function fixRound(story, worktree, round, findings, model, earlier) {
   const flags = findings.map((path) => ` --fix ${path}`).join('')
-  const brief = await call(
+  const brief = await callRetry(
     `Fix round ${round} of story ${story.id}: run \`accio-brief ${story.id}${flags}\`. Reply with its ` +
       '{worktree, brief, base}, or {error} if it fails.',
     { agentType: PORTKEY, model: 'haiku', schema: PREPARE_SCHEMA, label: label(story, 'fix-brief', round) })
   if (!brief || brief.error || !brief.brief) {
-    return stop(`Writing the fix brief failed (${(brief && brief.error) || 'no answer'}). Try again?`)
+    return accioStop(`Writing the fix brief failed (${(brief && brief.error) || 'no answer'}). Try again?`)
   }
   return build(story, worktree, round, (ruling) => call(
     `Fix round ${round} of story ${story.id}. Your fix brief is ${brief.brief}; your worktree is ${worktree}. ` +
@@ -240,7 +253,7 @@ const hasAny = (list) => Boolean(list && list.length)
 // null when the checks passed or were skipped; a stop for a broken check step or a failure no fix round can undo (the
 // main checkout or origin changed); else {fix: path}, the findings file for a fix round (S-034/5).
 function checkStop(story, result) {
-  if (!result || result.error) return stop(`The check step failed (${(result && result.error) || 'no answer'}). Try again?`)
+  if (failed(result)) return accioStop(`The check step failed (${(result && result.error) || 'no answer'}). Try again?`)
   if (result.skipped || result.pass) return null
   const fixable = hasAny(result.failing) || hasAny(result.out_of_bounds) || hasAny(result.untagged) || hasAny(result.weak_tests)
   if (!fixable || hasAny(result.main_changed) || result.remote_moved) {
@@ -272,12 +285,12 @@ function panel(story, risky) {
 }
 
 async function packageFor(story, round, since) {
-  const reply = await call(
+  const reply = await callRetry(
     `Step 4, review package for story ${story.id}: run \`accio-brief ${story.id} --review` +
       `${since ? ` --since ${since}` : ''}\`. Reply with its JSON {package, head, risky}, or {error} if it fails.`,
     { agentType: PORTKEY, model: 'haiku', schema: PACKAGE_SCHEMA, label: label(story, 'package', round) })
   if (!reply || reply.error || !reply.package || !reply.head) {
-    return stop(`Writing the review package failed (${(reply && reply.error) || 'no answer'}). Try again?`)
+    return accioStop(`Writing the review package failed (${(reply && reply.error) || 'no answer'}). Try again?`)
   }
   return reply
 }
@@ -293,7 +306,7 @@ function reviewPrompt(story, name, pkg, round, ruling) {
 }
 
 async function review(story, names, pkg, round, ruling) {
-  const replies = await Promise.all(names.map((name) => call(reviewPrompt(story, name, pkg, round, ruling),
+  const replies = await Promise.all(names.map((name) => callRetry(reviewPrompt(story, name, pkg, round, ruling),
     { agentType: `accio:${name}`, model: REVIEW_MODEL, schema: REVIEW_SCHEMA, label: label(story, name, round) })))
   return names.map((name, index) => ({ name, reply: replies[index] }))
 }
@@ -307,8 +320,8 @@ async function reviewAndFix(story, worktree, model, earlier, usedFixes) {
   let fixes = usedFixes
   for (let round = 0; ; round += 1) {
     const verdicts = await review(story, names, pkg, round, ruling)
-    const silent = verdicts.find((each) => !each.reply)
-    if (silent) return stop(`The ${ROLES[silent.name]} (${silent.name}) stopped answering for over 20 minutes. Review it again?`)
+    const silent = verdicts.find((each) => failed(each.reply))
+    if (silent) return accioStop(`The ${ROLES[silent.name]} (${silent.name}) stopped answering for over 20 minutes. Review it again?`)
     const failing = verdicts.filter((each) => each.reply.verdict !== 'pass')
     if (!failing.length) return {}
     const findings = failing.map((each) => each.reply.path)
@@ -334,14 +347,14 @@ async function reviewAndFix(story, worktree, model, earlier, usedFixes) {
 
 async function runStory(story) {
   const model = story.track === 'feature' ? 'opus' : 'sonnet'
-  const blocked = (worktree, ended) => record(story, worktree, 'BLOCKED', ended.question, ended.asked)
+  const blocked = (worktree, ended) => record(story, worktree, 'BLOCKED', ended.question, ended.asked, ended.cause)
   let worktree = story.worktree
   let ruling = ''
   if (story.resume !== 'check') {
     const prepared = await prepare(story)
     if (!prepared || prepared.error || !prepared.brief) {
       const why = (prepared && prepared.error) || 'no answer'
-      return record(story, worktree, 'BLOCKED', `Preparing it failed (${why}). Try again?`)
+      return record(story, worktree, 'BLOCKED', `Preparing it failed (${why}). Try again?`, false, ACCIO)
     }
     worktree = prepared.worktree
     const built = await build(story, worktree, 0, (ruling) => implement(story, prepared, model, ruling))
