@@ -299,6 +299,27 @@ def _block_line(run_dir, sid):
     return f"{sid} blocked ({kind}): {_escaped(first[match.end():] if match else first)}"
 
 
+def _boggart_lines(run_dir, sid):
+    """Log lines for the breaks boggart left in `run/<ID>/boggart/verdicts.json` (S-043): a kept break outside the DoD
+    (a note for the backlog, no fix round), and a kept repro that can't load (a setup error on head). A kept break
+    inside the DoD is handled by its fix rounds and its block, so it adds no line here."""
+    path = run_dir / sid / "boggart" / "verdicts.json"
+    try:
+        repros = json.loads(path.read_text(encoding="utf-8"))["repros"]
+    except (OSError, ValueError, KeyError, TypeError):
+        return []
+    lines = []
+    for entry in repros:
+        if not isinstance(entry, dict) or entry.get("verdict") != "kept":
+            continue
+        name = entry.get("file", "repro")
+        if entry.get("cant_load") is True:  # set by breaker.py only for a setup error on head, never read from reason text
+            lines.append(f"{sid} boggart {name}: repro can't load (setup error after a fix round)")
+        elif not entry.get("in_dod"):
+            lines.append(f"{sid} boggart {name} outside the DoD: {entry.get('claim', '')} ({entry.get('source', '')})")
+    return lines
+
+
 def _kept_log(text):
     """The lines already in the iteration's log section."""
     lines, inside = [], False
@@ -316,6 +337,7 @@ def _log_text(accio, stories, text, extra):
     ids = sorted(stories)
     fresh = [*(line for sid in ids for line in _finding_lines(run_dir, sid)),
              *filter(None, (_block_line(run_dir, sid) for sid in ids)),
+             *(_escaped(" ".join(line.split())) for sid in ids for line in _boggart_lines(run_dir, sid)),
              *(_escaped(" ".join(line.split())) for line in extra if line.strip())]
     merged = {}
     for line in [*_kept_log(text), *fresh]:

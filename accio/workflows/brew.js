@@ -24,6 +24,8 @@ export const meta = {
 // package is risky. A house-elf that returns
 // NEEDS_CONTEXT, which includes a fix it refuses because the finding conflicts with the story, goes to headmaster:
 // a ruling gets one more try, a question blocks the story. house-elf's `maxTurns` is the 2× budget stop (S-001).
+// After review passes, a story whose diff has code (the package's `code` and `breaker` flags) goes to boggart, with
+// prefect running `accio-break <ID> verify` (S-043; see "boggart" below).
 // Every label starts with the story id: accio-cost ties usage to stories by it.
 
 const DEFAULT_WIP = 3  // used only when the load reply carries no usable wip
@@ -35,6 +37,7 @@ const PORTKEY = 'accio:portkey'
 const HOUSE_ELF = 'accio:house-elf'
 const PREFECT = 'accio:prefect'
 const HEADMASTER = 'accio:headmaster'
+const BOGGART = 'accio:boggart'
 const QUESTIONS = '.accio/run/questions'
 const IN_MAIN = 'in the main checkout (your working folder), never inside the worktree'  // curfew refuses the worktree copy
 const ROLES = { examiner: 'spec reviewer', professor: 'code reviewer', auror: 'security reviewer' }
@@ -81,7 +84,30 @@ const CHECK_SCHEMA = {
 }
 const PACKAGE_SCHEMA = {
   type: 'object',
-  properties: { package: { type: 'string' }, head: { type: 'string' }, risky: { type: 'boolean' }, error: { type: 'string' } },
+  properties: {
+    package: { type: 'string' }, head: { type: 'string' }, risky: { type: 'boolean' }, error: { type: 'string' },
+    code: { type: 'boolean' }, breaker: { type: 'boolean' },  // the diff has code; config.json has a `breaker` command
+  },
+}
+const BREAK_SCHEMA = {
+  type: 'object',
+  properties: { breaks: { type: 'array', items: { type: 'object' } }, questions: { type: 'array', items: { type: 'string' } } },
+}
+const VERIFY_SCHEMA = {
+  type: 'object',
+  properties: {
+    skipped: { type: 'boolean' }, error: { type: 'string' },
+    repros: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          file: { type: 'string' }, verdict: { type: 'string' }, reason: { type: 'string' }, claim: { type: 'string' },
+          source: { type: 'string' }, in_dod: { type: 'boolean' }, cant_load: { type: 'boolean' },
+        },
+      },
+    },
+  },
 }
 const COUNT = { type: 'integer' }
 const REVIEW_SCHEMA = {
@@ -178,7 +204,7 @@ function judge(story, worktree, round, report, findings) {
   )
 }
 
-async function record(story, worktree, outcome, question, asked, cause = CODE) {
+async function record(story, worktree, outcome, question, asked, cause = CODE, extra = '') {
   const first = `Make the first line of the question file exactly \`${cause}\` (the cause).`
   const blocked = asked
     ? `It is BLOCKED: move it to blocked and record fail. headmaster already wrote the question to ` +
@@ -193,7 +219,7 @@ async function record(story, worktree, outcome, question, asked, cause = CODE) {
       'Reply {"done": true} or {error}.',
     { agentType: PREFECT, model: 'haiku', schema: OUTCOME_SCHEMA, label: label(story, 'outcome') })
   const recorded = Boolean(reply && reply.done && !reply.error)
-  const note = recorded ? '' : 'the board was not updated; the next brew resumes it'
+  const note = recorded ? extra : [extra, 'the board was not updated; the next brew resumes it'].filter(Boolean).join('; ')
   return { id: story.id, title: story.title, outcome, question: question || '', cause, note }
 }
 
@@ -300,10 +326,10 @@ function panel(story, risky) {
   return risky ? [...base, 'auror'] : base
 }
 
-async function packageFor(story, round, since) {
+async function packageFor(story, round, since) {  // `round` only labels the step
   const reply = await callRetry(
     `Step 4, review package for story ${story.id}: run \`accio-brief ${story.id} --review` +
-      `${since ? ` --since ${since}` : ''}\`. Reply with its JSON {package, head, risky}, or {error} if it fails.`,
+      `${since ? ` --since ${since}` : ''}\`. Reply with its JSON {package, head, risky, code, breaker} (copy the code and breaker flags as given), or {error} if it fails.`,
     { agentType: PORTKEY, model: 'haiku', schema: PACKAGE_SCHEMA, label: label(story, 'package', round) })
   if (!reply || reply.error || !reply.package || !reply.head) {
     return accioStop(`Writing the review package failed (${(reply && reply.error) || 'no answer'}). Try again?`)
@@ -327,19 +353,29 @@ async function review(story, names, pkg, round, ruling) {
   return names.map((name, index) => ({ name, reply: replies[index] }))
 }
 
-// Review, then at most MAX_FIX_ROUNDS fix rounds (S-020/1, /2, /5). Returns a stop, or {} when the story is READY.
+// Review, then at most MAX_FIX_ROUNDS fix rounds (S-020/1, /2, /5), then boggart (S-043). Returns a stop, or what
+// boggart left ({note}) when the story is READY.
 async function reviewAndFix(story, worktree, model, earlier, usedFixes) {
-  let pkg = await packageFor(story, 0, null)
-  if (pkg.stop) return pkg
-  let names = panel(story, pkg.risky)
+  const whole = await packageFor(story, 0, null)  // the whole story's package: its `code` and `breaker` flags decide whether boggart runs
+  if (whole.stop) return whole
+  const reviewed = await reviewLoop(story, worktree, model, earlier, usedFixes, whole, panel(story, whole.risky), 0)
+  if (reviewed.stop) return reviewed
+  return boggartStage(story, worktree, model, reviewed.ruling, reviewed.fixes, whole, reviewed.head)
+}
+
+// The review rounds for `first`, a package: review, and while a reviewer fails run a fix round and review the fix diff.
+// Returns a stop, or {fixes, ruling, head} (head: the commit the last review judged).
+async function reviewLoop(story, worktree, model, earlier, usedFixes, first, firstNames, startRound) {
+  let pkg = first
+  let names = firstNames
   let ruling = earlier
   let fixes = usedFixes
-  for (let round = 0; ; round += 1) {
+  for (let round = startRound; ; round += 1) {
     const verdicts = await review(story, names, pkg, round, ruling)
     const silent = verdicts.find((each) => failed(each.reply))
     if (silent) return accioStop(`The ${ROLES[silent.name]} (${silent.name}) stopped answering for over 20 minutes. Review it again?`)
     const failing = verdicts.filter((each) => each.reply.verdict !== 'pass')
-    if (!failing.length) return {}
+    if (!failing.length) return { fixes, ruling, head: pkg.head }
     const findings = failing.map((each) => each.reply.path)
     if (fixes >= MAX_FIX_ROUNDS) {
       return stop(`Findings remain after ${MAX_FIX_ROUNDS} fix rounds (${findings.join(', ')}). Fix them by hand, ` +
@@ -356,6 +392,125 @@ async function reviewAndFix(story, worktree, model, earlier, usedFixes) {
     if (pkg.stop) return pkg
     names = failing.map((each) => each.name)
     if (pkg.risky && !names.includes('auror')) names.push('auror')  // the fix touched a risky path, or `risk` names security
+  }
+}
+
+// --- boggart: tries to break a reviewed story (S-043) ----------------------------------------------------------
+// After the reviewers pass a story whose diff has code (and config.json has a `breaker` command), boggart writes repros
+// and prefect runs `accio-break <ID> verify`, so boggart never grades itself. A kept break that touches a DoD line gets
+// a fix round with boggart-findings.md; one outside the DoD starts none (owl reads it from verdicts.json and logs it).
+// After a fix round, a kept repro that only fails to load (a setup error) gets one boggart turn for its imports or
+// setup, then verify again; if it still can't load it is logged, not fixed. A boggart or verify step that gives no
+// answer never blocks the story: it leaves a note.
+
+const brokenPath = (story) => `.accio/run/${story.id}/boggart-findings.md`
+const reproPath = (story, file) => `.accio/run/${story.id}/boggart/repros/${file}`
+// `cant_load` is set by breaker.py only when the head runs failed with a setup error. The reason text is never read:
+// a break in code the story added says "setup error" for base, and it is a real break.
+const cantLoad = (item) => item.verdict === 'kept' && item.cant_load === true
+const plural = (count, word) => `${count} ${word}${count === 1 ? '' : 's'}`
+
+function tryToBreak(story, pkg) {
+  return callRetry(
+    `Step 4b, try to break story ${story.id}. Your review package: ${pkg.package}. Follow your checklist: write repros ` +
+      `to .accio/run/${story.id}/boggart/repros/ and judge each with \`accio-break ${story.id} try <file>\`. ` +
+      'Reply {breaks, questions}.',
+    { agentType: BOGGART, model: REVIEW_MODEL, schema: BREAK_SCHEMA, label: label(story, 'boggart') })
+}
+
+function verify(story, step, round) {
+  return callRetry(
+    `Step 4b, verify the breaks of story ${story.id}: run \`accio-break ${story.id} verify\` and reply with its JSON ` +
+      '{skipped, repros}, as it prints it, or {error} if it fails. Don\'t judge the repros yourself.',
+    { agentType: PREFECT, model: 'haiku', schema: VERIFY_SCHEMA, label: label(story, step, round) })
+}
+
+function repairRepros(story, round, stuck) {
+  const files = stuck.map((item) => reproPath(story, item.file)).join(', ')
+  return callRetry(
+    `Step 4b, repair repros of story ${story.id} after fix round ${round}: the fix changed code these repros load, so ` +
+      `they fail to load (a setup error): ${files}. Update only their imports or setup so they load again. Never ` +
+      'change a repro\'s claim, its source or its expected value, and don\'t run `accio-break`: verify runs next. ' +
+      'Reply {breaks, questions}.',
+    { agentType: BOGGART, model: REVIEW_MODEL, schema: BREAK_SCHEMA, label: label(story, 'boggart-repair', round) })
+}
+
+function writeBrokenFindings(story, round, broken) {
+  const data = JSON.stringify(broken.map((item, index) => ({
+    id: `boggart-${index + 1}`, where: reproPath(story, item.file), claim: item.claim, dod: item.source, failure: item.reason,
+  })))
+  return callRetry(
+    `Step 4b, write the findings file for fix round ${round} of story ${story.id}: ${brokenPath(story)} ${IN_MAIN}. ` +
+      'One item per entry in this list, in the format of the findings template (references/findings-template.md): ' +
+      'status open, severity major, confidence 100, and the entry\'s id, where, claim, dod and failure ' +
+      `(say in failure that the repro fails twice on head: ${data}). Reply {"done": true} or {error}.`,
+    { agentType: PREFECT, model: 'haiku', schema: OUTCOME_SCHEMA, label: label(story, 'boggart-findings', round) })
+}
+
+function brokenQuestion(story, broken) {
+  const each = broken.map((item) => `its repro: ${reproPath(story, item.file)} (claim: "${item.claim}", from ${item.source})`)
+  return `a break boggart found is still there after ${MAX_FIX_ROUNDS} fix rounds; ${each.join('; ')}. ` +
+    'Fix it by hand, or change the story?'
+}
+
+function boggartNote(kept) {
+  const outside = kept.filter((item) => !item.in_dod && !cantLoad(item)).length
+  const stuck = kept.filter(cantLoad).length
+  return [outside && `boggart: ${plural(outside, 'break')} outside the DoD, logged for owl`,
+    stuck && `boggart: ${plural(stuck, 'repro')} can't load, logged for owl`].filter(Boolean).join('; ')
+}
+
+const verified = (reply) => !failed(reply) && Array.isArray(reply.repros)
+
+// One fix round for the kept in-DoD breaks: write boggart-findings.md, fix, re-check, then review the fix diff (since
+// `head`) as reviewAndFix does, with auror added when it is risky. Returns a stop or {fixes, ruling, head}.
+async function fixBreaks(story, worktree, model, used, ruling, broken, head) {
+  const round = used + 1
+  const wrote = await writeBrokenFindings(story, round, broken)
+  if (failed(wrote)) return accioStop(`Writing the boggart findings failed (${(wrote && wrote.error) || 'no answer'}). Try again?`)
+  const fixed = await fixRound(story, worktree, round, [brokenPath(story)], tierFor(model, round), ruling)
+  if (fixed.stop) return fixed
+  const checked = await checkAndFix(story, worktree, model, round, fixed.ruling)
+  if (checked.stop) return checked
+  const pkg = await packageFor(story, `${checked.fixes}c`, head)
+  if (pkg.stop) return pkg
+  return reviewLoop(story, worktree, model, checked.ruling, checked.fixes, pkg, panel(story, pkg.risky), checked.fixes)
+}
+
+async function boggartStage(story, worktree, model, ruling, fixes, whole, reviewedHead) {
+  if (!whole.code || !whole.breaker) return {}  // docs-only, or no `breaker` command: review.py logged the skip
+  let pkg = whole
+  let head = reviewedHead  // the commit the last review judged: a fix round's diff starts there
+  if (fixes > 0) {  // a re-review package holds only a fix diff: boggart reads the whole story
+    pkg = await packageFor(story, `${fixes}b`, null)
+    if (pkg.stop) return { note: 'boggart did not run: its package failed' }
+  }
+  const tried = await tryToBreak(story, pkg)
+  if (failed(tried)) return { note: 'boggart gave no answer' }
+  if (!tried.breaks || !tried.breaks.length) return {}
+  let reply = await verify(story, 'verify', 0)
+  let used = fixes
+  let current = ruling
+  let repairedAt = -1  // the fix count a repair turn was used at: one per fix round
+  for (;;) {
+    if (!verified(reply)) return { fixes: used, ruling: current, note: "boggart's verify gave no answer" }
+    const kept = reply.repros.filter((item) => item.verdict === 'kept')
+    const stuck = kept.filter(cantLoad)
+    if (stuck.length && repairedAt !== used) {
+      repairedAt = used
+      await repairRepros(story, used, stuck)
+      reply = await verify(story, 'verify-repair', used)
+      continue
+    }
+    const broken = kept.filter((item) => item.in_dod && !cantLoad(item))
+    if (!broken.length) return { fixes: used, ruling: current, note: boggartNote(kept) }
+    if (used >= MAX_FIX_ROUNDS) return stop(brokenQuestion(story, broken))
+    const fixed = await fixBreaks(story, worktree, model, used, current, broken, head)
+    if (fixed.stop) return fixed
+    used = fixed.fixes
+    current = fixed.ruling
+    head = fixed.head
+    reply = await verify(story, 'verify', used)
   }
 }
 
@@ -381,7 +536,7 @@ async function runStory(story) {
   if (checked.stop) return blocked(worktree, checked)
   if (checked.skipped && checked.fixes === 0) return record(story, worktree, 'READY')  // passed review before
   const reviewed = await reviewAndFix(story, worktree, model, checked.ruling, checked.fixes)
-  return reviewed.stop ? blocked(worktree, reviewed) : record(story, worktree, 'READY')
+  return reviewed.stop ? blocked(worktree, reviewed) : record(story, worktree, 'READY', '', false, CODE, reviewed.note)
 }
 
 // --- scheduling ------------------------------------------------------------------------------------------------

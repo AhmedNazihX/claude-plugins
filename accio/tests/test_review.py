@@ -100,6 +100,36 @@ class ReviewPackageTest(unittest.TestCase):
                 else:
                     self.assertIn("Checklists: none", text)
 
+    def test_S_043_1_the_code_flag_is_false_for_a_diff_of_docs_and_config_only(self):
+        self.story(files="src/a.py, docs/guide.md, config.json")
+        self.brief()
+        self.build("docs/guide.md", "# Guide\n")
+        self.build("config.json", "{}\n")
+        reply, _ = self.package()
+        self.assertIs(reply["code"], False)
+        self.build()
+        self.assertIs(self.package()[0]["code"], True)
+
+    def test_S_043_5_a_skip_is_logged_for_a_docs_only_diff_and_for_no_breaker_command(self):
+        self.story(files="src/a.py, docs/guide.md")
+        self.brief()
+        self.build("docs/guide.md", "# Guide\n")
+        reply, _ = self.package()
+        self.assertIs(reply["breaker"], False)
+        log = (self.accio / "run" / "S-001" / "boggart" / "log.txt").read_text(encoding="utf-8")
+        self.assertIn("S-001 skipped: the diff has no code", log)
+        self.assertIn("no `breaker` command", log)
+
+    def test_S_043_5_a_code_diff_with_a_breaker_command_is_not_skipped(self):
+        write(self.accio / "config.json", json.dumps({"breaker": {"command": "python3 {file}"}}))
+        self.story()
+        self.brief()
+        self.build()
+        reply, _ = self.package()
+        self.assertIs(reply["code"], True)
+        self.assertIs(reply["breaker"], True)
+        self.assertFalse((self.accio / "run" / "S-001" / "boggart" / "log.txt").exists())
+
     def test_S_020_2_a_re_review_package_holds_only_the_fix_diff(self):
         self.story()
         self.brief()

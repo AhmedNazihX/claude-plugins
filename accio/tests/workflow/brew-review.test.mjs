@@ -253,3 +253,169 @@ test('S-020 a ledger skip is work that already passed review: no reviewer runs',
   const { calls } = await runWorkflow('brew', happy([story('S-001')], { check: async () => ({ skipped: true }) }))
   assert.deepEqual(steps(calls, 'S-001'), ['prepare', 'implement', 'check', 'outcome'])
 })
+
+// --- S-043: boggart after review -----------------------------------------------------------------------------------
+
+const withCode = async (call, id) => ({ package: `/run/${id}/review-package.md`, head: 'h0', risky: false, code: true, breaker: true })
+const entry = (extra = {}) => ({
+  file: 'r1.py', verdict: 'kept', reason: 'failed an assertion on head in both runs', claim: 'it resets', source: 'S-001/1',
+  in_dod: true, ...extra,
+})
+const verdicts = (...repros) => async () => ({ skipped: false, repros })
+const found = async () => ({ breaks: [{ file: 'r1.py', claim: 'it resets', source: 'S-001/1', verdict: 'kept' }], questions: [] })
+const SETUP = 'still fails on head: failed with a setup error (ImportError), not a break'
+const LOADS_NOT = { reason: SETUP, cant_load: true }  // breaker.py sets cant_load only for a setup error on head
+const FIXED = 'passes on head after the fix round'
+
+test('S-043/1 the package reply schema carries the code flag next to risky', async () => {
+  const { calls } = await runWorkflow('brew', happy([story('S-001')]))
+  const props = calls.find((call) => call.label === 'S-001 package').opts.schema.properties
+  assert.equal(props.code.type, 'boolean')
+  assert.equal(props.risky.type, 'boolean')
+})
+
+test('S-043/2 the package prompt asks prefect to return the code and breaker flags', async () => {
+  const { calls } = await runWorkflow('brew', happy([story('S-001')]))
+  assert.match(prompt(calls, 'S-001 package'), /\{package, head, risky, code, breaker\}/)
+})
+
+test('S-043/2 a diff with code that passes review goes to boggart, then prefect runs accio-break verify', async () => {
+  const { result, calls } = await runWorkflow('brew', happy([story('S-001')], {
+    package: withCode, boggart: found, verify: verdicts(entry({ verdict: 'dropped' })),
+  }))
+  assert.deepEqual(steps(calls, 'S-001'), ['prepare', 'implement', 'check', 'package', 'examiner', 'professor',
+    'boggart', 'verify', 'outcome'])
+  assert.equal(calls.find((call) => call.label === 'S-001 boggart').opts.agentType, 'accio:boggart')
+  assert.match(prompt(calls, 'S-001 boggart'), /\/run\/S-001\/review-package\.md/)
+  assert.equal(calls.find((call) => call.label === 'S-001 verify').opts.agentType, 'accio:prefect')
+  assert.match(prompt(calls, 'S-001 verify'), /accio-break S-001 verify/)
+  assert.match(result, /S-001 Story S-001\s+READY/)
+})
+
+test('S-043/2 boggart finding nothing means no verify and no fix round', async () => {
+  const { calls } = await runWorkflow('brew', happy([story('S-001')], { package: withCode, boggart: async () => ({ breaks: [] }) }))
+  assert.deepEqual(steps(calls, 'S-001').slice(-2), ['boggart', 'outcome'])
+})
+
+test('S-043/3 a kept break that touches a DoD line starts a fix round with boggart-findings.md', async () => {
+  const { result, calls } = await runWorkflow('brew', happy([story('S-001')], {
+    package: withCode, boggart: found,
+    'S-001 verify': verdicts(entry()),
+    'S-001 verify r1': verdicts(entry({ verdict: 'fixed', reason: FIXED })),
+  }))
+  assert.deepEqual(steps(calls, 'S-001').slice(6), ['boggart', 'verify', 'boggart-findings r1', 'fix-brief r1', 'fix r1',
+    'check r1', 'package r1c', 'examiner r1', 'professor r1', 'verify r1', 'outcome'])
+  assert.match(prompt(calls, 'S-001 boggart-findings r1'), /\.accio\/run\/S-001\/boggart-findings\.md[\s\S]*r1\.py/)
+  assert.match(prompt(calls, 'S-001 fix-brief r1'), /accio-brief S-001 --fix \.accio\/run\/S-001\/boggart-findings\.md/)
+  assert.match(result, /S-001 Story S-001\s+READY/)
+})
+
+test('S-043/4 a kept break outside the DoD starts no fix round; owl logs it from the verdicts', async () => {
+  const { result, calls } = await runWorkflow('brew', happy([story('S-001')], {
+    package: withCode, boggart: found, verify: verdicts(entry({ in_dod: false, source: 'src/a.py:9' })),
+  }))
+  assert.deepEqual(steps(calls, 'S-001').slice(-3), ['boggart', 'verify', 'outcome'])
+  assert.match(result, /S-001 Story S-001\s+READY\s+boggart: 1 break outside the DoD, logged for owl/)
+})
+
+test('S-043/5 a docs-only diff, or a config with no breaker command, never calls boggart', async () => {
+  for (const flags of [{ code: false, breaker: true }, { code: true, breaker: false }, { code: false, breaker: false }]) {
+    const { calls } = await runWorkflow('brew', happy([story('S-001')], {
+      package: async (call, id) => ({ package: `/run/${id}/review-package.md`, head: 'h0', risky: false, ...flags }),
+    }))
+    assert.deepEqual(steps(calls, 'S-001').slice(-2), ['professor', 'outcome'], JSON.stringify(flags))
+  }
+})
+
+test('S-043/6 a kept in-DoD break that survives both fix rounds blocks the story with its repro', async () => {
+  const { result, calls } = await runWorkflow('brew', happy([story('S-001')], {
+    package: withCode, boggart: found, verify: verdicts(entry()),
+  }))
+  assert.deepEqual(steps(calls, 'S-001').slice(6), ['boggart', 'verify',
+    'boggart-findings r1', 'fix-brief r1', 'fix r1', 'check r1', 'package r1c', 'examiner r1', 'professor r1', 'verify r1',
+    'boggart-findings r2', 'fix-brief r2', 'fix r2', 'check r2', 'package r2c', 'examiner r2', 'professor r2', 'verify r2',
+    'outcome'])
+  assert.match(prompt(calls, 'S-001 outcome'), /BLOCKED[\s\S]*\.accio\/run\/S-001\/boggart\/repros\/r1\.py[\s\S]*it resets/)
+  assert.match(result, /S-001 Story S-001\s+BLOCKED\s+1 question for you/)
+})
+
+test('S-043/6 a fix round spent on review leaves one for a kept in-DoD break, and then it blocks', async () => {
+  const { calls } = await runWorkflow('brew', happy([story('S-001')], {
+    package: withCode, boggart: found, verify: verdicts(entry()),
+    'S-001 examiner': async (call, id) => fail(id, 'examiner'),
+  }))
+  assert.deepEqual(steps(calls, 'S-001').slice(-13), ['examiner r1', 'package r1b', 'boggart', 'verify',
+    'boggart-findings r2', 'fix-brief r2', 'fix r2', 'check r2', 'package r2c', 'examiner r2', 'professor r2', 'verify r2',
+    'outcome'])
+  assert.match(prompt(calls, 'S-001 outcome'), /BLOCKED[\s\S]*r1\.py/)
+})
+
+test('S-043/8 a repro that fails to load after a fix round gets one boggart turn for its imports, then verify again', async () => {
+  const { result, calls } = await runWorkflow('brew', happy([story('S-001')], {
+    package: withCode, boggart: found,
+    'S-001 verify': verdicts(entry()),
+    'S-001 verify r1': verdicts(entry(LOADS_NOT)),
+    'S-001 verify-repair r1': verdicts(entry({ verdict: 'fixed', reason: FIXED })),
+  }))
+  assert.deepEqual(steps(calls, 'S-001').slice(-5), ['professor r1', 'verify r1', 'boggart-repair r1', 'verify-repair r1', 'outcome'])
+  const repair = prompt(calls, 'S-001 boggart-repair r1')
+  assert.match(repair, /r1\.py/)
+  assert.match(repair, /imports or setup/)
+  assert.match(repair, /never[^.]*claim[^.]*source[^.]*expected value/i)
+  assert.equal(calls.find((call) => call.label === 'S-001 boggart-repair r1').opts.agentType, 'accio:boggart')
+  assert.match(result, /READY/)
+})
+
+test('S-043/8 a repro that still cannot load is logged for owl and starts no fix round', async () => {
+  const { result, calls } = await runWorkflow('brew', happy([story('S-001')], {
+    package: withCode, boggart: found,
+    'S-001 verify': verdicts(entry()),
+    'S-001 verify r1': verdicts(entry(LOADS_NOT)),
+    'S-001 verify-repair r1': verdicts(entry(LOADS_NOT)),
+  }))
+  assert.deepEqual(steps(calls, 'S-001').slice(-5), ['professor r1', 'verify r1', 'boggart-repair r1', 'verify-repair r1', 'outcome'])
+  assert.equal(steps(calls, 'S-001').filter((step) => step.startsWith('fix r')).length, 1)
+  assert.match(result, /S-001 Story S-001\s+READY\s+boggart: 1 repro can't load, logged for owl/)
+})
+
+test('S-043/8 a kept break whose reason text says setup error but has no cant_load is a break, not a repro that cannot load', async () => {
+  const onBase = entry({ reason: 'failed an assertion on head in both runs; the code under test isn\'t on base (setup error there)' })
+  const { calls } = await runWorkflow('brew', happy([story('S-001')], {
+    package: withCode, boggart: found, verify: verdicts(onBase),
+  }))
+  assert.ok(!labels(calls).some((label) => label.includes('boggart-repair')))
+  assert.ok(labels(calls).includes('S-001 boggart-findings r1'))
+})
+
+test('S-043/3 after a fix round for a boggart break passes its checks, its diff is reviewed before verify runs again', async () => {
+  const { calls } = await runWorkflow('brew', happy([story('S-001')], {
+    package: withCode, boggart: found,
+    'S-001 verify': verdicts(entry()),
+    'S-001 verify r1': verdicts(entry({ verdict: 'fixed', reason: FIXED })),
+  }))
+  assert.deepEqual(steps(calls, 'S-001').slice(-7), ['fix r1', 'check r1', 'package r1c', 'examiner r1', 'professor r1',
+    'verify r1', 'outcome'])
+  assert.match(prompt(calls, 'S-001 package r1c'), /--since h0/)
+})
+
+test('S-043/3 the review of a boggart fix adds auror when the fix diff is risky', async () => {
+  const { calls } = await runWorkflow('brew', happy([story('S-001')], {
+    'S-001 package': withCode,
+    'S-001 package r1c': async (call, id) => ({ package: `/run/${id}/p.md`, head: 'h1', risky: true, code: true, breaker: true }),
+    boggart: found,
+    'S-001 verify': verdicts(entry()),
+    'S-001 verify r1': verdicts(entry({ verdict: 'fixed', reason: FIXED })),
+  }))
+  assert.deepEqual(steps(calls, 'S-001').slice(-6), ['package r1c', 'examiner r1', 'professor r1', 'auror r1', 'verify r1', 'outcome'])
+})
+
+test('S-043 a boggart or verify step that gives no answer does not block the story', async () => {
+  const { result, calls } = await runWorkflow('brew', happy([story('S-001'), story('S-002')], {
+    package: withCode,
+    'S-001 boggart': async () => null, 'S-001 boggart retry': async () => null,
+    'S-002 boggart': found, 'S-002 verify': async () => null, 'S-002 verify retry': async () => null,
+  }))
+  assert.match(result, /S-001 Story S-001\s+READY\s+boggart gave no answer/)
+  assert.match(result, /S-002 Story S-002\s+READY\s+boggart's verify gave no answer/)
+  assert.ok(labels(calls).includes('S-001 boggart retry'))
+})
