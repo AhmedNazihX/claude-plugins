@@ -40,7 +40,6 @@ accio's names come from a school of magic; each comes with a plain role.
 | `examiner` | `sonnet` | the spec reviewer | checks every acceptance line is met and really tested |
 | `professor` | `sonnet` | the code reviewer | looks for bugs, silent errors and code that's hard to change |
 | `auror` | `sonnet` | the security reviewer | reviews changes that touch risky paths |
-| `boggart` | `sonnet` | the breaker | tries to break a built story with inputs its DoD never named; writes a repro per break |
 | `headmaster` | `sonnet` | the judge | settles a disagreement, or turns it into one question for you |
 | `quill` | `sonnet` | the story writer | turns the design into small, testable story files |
 | `seeker` | `sonnet` | the researcher | checks facts against live docs and the code |
