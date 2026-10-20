@@ -66,15 +66,68 @@ class PreviewTest(unittest.TestCase):
             self.preview(story_id, "stop")
         self.tmp.cleanup()
 
-    def configure(self, command):
-        write(self.accio / "config.json", json.dumps({"preview": {"command": command, "url": self.url}}))
+    def configure(self, command, **extra):
+        settings = {"command": command, "url": self.url, "test_data": True, **extra}
+        write(self.accio / "config.json", json.dumps({"preview": settings}))
 
     def worktree(self, story_id):
         return paths.worktree_root(self.root) / story_id
 
-    def preview(self, story_id, action, *extra):
+    def preview(self, story_id, action, *extra, env=None):
         return subprocess.run([sys.executable, str(PREVIEW), story_id, action, *extra], cwd=self.root,
-                              capture_output=True, text=True, timeout=60)
+                              capture_output=True, text=True, timeout=60, env={**os.environ, **(env or {})})
+
+    def test_S_049_1_start_refuses_without_test_data_true(self):
+        for extra in ({"test_data": False}, {"test_data": None}):
+            self.configure(f"sh -c '{self.serve} & wait'", **extra)
+            result = self.preview("S-001", "start", "--timeout", "2")
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("test_data", result.stderr)
+            self.assertFalse((self.run_dir / "S-001" / "preview.json").exists())
+        settings = {"command": "x", "url": self.url}
+        write(self.accio / "config.json", json.dumps({"preview": settings}))
+        result = self.preview("S-001", "start", "--timeout", "2")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("test_data", result.stderr)
+
+    def test_S_049_2_start_refuses_when_a_login_variable_is_unset(self):
+        self.configure(f"sh -c '{self.serve} & wait'", login={"username_env": "A49_USER", "password_env": "A49_PASS"})
+        result = self.preview("S-001", "start", "--timeout", "2", env={"A49_USER": "u"})
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("A49_PASS", result.stderr)
+        self.assertFalse((self.run_dir / "S-001" / "preview-login.json").exists())
+        self.assertFalse((self.run_dir / "preview.lock").exists())
+
+    def test_S_049_3_start_writes_the_login_file_from_the_variables(self):
+        self.configure(f"sh -c '{self.serve} & wait'", login={"username_env": "A49_USER", "password_env": "A49_PASS"})
+        result = self.preview("S-001", "start", "--timeout", "20", env={"A49_USER": "tester", "A49_PASS": "s3cret"})
+        self.assertEqual(result.returncode, 0, result.stderr)
+        path = self.run_dir / "S-001" / "preview-login.json"
+        self.assertEqual(json.loads(path.read_text(encoding="utf-8")), {"username": "tester", "password": "s3cret"})
+        self.assertEqual(path.stat().st_mode & 0o077, 0)
+        with (self.root / ".gitignore").open("a", encoding="utf-8") as handle:
+            handle.write(".accio/run/\n")  # accio-design adds this line to a real repo
+        ignored = subprocess.run(["git", "check-ignore", "-q", str(path)], cwd=self.root, check=False)
+        self.assertEqual(ignored.returncode, 0)
+        self.preview("S-001", "stop")
+        self.assertFalse(path.exists())
+
+    def test_S_049_4_config_with_a_login_value_is_refused_and_writes_no_login_file(self):
+        for login in ({"username": "bob", "password": "x"}, {"username_env": "A", "password": "x"},
+                      {"username_env": "A"}, "bob"):
+            self.configure(f"sh -c '{self.serve} & wait'", login=login)
+            result = self.preview("S-001", "start", "--timeout", "2", env={"A": "1"})
+            self.assertNotEqual(result.returncode, 0, repr(login))
+            self.assertIn("login", result.stderr)
+            self.assertFalse((self.run_dir / "S-001" / "preview-login.json").exists())
+            self.assertFalse((self.run_dir / "S-001" / "preview.json").exists())
+
+    def test_S_049_5_env_variables_reach_the_preview_process(self):
+        self.configure(f"sh -c 'echo $A49_MODE > marker.txt; {self.serve} & wait'", env={"A49_MODE": "demo"})
+        result = self.preview("S-001", "start", "--timeout", "20")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        with urllib.request.urlopen(self.url, timeout=5) as response:
+            self.assertEqual(response.read().decode(), "demo\n")
 
     def state(self, story_id):
         return json.loads((self.run_dir / story_id / "preview.json").read_text(encoding="utf-8"))

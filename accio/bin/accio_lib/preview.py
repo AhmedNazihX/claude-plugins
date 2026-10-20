@@ -166,19 +166,48 @@ def _clear(run_dir, story_id):
         (run_dir / LOCK_NAME).unlink(missing_ok=True)
 
 
+def _require_test_data(settings):
+    if settings.get("test_data") is not True:
+        raise PreviewError('preview needs "test_data": true in .accio/config.json: accio cannot check the app holds '
+                           "only test data, so you say so")
+
+
+def _login(settings):
+    """The login details from the environment variables `preview.login` names, or None without a login."""
+    login = settings.get("login")
+    if login is None:
+        return None
+    names = (login["username_env"], login["password_env"])
+    missing = [name for name in names if name not in os.environ]
+    if missing:
+        raise PreviewError(f"preview.login names environment variable(s) that are not set: {', '.join(missing)}")
+    return {"username": os.environ[names[0]], "password": os.environ[names[1]]}
+
+
+def _write_login(path, login):
+    """Write the login file readable by its owner only."""
+    descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
+        handle.write(json.dumps(login) + "\n")
+
+
 def start(run_dir, worktree, story_id, settings, wait=DEFAULT_WAIT, timeout=DEFAULT_TIMEOUT):
     """Start the preview and return its URL once it answers. Raises PreviewError, leaving nothing running."""
     if settings is None:
         raise PreviewError('no preview in .accio/config.json; add {"preview": {"command": "...", "url": "http://..."}}')
+    _require_test_data(settings)
+    login = _login(settings)
     if not worktree.is_dir():
         raise PreviewError(f"no worktree for {story_id} at {worktree}")
     (run_dir / story_id).mkdir(parents=True, exist_ok=True)
     _lock_wait(run_dir, story_id, wait)
     try:
+        if login is not None:
+            _write_login(run_dir / story_id / LOGIN_NAME, login)
         log = open(run_dir / story_id / LOG_NAME, "ab")
         with log:
             process = subprocess.Popen(settings["command"], shell=True, cwd=worktree, start_new_session=True,
-                                       stdin=subprocess.DEVNULL, stdout=log, stderr=subprocess.STDOUT)
+                                       env={**os.environ, **settings.get("env", {})}, stdin=subprocess.DEVNULL, stdout=log, stderr=subprocess.STDOUT)
     except OSError as error:
         _clear(run_dir, story_id)
         raise PreviewError(f"cannot run the preview command: {error}") from error

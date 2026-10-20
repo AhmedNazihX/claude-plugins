@@ -219,6 +219,16 @@ class SnapshotTest(CheckTestBase):
         changed = checks.compare(before, checks.snapshot(self.repo, "main"), skip=(".remember/**",))[0]
         self.assertEqual(changed, [".env"])
 
+    def test_S_049_7_playwright_mcp_logs_at_the_repo_root_never_count(self):
+        write(self.repo / ".playwright-mcp" / "console-1.log", "one\n")
+        self.check("S-001", "snapshot")
+        before = json.loads((self.accio / "run" / "S-001" / "main-snapshot.json").read_text(encoding="utf-8"))
+        write(self.repo / ".playwright-mcp" / "console-1.log", "two\n")
+        write(self.repo / ".playwright-mcp" / "page-2.yml", "new\n")
+        write(self.repo / ".env", "KEY=two\n")
+        changed = checks.compare(before, checks.snapshot(self.repo, "main"))[0]  # no snapshot_skip configured
+        self.assertEqual(changed, [".env"])
+
     def test_a_folder_skip_covers_a_folder_git_lists_as_one_entry(self):
         write(self.repo / "build" / "out.txt", "one\n")  # the repo's .gitignore holds `build/`: one `build` entry
         self.check("S-001", "snapshot")
