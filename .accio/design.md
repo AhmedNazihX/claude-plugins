@@ -460,3 +460,195 @@ modules or the error. `main` reads stdin first; on a load error it answers as R2
 
 ### Open questions
 none
+
+## Group B: fewer stops, a reason for every ending
+
+### Outcome
+After this ships, a build stops for the user only for a real decision, and every finding, block and break leaves a
+reason. We'd know because over the next two iterations no story blocks with "Should it be fixed and built again?" or
+on a one-off accio hiccup; each `.accio/iterations/<N>.md` has one line per finding and block saying how it ended;
+every boggart break that reached a fix round came with a repro that failed twice on head; owl reports a cost for
+every build; and the guard and allow-list tests pass.
+
+### Who and why
+The user, building accio with accio and running `/accio` in their repos. The 2026-10-20 audit
+(`accio/docs/research/improvements.md`, `breaker.md`) found that most stops are not real decisions, that nobody
+records why a finding or block ended, and that nothing tries the feature with inputs the DoD never named.
+
+### Requirements
+- R1 A failed check (a failing command, an untagged DoD line, a weak test, an out-of-bounds file) goes into a fix
+  round with the command's output, instead of asking. Owner: the user (every answer on record was "yes, build
+  again"; 7 of 20 stories blocked at least once).
+- R2 accio's own failures (portkey, prefect, a reviewer or headmaster gives no answer or an error) are retried once;
+  `evals/`, `eval/`, `__mocks__/` and `__fixtures__/` folders count as the story's test area. Owner: the user (5 of 7
+  early blocks were accio's fault).
+- R3 Each finding and block records how it ended (fixed in round N, dismissed with headmaster's ruling, open, or
+  blocked because of the code, accio or a decision) in the iteration file. Owner: the user (the reviewers'
+  false-positive rate and the budgets are guesses; rulings are never saved).
+- R4 boggart tries to break each reviewed code story. A script keeps a break only when its repro fails twice on head,
+  on an assertion or a crash in a changed file, not on a setup error, and quotes a written claim. An in-DoD break goes
+  to the fix round; an out-of-DoD break becomes an owl line. Owner: the user (named it; nothing checks inputs the
+  DoD never named).
+- R5 protego and fidelius catch their own start-up crash: deny an `accio:*` agent, let every other caller through.
+  Owner: the user (0.6.1 push security review; decision 007 keeps fail-open).
+- R6 owl's cost counts a build started while the session sat in a subfolder of the repo. Owner: the user
+  (iteration 9 showed "cost unknown").
+- R7 `agent_allow` entries match the whole command (decision 010). Owner: the user (the 2026-10-20 commit review: a
+  builder could append arguments to the two `claude` entries).
+- R8 mad-eye checks a UI story's visible DoD lines in the running app, driving it through the user's Playwright MCP
+  server, and saves a screenshot per line as evidence; it never edits, and its findings go to the fix round. curfew
+  lets only mad-eye use those browser tools, and only on the preview's address. Owner: the user (named it; layout
+  and looks aren't checked today).
+- R9 mad-eye's clicks never reach real data: the preview runs only when the user has written a preview command that
+  uses test data and test keys, and said so in config; mad-eye logs in only with a test account whose details come
+  from environment variables, never from config.json or the story. Owner: the user (a side-agent review on
+  2026-10-20: a "save", "delete" or "send" click in a preview wired to the real database or services would really
+  happen).
+
+### Out of scope
+- Retrying a stalled builder (decision 011; spike S-R1 under Open questions).
+- mad-eye in a repo without the Playwright MCP server: a logged skip, not a fallback (decision 008).
+- accio shipping its own browser server.
+- accio checking that a preview really uses test data (it can't; `test_data` is the user's word, R9).
+- pensieve retro, batching small stories, re-scoring ceremony from the diff, a goal check, the Stop-hook conductor
+  (improvements #7–#10).
+
+### Design
+Option C: staged, with a live browser for mad-eye (decision 008).
+- **Check failures become findings (R1, decision 009).** `checks.run` keeps each failing command's output (today
+  `_run_within_budget` returns it and `run` drops it, `checks.py:317-350`). `accio-check` writes
+  `run/<ID>/check-findings.md` in the findings format: ids `check-1…`, one per failing command (last 2,000
+  characters of output), untagged line, weak test and out-of-bounds file. A script writes it, so no agent gets a new
+  write. `checkStop` in `brew.js` sends these to `fixRound`; the re-check marks earlier ids `resolved` or `open`. Check
+  and review fixes share `MAX_FIX_ROUNDS = 2`.
+- **Retry once (R2).** A null or `{error}` reply from portkey, prefect, a reviewer or headmaster is retried once,
+  labelled `<ID> <step> retry` so `accio-cost` still ties it to the story. A second failure blocks with cause
+  `accio`. `TEST_FOLDERS` (`checks.py:49`) gains `evals`, `eval`, `__mocks__`, `__fixtures__`.
+- **Every ending logged (R3).** `stop()` carries a cause (`code`, `accio` or `decision`), written as the question
+  file's first line. headmaster's reply gains `dismisses: [ids]` and it writes `run/<ID>/ruling-r<N>.md`.
+  `accio-brief --fix` copies the findings it reads into `run/<ID>/fix-<N>/`. owl's script compares them with the last
+  files and writes `## Findings and blocks` in `iterations/<N>.md` before deleting the question files. Lines look like
+  `S-031 examiner-2 major: fixed in round 1` or `S-031 blocked (accio): prefect gave no answer twice`. No model tokens.
+- **boggart (R4).** A new Sonnet agent with `breaker.md`'s checklist: read the claims, list 3–6 risks, at most 3
+  charters and about 5 properties, judge only by a written claim, never edit. It reads the review package (story, DoD,
+  diff), not house-elf's report. It writes repros to `run/<ID>/boggart/` and may run `accio-break <ID> try <file>`.
+  prefect runs `accio-break <ID> verify`, so boggart never grades itself. The runner copies each repro into a
+  throwaway worktree at head (and base) and runs a new config command `breaker: {"command": "… {file}"}`. Kept: fails
+  twice on head, on an assertion or a crash in a changed file, no setup-error marker, a claim quoted with its source.
+  Passes on base and fails on head = regression; fails on base too = pre-existing, out of scope. Skipped (and logged)
+  with no `breaker` config or on a diff with no code (a `code` flag next to `risky` in the review package). After a
+  fix round, `verify` reruns the kept repros; a pass is the "fixed" evidence.
+- **Guards' start-up crash (R5).** A stdlib-only `hooks/_startup.py` holds curfew's crash code; curfew, protego and
+  fidelius import it before `accio_lib`. protego and fidelius deny in their own style (stderr and exit 2).
+  `hooks.json` keeps no `onFailure` (decision 007).
+- **Cost from a subfolder (R6).** `runs.py` scans the transcript folders of the repo root's slug and its subfolders'
+  slugs, and counts a run whose `cwd` is inside the root.
+- **Exact allow-list (R7, decision 010).** `_is_listed` compares the whole word list for `agent_allow` and allow-once
+  entries; listed checks keep their prefix match. `bashpolicy.py:13` and `BACKLOG.md:300` say so.
+- **mad-eye (R8, decision 008).** After S-M2 and S-M3 pass. portkey runs `accio-preview <ID> start`: it starts the
+  config's `preview: {command, url}` in the story's worktree as a detached process, records its pid in
+  `run/<ID>/preview.json`, and waits for the URL; one preview at a time through `run/preview.lock`. mad-eye, a new
+  Sonnet agent, opens the URL with the browser tools, walks each visible DoD line (clicking and typing as the line
+  needs), saves one screenshot per line to `run/<ID>/mad-eye/`, and writes `mad-eye-findings.md`. portkey then runs
+  `accio-preview <ID> stop`, which kills the process group and frees the port; the workflow also calls stop when
+  mad-eye fails, so no server outlives the step. curfew allows mad-eye only the browser tools on a fixed list
+  (navigate, snapshot, click, type, fill form, select, hover, press key, wait, screenshot, resize, console messages,
+  close), under the prefix in `preview.mcp_prefix` (default `mcp__plugin_playwright_playwright__`). It denies
+  `navigate` to any address outside the preview's origin, a screenshot path outside `run/<ID>/mad-eye/`, and every
+  other browser tool (`evaluate`, `run_code_unsafe`, `file_upload` …); every other agent keeps no MCP tools. mad-eye
+  runs only when the diff touches `ui_globs`; with no `preview`, or no browser tools in the session, a logged skip.
+- **Test data only (R9).** accio never guesses a preview command: `preview` is written by the user and must hold
+  `"test_data": true`, the user's statement that the command points at a test database and test keys (no real email,
+  payments or other outside services). Without it `accio-preview start` refuses and mad-eye is a logged skip that
+  names the missing field. `preview.env` adds environment variables to the preview process (for example
+  `DATABASE_URL` for a test database), so the user needn't change their normal settings file. For a screen behind a
+  login, `preview.login: {"user_env": "…", "password_env": "…"}` names two environment variables; `accio-preview start`
+  reads them and writes `run/<ID>/preview-login.json` (git-ignored, removed by `stop`) for mad-eye to read; it
+  refuses when either is unset. accio can't check that the data is test data: the field is the user's word, and
+  wand's setup and the README say so plainly.
+
+### What we build
+1. **Check failures go to a fix round.** Files: `accio/bin/accio_lib/checks.py`, `accio/workflows/brew.js`,
+   `accio/agents/prefect.md`, `accio/tests/test_checks.py`, `accio/tests/workflow/brew-core.test.mjs`. Needs: none.
+   Risk: none. Checked by: a unittest where a check prints a marker and fails, and `check-findings.md` holds the
+   command and the marker; a stub test: failing check → fix brief with `--fix …/check-findings.md` → re-check →
+   review; check plus review fixes never pass 2 rounds; "Should it be fixed" is gone from `brew.js`.
+2. **Retry once; wider test area.** Files: `accio/workflows/brew.js`, `accio/bin/accio_lib/checks.py`, the same
+   tests. Needs: 1 (same files). Risk: none. Checked by: stubs: portkey null once → READY after 2 calls; null twice →
+   BLOCKED with cause `accio`; a unittest that `evals/case.json` and `evals/x.py` are not out of bounds.
+3. **Every ending logged.** Files: `accio/workflows/brew.js`, `accio/agents/headmaster.md`,
+   `accio/bin/accio_lib/policy.py`, `accio/bin/accio_lib/brief.py`, `accio/bin/accio_lib/owl.py`,
+   `accio/tests/test_owl.py`, `accio/tests/test_curfew.py`, `accio/tests/workflow/brew-review.test.mjs`. Needs: 1, 2.
+   Risk: none. Checked by: an owl unittest on a fixture run folder (findings in `fix-1/`, `fix-2/` and the last files,
+   a ruling, a question with a cause) → one line per finding id and per block, each with the right ending; a curfew
+   test that headmaster may write `run/S-1/ruling-r1.md` and nothing else new.
+4. **protego and fidelius catch their start-up crash.** Files: `accio/hooks/_startup.py`, `accio/hooks/protego.py`,
+   `accio/hooks/fidelius.py`, `accio/hooks/curfew.py`, `accio/tests/test_protego.py`, `accio/tests/test_fidelius.py`,
+   `accio/tests/test_curfew.py`, `accio/tests/test_scaffold.py`. Needs: none. Risk: security (the guards). Checked by:
+   subprocess runs with `accio_lib` unimportable: an `accio:house-elf` PreToolUse call is denied (exit 2, stderr); a
+   main-chat call and a PermissionRequest exit 0 with no output; `hooks.json` has no `onFailure`.
+5. **Cost counts subfolder sessions.** Files: `accio/bin/accio_lib/runs.py`, `accio/tests/test_runs.py`. Needs: none.
+   Risk: none. Checked by: a unittest where a transcript under a subfolder's slug with its cwd in that subfolder is
+   counted, and one under a sibling `/repo-other` is not.
+6. **Exact allow-list.** Files: `accio/bin/accio_lib/bashpolicy.py`, `accio/bin/accio_lib/policy.py`,
+   `accio/docs/BACKLOG.md`, `accio/tests/test_curfew.py`. Needs: none. Risk: security (curfew). Checked by: tests that
+   `claude plugin validate accio` is allowed and the same with `--x` added or `; rm x` appended is denied; a listed
+   check still allows extra arguments; allow-once entries are exact too.
+7. **Breaker runner.** Files: `accio/bin/accio-break`, `accio/bin/accio_lib/breaker.py`, `accio/bin/accio_lib/config.py`,
+   `accio/bin/accio_lib/policy.py`, `accio/tests/test_breaker.py`. Needs: 3. Risk: security (runs repro code, as
+   checks do). Checked by: fixture repos, one per kind: assertion fails on head and passes on base (kept,
+   regression); crash in a changed file (kept); import error (dropped); passes on head (dropped); fails 1 of 2
+   (dropped); fails on base too (out of scope).
+8. **boggart agent and eval set.** Files: `accio/agents/boggart.md`, `accio/evals/boggart/`,
+   `accio/tests/test_agents.py`. Needs: 7. Risk: none. Checked by: an agent test (tools, checklist steps, never
+   edits); an eval by hand on 3 planted breaks and 3 clean stories: at least 2 caught, none kept on the clean ones.
+9. **boggart after review.** Files: `accio/workflows/brew.js`, `accio/bin/accio_lib/review.py`,
+   `accio/tests/workflow/brew-review.test.mjs`. Needs: 1, 8. Risk: none. Checked by: stubs: an in-DoD kept break → a
+   fix round with `boggart-findings.md`; an out-of-DoD break → an owl line only; a docs-only diff → boggart never
+   called.
+10. **Spikes S-M2 and S-M3: browser tools in a build.** By hand, about 30–60 min each. S-M2: does a Workflow
+    `agent()` get the session's MCP tools? A toy workflow agent calls
+    `mcp__plugin_playwright_playwright__browser_navigate` on a local page and saves a screenshot. S-M3: what happens
+    when an agent's `tools:` names an MCP server the session lacks? Files: `accio/docs/research/spike-s-m2-m3.md`.
+    Needs: none. Risk: none. Checked by: S-M2 passes when the toy agent's screenshot exists; S-M3 passes when the
+    agent gets a plain error or runs without the tools, with no hang. If S-M2 fails, mad-eye is not built and the
+    note comes back to wand.
+11. **Preview start and stop.** Files: `accio/bin/accio-preview`, `accio/bin/accio_lib/preview.py`,
+    `accio/bin/accio_lib/config.py`, `accio/bin/accio_lib/policy.py` (portkey may run it), `accio/tests/test_preview.py`,
+    `accio/README.md`. Needs: 10. Risk: security (runs the user's app, handles test login details). Checked by: a
+    unittest with a stdlib `http.server` as the preview: `start` returns once the URL answers, a second `start` waits
+    on the lock, `stop` frees the port and removes `preview.json` and `preview-login.json`, and `stop` after a crashed
+    start still frees the port; `start` refuses without `"test_data": true`, and refuses when a `login` variable is
+    unset; `preview.env` reaches the process; the README's mad-eye section says the preview must use test data.
+12. **mad-eye.** Files: `accio/agents/mad-eye.md`, `accio/bin/accio_lib/policy.py`, `accio/hooks/curfew.py`,
+    `accio/workflows/brew.js`, `accio/tests/test_curfew.py`, `accio/tests/workflow/brew-review.test.mjs`. Needs: 9, 11.
+    Risk: security (curfew). Checked by: curfew tests that mad-eye's `browser_navigate` to the preview origin and a
+    screenshot into `run/<ID>/mad-eye/` are allowed, while navigate to another origin, a screenshot elsewhere,
+    `browser_evaluate` and any browser tool for every other agent are denied; stubs: no UI glob → mad-eye never
+    called; UI but no `preview` or no `test_data` → a logged skip; mad-eye fails → `accio-preview stop` still called.
+
+### Evidence
+- Stub workflow tests (`node --test`): a failing check leads to a fix round, never the question; check and review
+  fixes together stop at 2 rounds; a null portkey or prefect reply is retried once, then blocks with cause `accio`;
+  boggart and mad-eye are never called on docs-only or non-UI diffs.
+- Unittests: `check-findings.md` holds the output; `evals/` is inside the boundary; `accio-break verify` sorts all six
+  fixture kinds; owl writes one line per finding id and per block; the guards deny `accio:*` and stay silent for
+  others when `accio_lib` won't import; an `agent_allow` entry with an extra argument is denied; a subfolder
+  session's transcript is counted. `claude plugin validate accio` passes.
+- Over the next two iterations, by grep: no "Blocked question" holds "Should it be fixed" or a single machinery
+  failure; each iteration file has a `Findings and blocks` line per finding id and block; every boggart line that
+  reached a fix round has a `verify` record of two failures on head; `accio-cost` shows a row for every build.
+- The curfew tests: mad-eye's browser tools allowed only on the preview's origin and its screenshot folder, and
+  denied for every other agent; `accio-preview stop` frees the port.
+- mad-eye: this repo has no UI, so its first evidence comes from one of the user's other repos (a UI story with one
+  screenshot per visible DoD line in `run/<ID>/mad-eye/`).
+
+### Open questions
+- Spikes S-M2 and S-M3 (part 10) gate mad-eye. If a workflow agent gets no MCP tools, mad-eye is not built and this
+  part comes back to wand (option A, a script-run Playwright test, is the fallback).
+- Spike S-R1: does `agent()` throw a different error for a stall and a turn-budget stop? If so, retry a stalled
+  builder once (decision 011). Left for later.
+- A late in-DoD break after both fix rounds are spent blocks with its repro (decision 009). Part 3's log counts these;
+  if it happens often, raise the cap.
+- boggart's token cost (50–100k Sonnet a story, unmeasured) and mad-eye's (likely above 60k, since each page
+  snapshot enters its context): measured on the first stories with `accio-cost`.
