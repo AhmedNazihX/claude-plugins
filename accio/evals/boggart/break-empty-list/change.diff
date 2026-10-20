@@ -1,0 +1,19 @@
+--- /dev/null
++++ b/stats.py
+@@ -0,0 +1,9 @@
++def average(values):
++    """Mean of `values`; 0.0 when it is empty."""
++    values = list(values)
++    return sum(values) / len(values)
+--- /dev/null
++++ b/test_stats.py
+@@ -0,0 +1,10 @@
++from stats import average
++
++
++def test_S_902_1_mean():
++    assert average([1, 2, 3]) == 2
++
++
++def test_S_902_2_empty_is_zero():
++    assert average([0]) == 0.0

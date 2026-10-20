@@ -1,0 +1,22 @@
+--- /dev/null
++++ b/pager.py
+@@ -0,0 +1,10 @@
++def paginate(items, page, size):
++    """Return the items of page `page` (from 1). The last page holds the remainder."""
++    pages = len(items) // size
++    if page < 1 or page > pages:
++        return []
++    start = (page - 1) * size
++    return items[start:start + size]
+--- /dev/null
++++ b/test_pager.py
+@@ -0,0 +1,8 @@
++from pager import paginate
++
++
++def test_S_901_1_second_page():
++    assert paginate(list(range(10)), 2, 5) == [5, 6, 7, 8, 9]
++
++
++def test_S_901_2_short_last_page():
++    assert paginate(list(range(6)), 1, 3) == [0, 1, 2]
