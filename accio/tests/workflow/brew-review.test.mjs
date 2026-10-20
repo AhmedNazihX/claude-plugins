@@ -194,6 +194,7 @@ test('S-020 a reviewer that stops answering, or a failing re-check, blocks the s
   const stories = [story('S-001'), story('S-002')]
   const { result, calls } = await runWorkflow('brew', happy(stories, {
     'S-001 professor': async () => null,
+    'S-001 professor retry': async () => null,  // S-035: the retry is silent too
     'S-002 examiner': async (call, id) => fail(id, 'examiner'),
     'S-002 check r1': async () => ({ pass: false, failing: ['npm test'] }),
     'S-002 check r2': async () => ({ pass: false, failing: ['npm test'] }),

@@ -176,6 +176,7 @@ test('S-019/7 an outcome the board did not take, or a check with no reasons, sti
   const stories = [story('S-001'), story('S-002')]
   const { result, calls } = await runWorkflow('brew', happy(stories, {
     'S-001 outcome': async () => ({ done: false, error: 'move failed' }),
+    'S-001 outcome retry': async () => ({ done: false, error: 'move failed' }),  // S-035: the retry fails too
     'S-002 check': async () => ({ pass: false }),
   }))
   assert.match(result, /S-001 Story S-001\s+READY\s+the board was not updated; the next brew resumes it/)
@@ -280,4 +281,47 @@ test('S-034/7 one check fix leaves one review fix round, and a second review fai
 test('S-034/8 brew.js never asks "Should it be fixed"', () => {
   const source = readFileSync(join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'workflows', 'brew.js'), 'utf8')
   assert.doesNotMatch(source, /Should it be fixed/)
+})
+
+// A step that answers badly once, then well: one try is not enough, two are.
+const flaky = (bad, good) => { let tries = 0; return async (call, id) => (tries++ === 0 ? bad : good(call, id)) }
+
+for (const [step, agent, bad] of [
+  ['prepare', 'portkey', null], ['prepare', 'portkey', { error: 'boom' }],
+  ['check', 'prefect', null], ['check', 'prefect', { error: 'boom' }],
+  ['package', 'portkey', { error: 'boom' }], ['examiner', 'examiner', null], ['outcome', 'prefect', { error: 'boom' }],
+]) {
+  test(`S-035/1 S-035/2 a ${agent} ${step} reply of ${JSON.stringify(bad)} is retried once, labelled "<ID> ${step} retry"`, async () => {
+    const base = happy([story('S-001')])
+    const { result, calls } = await runWorkflow('brew', happy([story('S-001')], { [step]: flaky(bad, base) }))
+    assert.deepEqual(labels(calls).filter((label) => label.startsWith(`S-001 ${step}`)).slice(0, 2),
+      [`S-001 ${step}`, `S-001 ${step} retry`])
+    assert.match(result, /S-001 Story S-001\s+READY/)
+  })
+}
+
+test('S-035/1 a headmaster that answers null once is asked again and its ruling is used', async () => {
+  const base = happy([story('S-001')])
+  let builds = 0
+  const { result, calls } = await runWorkflow('brew', happy([story('S-001')], {
+    implement: async (call, id) => (builds++ === 0 ? { status: 'NEEDS_CONTEXT', report: 'r' } : base(call, id)),
+    judge: flaky(null, base),
+  }))
+  assert.deepEqual(labels(calls).filter((label) => label.includes('judge')), ['S-001 judge', 'S-001 judge retry'])
+  assert.match(result, /S-001 Story S-001\s+READY/)
+})
+
+test('S-035/3 a second null or {error} reply blocks the story with cause accio, with no third try', async () => {
+  const { result, calls } = await runWorkflow('brew', happy([story('S-001')], { check: async () => ({ error: 'boom' }) }))
+  assert.deepEqual(labels(calls).filter((label) => label.includes('check')), ['S-001 check', 'S-001 check retry'])
+  assert.match(result, /S-001 Story S-001\s+BLOCKED/)
+  assert.match(calls.find((call) => call.label === 'S-001 outcome').prompt, /The cause is accio/)
+})
+
+test('S-035/3 a reviewer silent twice blocks with cause accio; a builder silence is not accio\'s', async () => {
+  const reviewer = await runWorkflow('brew', happy([story('S-001')], { examiner: async () => null }))
+  assert.match(reviewer.calls.find((call) => call.label === 'S-001 outcome').prompt, /The cause is accio/)
+  const builder = await runWorkflow('brew', happy([story('S-001')], { implement: async () => null }))
+  assert.deepEqual(labels(builder.calls).filter((label) => label.includes('implement')), ['S-001 implement'])
+  assert.doesNotMatch(builder.calls.find((call) => call.label === 'S-001 outcome').prompt, /The cause is accio/)
 })
