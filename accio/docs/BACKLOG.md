@@ -297,7 +297,8 @@ ask), and uses `PermissionRequest` only to record what froze.
 - [x] S-015/11 WHEN `PermissionRequest` fires for an `accio:*` agent THE SYSTEM SHALL record its agent, tool and command in `run/stuck.json`
 - [x] S-015/12 WHEN `accio-hooks verify` runs THE SYSTEM SHALL list the settings `ask` rules a build would stop on
 Done: three review rounds (code+security, then two scoped). curfew's lists live in `policy.py` (agents, claims,
-writes) and `bashpolicy.py` (commands): checks and `agent_allow` match as whole-command prefixes; read-only tools
+writes) and `bashpolicy.py` (commands): checks match as word prefixes, but `agent_allow` and allow-once entries match the whole command (S-040: no word
+added, nothing chained to it); read-only tools
 lose their writing flags in any getopt abbreviation; file tools take plain flags; git has an explicit list; no
 `NAME=value`, substitutions, `&` or `.git` paths. A claim needs a `doing` story and is released by its next
 `accio-brief`. **Limit (DESIGN § 6):** it stops mistakes, not a determined agent (a check runs code the agent

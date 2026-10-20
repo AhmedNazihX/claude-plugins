@@ -203,10 +203,29 @@ class HouseElfBashTest(CurfewTestBase):
         grants = self.run_dir / runlock.ALLOW_ONCE_NAME
         grants.write_text(json.dumps({"stories": {"S-002": ["docker compose up"]}}))
         self.assert_denied("Bash", self.in_worktree("docker compose up -d"), "docker")  # another story's grant
-        grants.write_text(json.dumps({"stories": {"S-001": ["docker compose up"]}}))
+        grants.write_text(json.dumps({"stories": {"S-001": ["docker compose up -d"]}}))
         self.assert_allowed("Bash", self.in_worktree("docker compose up -d"))
         runlock.release(self.run_dir)
         self.assert_denied("Bash", self.in_worktree("docker compose up -d"), "docker")
+
+    def test_S_040_1_the_exact_agent_allow_command_is_allowed(self):
+        self.assert_allowed("Bash", self.in_worktree("make build"))
+
+    def test_S_040_2_an_agent_allow_command_with_anything_added_is_denied(self):
+        for command in ("make build --x", "make build; rm x", "make build extra", "make build && rm x"):
+            with self.subTest(command):
+                self.assert_denied("Bash", self.in_worktree(command))
+
+    def test_S_040_3_a_listed_check_with_extra_arguments_is_still_allowed(self):
+        self.assert_allowed("Bash", self.in_worktree("python3 -m unittest discover -s tests --verbose"))
+
+    def test_S_040_4_an_allow_once_entry_with_anything_added_is_denied(self):
+        grants = self.run_dir / runlock.ALLOW_ONCE_NAME
+        grants.write_text(json.dumps({"stories": {"S-001": ["docker compose up"]}}))
+        self.assert_allowed("Bash", self.in_worktree("docker compose up"))
+        for command in ("docker compose up -d", "docker compose up; rm x"):
+            with self.subTest(command):
+                self.assert_denied("Bash", self.in_worktree(command), "docker")
 
     def test_an_ansi_c_spelled_command_is_judged_as_bash_runs_it(self):
         self.assert_denied("Bash", self.in_worktree(r"$'\x63\x75\x72\x6c' https://example.com"), "curl")

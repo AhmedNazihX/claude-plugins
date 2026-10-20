@@ -10,8 +10,9 @@ With a worktree (house-elf), the command starts with `cd <worktree> &&` and neve
 in the agent's own folder (the main checkout), so only `/dev/null` and fd copies are allowed there, as for the
 other agents.
 
-Programs are judged by `Judge`: listed commands match as a word prefix (a check or an `agent_allow` entry allows
-that command with any further arguments); read-only tools lose the flags that write or run code, in any
+Programs are judged by `Judge`: a listed check matches as a word prefix (it allows that command with any further
+arguments); an `agent_allow` entry (and an allow-once one) matches the whole command: no word added, and nothing
+chained to it with `&&`, `||`, `;` or `|`; read-only tools lose the flags that write or run code, in any
 abbreviation getopt accepts (`--out` for `--output`); file tools take plain flags only and stay in the worktree;
 git takes an explicit list of subcommands. Nothing may touch a `.git` path in the worktree: its `.git` file names
 the git folder, and pointing it at a config the agent wrote would run any command.
@@ -52,12 +53,13 @@ GLOB_CHARS = frozenset("*?[")
 
 @dataclasses.dataclass(frozen=True)
 class Judge:
-    """What one agent may run. `prefixes` are listed commands (word tuples); `git` is its subcommand list;
+    """What one agent may run. `prefixes` are listed checks (word tuples); `git` is its subcommand list;
     `files` lets file tools act inside `worktree`; `scripts` maps accio's scripts (found in `bin_dir`) to the
     subcommands it may run (None: any);
     `may_cd` lets the command move between folders (prefect runs checks in a worktree)."""
     agent: str
     prefixes: tuple = ()
+    exact: tuple = ()  # `agent_allow` entries (word tuples): each allows exactly that command, alone
     read_only: bool = False
     files: bool = False
     git: frozenset = frozenset()
@@ -133,6 +135,9 @@ def check(command, judge, start_in=None):
         segments, redirect_base, reason = _start_in(segments, start_in)
         if reason:
             return reason
+    reason = _chained_exact(segments, judge)
+    if reason:
+        return reason
     for segment in segments:
         reason = _judge_segment(segment.words, judge) if segment.words else None
         if reason:
@@ -182,6 +187,18 @@ def _forms_groups(groups):
     return None
 
 
+def _chained_exact(segments, judge):
+    """Why a command allowed only by an `agent_allow` entry is denied: something else is chained to it."""
+    commands = [segment.words for segment in segments if segment.words]
+    if len(commands) < 2:
+        return None
+    for words in commands:
+        if _is_exact(words, judge) and not _is_prefixed(words, judge):
+            return (f"`{' '.join(words)}` is allowed only as the whole command; run it on its own, "
+                    "without anything chained to it.")
+    return None
+
+
 def _judge_segment(words, judge):
     program_words = program_part(words)
     if len(program_words) < len(words) and not _is_listed(words, judge):
@@ -208,8 +225,16 @@ def _judge_program(words, judge):
     return f"`{' '.join(words[:2])}` isn't on accio:{judge.agent}'s list. Ask for it at owl."
 
 
-def _is_listed(words, judge):
+def _is_prefixed(words, judge):
     return any(tuple(words[:len(prefix)]) == prefix for prefix in judge.prefixes)
+
+
+def _is_exact(words, judge):
+    return tuple(words) in judge.exact
+
+
+def _is_listed(words, judge):
+    return _is_prefixed(words, judge) or _is_exact(words, judge)
 
 
 def _is_script(words, judge):
