@@ -5,7 +5,8 @@ import unittest
 from support import ROOT
 
 NEXT_STEP = {"wand": "sort", "sort": "prophecy", "prophecy": "brew", "owl": "prophecy"}
-DRIVING = "the `accio` conductor skill was loaded earlier in this chat and has not finished"
+DRIVING = "ARGUMENTS says `driven`"
+OLD_DRIVING = "loaded earlier in this chat"
 
 
 def flat(skill):
@@ -17,8 +18,14 @@ class StepEndingsTest(unittest.TestCase):
         for skill, step in NEXT_STEP.items():
             with self.subTest(skill=skill):
                 text = flat(skill)
-                self.assertIn(DRIVING, text)
+                self.assertIn(DRIVING, text)  # S-025/2
+                self.assertNotIn(OLD_DRIVING, text)  # S-025/3
                 self.assertIn(f"next: {step} (accio carries on)", text)
+
+    def test_S_025_4_no_argument_keeps_every_question(self):
+        for skill in NEXT_STEP:
+            with self.subTest(skill=skill):
+                self.assertIn("no `driven` argument", flat(skill))
 
     def test_S_007_2_alone_keeps_the_slash_command_ending(self):
         for skill, step in NEXT_STEP.items():
