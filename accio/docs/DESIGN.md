@@ -59,7 +59,7 @@ A solo developer working on their own repo. Accepted stories reach `main` by a d
 |---|---|---|
 | P1 | **Ceremony scales with size.** Work goes on a Quick, Story or Feature track; the plugin picks the track and the user can override it (decision 002). | F1, I8 |
 | P2 | **Caps live in code.** The build workflow, not the model, enforces the fix-round cap, the timeouts and the WIP limit (decision 003). | F2 |
-| P3 | **The user takes part in two checkpoints per iteration:** plan, then review. Everything between them runs unattended, and questions are collected for the review (decision 005). | F3, I3 |
+| P3 | **accio stops only for the user's decisions:** plan, then review. Everything between them runs unattended, and questions are collected for the review (decision 005). | F3, I3 |
 | P4 | **Magic names, plain words.** The output uses one report template; decisions follow the `decisions.md` format (decision 007). | F4, I4 |
 | P5 | **Verification decides "done".** Checks, tagged tests per DoD line, an independent spec review, and a ledger keyed to the exact diff decide it, not the agent's claim. | I7, F2 |
 | P6 | **Effects are guarded, not text.** Native git hooks are the wall; the Claude hooks are narrow early warnings (decision 004). | I6 |
@@ -510,7 +510,7 @@ Next: /accio:owl
    DoD-tag check and the full run before a push are scripts, not agents.
 4. **Cache-aware fixes.** Each fix round uses a fresh agent with a short brief, because the subagent cache TTL is
    5 minutes (`platform-facts.md`).
-5. **Small baseline.** Descriptions are short, and skill bodies use progressive disclosure. The target is about 2k
+5. **Small baseline.** Descriptions are short, and skill bodies use progressive disclosure. The target is 2,000 or fewer; it measures about 1,761
    tokens for all accio descriptions, checked with `claude plugin details accio`. Hooks print nothing outside
    accio repos.
 6. **Budgets.** Quick has 80k tokens and Story has 400k, counting fresh tokens only (input, cache writes, output):

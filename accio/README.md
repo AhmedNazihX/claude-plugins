@@ -1,8 +1,8 @@
 # accio
 
 A Claude Code plugin that plans, builds, reviews and safely merges your project's work in small iterations. You talk
-to it at two checkpoints: when you plan an iteration, and when you review what it built. In between, it builds on
-its own: each story in its own git worktree, test-first, checked by scripts and reviewed by separate agents, with
+to it when you plan an iteration and when you review what it built. It stops only for your decisions. In between,
+it builds on its own: each story in its own git worktree, test-first, checked by scripts and reviewed by separate agents, with
 nothing reaching your main branch until you say so.
 
 It is for a solo developer working on their own git repo.
@@ -89,7 +89,7 @@ attacker; use Claude Code's sandboxing for that. They do nothing in a repo witho
 
 ## Cost
 
-About 1,900 tokens of accio's descriptions are loaded in every session. A build costs what its agents use: a Quick
+About 1,761 tokens of accio's descriptions are loaded in every session. A build costs what its agents use: a Quick
 story has a budget of 80k fresh tokens and a Story 400k (cache reads are counted apart). The review at `owl` shows
 each story's tokens; a story far over budget stops and comes back as a question.
 
