@@ -196,6 +196,24 @@ class BriefTest(unittest.TestCase):
         self.assertNotIn("Use the mailer", text)
         self.assertNotIn("S-001/1 WHEN", text)
 
+    def fix_text(self):
+        self.brief("S-001")
+        findings = self.accio / "run" / "S-001" / "findings-spec.md"
+        write(findings, "- major, 90, src/a.py:1: the link never expires\n")
+        return pathlib.Path(self.brief("S-001", "--fix", str(findings))["brief"]).read_text(encoding="utf-8")
+
+    def test_S_021_1_a_fix_brief_names_the_story_briefs_path(self):
+        self.assertIn(str(self.accio / "run" / "S-001" / "brief.md"), self.fix_text())
+
+    def test_S_021_2_a_fix_brief_lists_the_same_files_and_checks(self):
+        story_brief = pathlib.Path(self.brief("S-001")["brief"]).read_text(encoding="utf-8")
+        text = self.fix_text()
+        for heading in ("## Files you may change (plus their tests)", "## Checks to run"):
+            self.assertEqual(story_brief.split(heading, 1)[1].split("\n## ", 1)[0],
+                             text.split(heading, 1)[1].split("\n## ", 1)[0])
+        self.assertIn("python3 -m unittest", text)
+        self.assertNotIn("npm test", text)
+
     def earlier_text(self, **story_args):
         if story_args:
             self.add_story("S-001", **story_args)

@@ -15,7 +15,7 @@ import shlex
 import string
 import subprocess
 
-from accio_lib import githooks, globs, paths, story, summary
+from accio_lib import config, githooks, globs, paths, story, summary
 
 TEMPLATES = pathlib.Path(__file__).resolve().parent / "templates"
 BIN = pathlib.Path(__file__).resolve().parents[1]
@@ -214,7 +214,13 @@ def render_brief(parsed, accio, worktree, onto, checks, reuse_files, notes):
 
 
 def render_fix(parsed, accio, worktree, findings):
-    return fill("fix-brief.md", {**common(parsed, worktree, accio), "findings": "\n\n".join(findings)})
+    files = parsed.meta.get("files", ())
+    checks = scoped_checks(config.load(accio)["checks"], files)
+    values = {**common(parsed, worktree, accio), "findings": "\n\n".join(findings),
+              "story_brief": accio / "run" / parsed.meta["id"] / "brief.md",
+              "files": bullets(f"`{path}`" for path in files),
+              "checks": bullets(f"`{check['command']}`" for check in checks)}
+    return fill("fix-brief.md", values)
 
 
 def write_file(path, text):
