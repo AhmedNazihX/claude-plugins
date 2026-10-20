@@ -17,6 +17,7 @@ from support import ROOT, commit_all, git, init_repo, write
 from accio_lib import paths, policy, runlock
 
 CURFEW = ROOT / "hooks" / "curfew.py"
+STARTUP = ROOT / "hooks" / "_startup.py"
 CLAIM = ROOT / "bin" / "accio-claim"
 HOOKS_CLI = ROOT / "bin" / "accio-hooks"
 HOOKS_JSON = ROOT / "hooks" / "hooks.json"
@@ -547,7 +548,7 @@ class AskRulesTest(CurfewTestBase):
 
 
 class CurfewStartupCrashTest(unittest.TestCase):
-    """S-033: curfew with an unimportable `accio_lib` (a copy of curfew beside a broken library)."""
+    """S-033, S-037/4: curfew (through `_startup.py`) with an unimportable `accio_lib` (a copy of curfew beside a broken library)."""
 
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
@@ -555,6 +556,7 @@ class CurfewStartupCrashTest(unittest.TestCase):
         (base / "hooks").mkdir()
         (base / "bin" / "accio_lib").mkdir(parents=True)
         (base / "hooks" / "curfew.py").write_text(CURFEW.read_text(encoding="utf-8"), encoding="utf-8")
+        (base / "hooks" / "_startup.py").write_text(STARTUP.read_text(encoding="utf-8"), encoding="utf-8")
         (base / "bin" / "accio_lib" / "__init__.py").write_text("raise ImportError('broken update')\n",
                                                                  encoding="utf-8")
         self.script = base / "hooks" / "curfew.py"

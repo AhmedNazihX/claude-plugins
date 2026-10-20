@@ -19,10 +19,14 @@ import pathlib
 import sys
 import time
 
-BIN = pathlib.Path(__file__).resolve().parents[1] / "bin"
+HOOKS = pathlib.Path(__file__).resolve().parent
+BIN = HOOKS.parent / "bin"
+sys.path.insert(0, str(HOOKS))
 sys.path.insert(0, str(BIN))
 
-AGENT_PREFIX = "accio:"
+import _startup  # noqa: E402  (stdlib only, so it loads even when `accio_lib` doesn't)
+
+AGENT_PREFIX = _startup.AGENT_PREFIX
 
 try:
     from accio_lib import askrules, config, paths, policy, runlock  # noqa: E402
@@ -130,25 +134,14 @@ def _pre_tool_use(payload, root, accio):
     return (False, refused) if refused else (True, decision.reason)
 
 
-def _startup_crash(raw):
-    """`accio_lib` didn't load (decision 007): deny an accio agent's call, naming the error, since it can't be
-    checked; every other caller and event gets no answer, so a broken update never blocks anyone else."""
-    try:
-        data = json.loads(raw)
-    except (json.JSONDecodeError, UnicodeDecodeError):
-        return 0
-    if not isinstance(data, dict) or data.get("hook_event_name") == "PermissionRequest":
-        return 0
-    agent = data.get("agent_type")
-    if not isinstance(agent, str) or not agent.startswith(AGENT_PREFIX):
-        return 0
-    _answer(False, f"could not start ({type(IMPORT_ERROR).__name__}: {IMPORT_ERROR}).")
+def _deny_crash(message):
+    _answer(False, message)
     return 0
 
 
 def main():
     if IMPORT_ERROR is not None:
-        return _startup_crash(sys.stdin.read())
+        return _startup.handle_crash(sys.stdin.read(), IMPORT_ERROR, _deny_crash)
     payload = _payload(sys.stdin.read())
     if payload is None:
         return 0
