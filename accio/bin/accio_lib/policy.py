@@ -73,6 +73,7 @@ BROWSER_TOOLS = frozenset({"browser_navigate", "browser_snapshot", "browser_clic
                            "browser_console_messages", "browser_close"})
 DEFAULT_PORTS = {"http": 80, "https": 443}
 SHOT_FOLDER = "mad-eye"
+UNSAFE_URL = re.compile(r"[\\\s\x00-\x1f\x7f]")  # a browser reads these differently from urlsplit
 
 HEX_SHA = r"[0-9a-f]{40}"
 NUMBER = r"[0-9]+"  # ASCII digits only (`\d` would take other scripts' digits)
@@ -163,19 +164,21 @@ def _browser(agent, tool, tool_input, ctx):
         return deny(f"{name} isn't on accio:{BROWSER_AGENT}'s browser list (rule: fixed browser list).")
     if name == "browser_navigate":
         return _navigate(tool_input, _preview(ctx).get("url"))
-    if name == "browser_take_screenshot":
-        return _screenshot(tool_input, ctx)
+    if name == "browser_take_screenshot" or "filename" in tool_input:
+        return _screenshot(tool_input, ctx, required=name == "browser_take_screenshot")
     return allow()
 
 
 def _origin(url):
     """(scheme, host, port) of an http(s) URL, or None."""
+    if UNSAFE_URL.search(url):
+        return None
     try:
         parts = urllib.parse.urlsplit(url)
         scheme, host, port = parts.scheme.lower(), parts.hostname, parts.port
     except ValueError:
         return None
-    if scheme not in DEFAULT_PORTS or not host:
+    if "@" in parts.netloc or scheme not in DEFAULT_PORTS or not host:
         return None
     return scheme, host.lower(), port or DEFAULT_PORTS[scheme]
 
@@ -190,14 +193,17 @@ def _navigate(tool_input, preview_url):
     return allow()
 
 
-def _screenshot(tool_input, ctx):
+def _screenshot(tool_input, ctx, required=True):
+    """The folder rule for a `filename` argument; a screenshot must have one, since Playwright would save elsewhere."""
     folder = ctx.accio / "run" / "<ID>" / SHOT_FOLDER
     filename = tool_input.get("filename")
+    if filename is None and not required:
+        return allow()
     if not isinstance(filename, str) or not filename:
-        return deny(f"a screenshot needs a `filename` inside {folder}, or it would be saved elsewhere "
+        return deny(f"a browser tool's `filename` must be a path inside {folder}, or it would be saved elsewhere "
                     "(rule: screenshot folder).")
     if not os.path.isabs(filename):
-        return deny(f"a screenshot's filename must be an absolute path inside {folder} (rule: screenshot folder).")
+        return deny(f"a browser tool's filename must be an absolute path inside {folder} (rule: screenshot folder).")
     run = pathlib.Path(os.path.realpath(ctx.accio / "run"))
     try:
         target = pathlib.Path(os.path.realpath(filename))

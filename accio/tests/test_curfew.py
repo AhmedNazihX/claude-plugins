@@ -351,6 +351,30 @@ class MadEyeBrowserTest(CurfewTestBase):
         self.assertEqual(verdict, "deny")
         self.assertIn("preview.url", reason)
 
+    def test_S_046_9_urls_that_a_browser_reads_differently_are_denied(self):
+        for url in ("http://evil.com\\@localhost:3000/", "http://evil.com@localhost:3000/",
+                    "http://localhost:3000\\@evil.com/", "http://localhost:3000/ x", "http://localhost:3000/\tx",
+                    "http://localhost:3000/\nx", "http://localhost:3000/\x00", " http://localhost:3000/",
+                    "http://localhost:3000/\\x"):
+            with self.subTest(url):
+                verdict, reason = self.browse("navigate", {"url": url})
+                self.assertEqual(verdict, "deny")
+                self.assertIn("origin", reason)
+
+    def test_S_046_10_a_filename_on_any_browser_tool_gets_the_folder_rule(self):
+        (self.shots).mkdir(parents=True)
+        for name in ("snapshot", "console_messages", "take_screenshot", "click"):
+            with self.subTest(name):
+                good = self.browse(name, {"filename": str(self.shots / "a.md")})
+                self.assertEqual(good[0], "allow")
+                for bad in (str(self.repo / "a.md"), "a.md", str(self.shots / ".." / "a.md")):
+                    verdict, reason = self.browse(name, {"filename": bad})
+                    self.assertEqual(verdict, "deny", bad)
+                    self.assertIn("mad-eye", reason)
+
+    def test_S_046_10_snapshot_without_a_filename_is_allowed(self):
+        self.assertEqual(self.browse("snapshot", {})[0], "allow")
+
     def test_S_046_3_screenshot_into_the_mad_eye_folder_is_allowed(self):
         for story_id in ("S-001", "S-123"):
             shot = self.run_dir / story_id / "mad-eye" / "home.png"

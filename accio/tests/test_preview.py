@@ -164,6 +164,15 @@ class PreviewTest(unittest.TestCase):
         write(self.accio / "config.json", "{}")
         self.assertIsNone(config.load(self.accio)["preview"])
 
+    def test_S_046_11_config_accepts_mcp_prefix_as_a_preview_key(self):
+        settings = {"command": "x", "url": "http://a", "mcp_prefix": "mcp__pw__"}
+        write(self.accio / "config.json", json.dumps({"preview": settings}))
+        self.assertEqual(config.load(self.accio)["preview"]["mcp_prefix"], "mcp__pw__")
+        for bad in (1, "", " "):
+            write(self.accio / "config.json", json.dumps({"preview": {**settings, "mcp_prefix": bad}}))
+            with self.assertRaises(config.ConfigError, msg=repr(bad)):
+                config.load(self.accio)
+
     def test_S_045_2_second_start_waits_on_the_lock_until_the_first_is_stopped(self):
         self.assertEqual(self.preview("S-001", "start", "--timeout", "20").returncode, 0)
         second = subprocess.Popen([sys.executable, str(PREVIEW), "S-002", "start", "--timeout", "20"],
