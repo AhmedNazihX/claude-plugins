@@ -1,6 +1,7 @@
 """S-007: accio-brief (worktree and branch per story, rebase, brief and fix brief)."""
 import json
 import pathlib
+import re
 import shlex
 import subprocess
 import sys
@@ -110,31 +111,78 @@ class BriefTest(unittest.TestCase):
         self.brief("S-001")
         self.assertEqual(git(self.wt_root / "S-001", "branch", "--show-current"), "story/S-001")
 
-    # S-007/3
-    def test_S_007_3_a_rebase_conflict_goes_into_the_brief(self):
+    def conflict(self):
         self.brief("S-001")
         worktree = self.wt_root / "S-001"
         write(worktree / "src" / "a.py", "value = 2\n")
         commit_all(worktree, "story change")
         write(self.repo / "src" / "a.py", "value = 3\n")
         commit_all(self.repo, "main change")
-        before = self.head("story/S-001")
-        reply = self.brief("S-001")
-        text = pathlib.Path(reply["brief"]).read_text(encoding="utf-8")
+        return worktree
+
+    def rebasing(self, worktree):
+        for name in ("rebase-merge", "rebase-apply"):
+            if (worktree / git(worktree, "rev-parse", "--git-path", name)).exists():
+                return True
+        return False
+
+    # S-022/1
+    def test_S_022_1_a_conflicting_rerun_leaves_the_rebase_in_progress(self):
+        worktree = self.conflict()
+        self.brief("S-001")
+        self.assertTrue(self.rebasing(worktree))
+        self.assertIn("src/a.py", git(worktree, "diff", "--name-only", "--diff-filter=U"))
+
+    # S-022/2
+    def test_S_022_2_the_brief_names_the_conflicted_files_and_rebase_continue(self):
+        self.conflict()
+        text = pathlib.Path(self.brief("S-001")["brief"]).read_text(encoding="utf-8")
         self.assertIn("Rebase conflict", text)
         self.assertIn("src/a.py", text)
-        self.assertEqual(self.head("story/S-001"), before)
-        self.assertNotIn("rebase", git(worktree, "status").lower().split("\n")[0])
+        self.assertIn(f"git -C {shlex.quote(str(self.wt_root / 'S-001'))} rebase --continue", text)
 
-    def test_uncommitted_work_is_never_rebased_away(self):
+    # S-022/3
+    def test_S_022_3_uncommitted_work_is_committed_as_a_checkpoint_before_the_rebase(self):
         self.brief("S-001")
         worktree = self.wt_root / "S-001"
         write(worktree / "src" / "wip.py", "z = 3\n")
         write(self.repo / "docs.md", "main moved\n")
         commit_all(self.repo, "main moves on")
-        reply = self.brief("S-001")
+        self.brief("S-001")
+        self.assertEqual(git(worktree, "status", "--porcelain"), "")
+        self.assertEqual(git(worktree, "merge-base", "HEAD", "main"), self.head("main"))
         self.assertTrue((worktree / "src" / "wip.py").is_file())
-        self.assertIn("uncommitted", pathlib.Path(reply["brief"]).read_text(encoding="utf-8"))
+        self.assertIn("checkpoint", git(worktree, "log", "-1", "--format=%s"))
+
+    # S-022/4
+    def test_S_022_4_a_failed_rebase_without_a_conflict_blocks_with_one_question(self):
+        self.brief("S-001")
+        worktree = self.wt_root / "S-001"
+        write(worktree / "src" / "new.py", "y = 2\n")
+        commit_all(worktree, "story change")
+        write(self.repo / "docs.md", "main moved\n")
+        commit_all(self.repo, "main moves on")
+        hook = worktree / git(worktree, "rev-parse", "--git-path", "hooks") / "pre-rebase"
+        write(hook, "#!/bin/sh\nexit 1\n")
+        hook.chmod(0o755)
+        result = self.brief("S-001", check=False)
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("?", result.stderr)
+        self.assertEqual(len(result.stderr.strip().splitlines()), 1)
+        self.assertFalse(self.rebasing(worktree))
+
+    # S-022/5
+    def test_S_022_5_no_brief_text_names_a_rebase_command_curfew_denies(self):
+        sys.path.insert(0, str(ROOT / "bin"))
+        from accio_lib import bashpolicy
+        self.conflict()
+        texts = [pathlib.Path(self.brief("S-001")["brief"]).read_text(encoding="utf-8"),
+                 pathlib.Path(self.brief("S-001")["brief"]).read_text(encoding="utf-8")]  # 2nd: rebase in progress
+        for text in texts:
+            for command in re.findall(r"`([^`]*git [^`]*rebase[^`]*)`", text):
+                rebase_args = shlex.split(command)
+                rebase_args = rebase_args[rebase_args.index("rebase") + 1:]
+                self.assertTrue(len(rebase_args) == 1 and rebase_args[0] in bashpolicy.REBASE_STEPS, command)
 
     # S-007/4
     def test_S_017_4_a_new_brief_clears_the_main_snapshot_but_a_fix_brief_keeps_it(self):
@@ -290,7 +338,7 @@ class BriefTest(unittest.TestCase):
         self.assertNotIn("Rebase conflict", pathlib.Path(reply["brief"]).read_text(encoding="utf-8"))
         self.assertEqual(git(child, "log", "--format=%s", "main..HEAD").splitlines(), ["c1", "p1 amended"])
 
-    def test_a_stacked_child_with_uncommitted_work_is_told_the_onto_command(self):
+    def test_S_022_3_a_stacked_child_with_uncommitted_work_is_checkpointed_then_rebased_onto_the_new_parent(self):
         self.brief("S-001")
         parent = self.wt_root / "S-001"
         write(parent / "src" / "p.py", "p = 1\n")
@@ -305,8 +353,10 @@ class BriefTest(unittest.TestCase):
         git(parent, "add", "-A")
         git(parent, "-c", "user.name=t", "-c", "user.email=t@example.com", "commit", "-q", "--amend", "-m", "p1 amended")
         write(child / "src" / "wip.py", "w = 1\n")
-        text = pathlib.Path(self.brief("S-002", "--parent", "story/S-001")["brief"]).read_text(encoding="utf-8")
-        self.assertIn(f"rebase --onto {self.head('story/S-001')} {old_parent}", text)
+        self.brief("S-002", "--parent", "story/S-001")
+        self.assertEqual(git(child, "merge-base", "HEAD", "story/S-001"), self.head("story/S-001"))
+        self.assertNotEqual(self.head("story/S-001"), old_parent)
+        self.assertEqual(git(child, "log", "--format=%s", "story/S-001..HEAD").splitlines()[1:], ["c1"])
 
     def test_a_worktree_folder_deleted_by_hand_is_recreated(self):
         self.brief("S-001")
@@ -333,10 +383,7 @@ class BriefTest(unittest.TestCase):
         self.assertIn(f"cd {shlex.quote(reply['worktree'])} &&", text)
 
     def test_notes_come_before_the_story_details(self):
-        self.brief("S-001")
-        write(self.wt_root / "S-001" / "src" / "wip.py", "z = 3\n")
-        write(self.repo / "docs.md", "main moved\n")
-        commit_all(self.repo, "main moves on")
+        self.conflict()
         text = pathlib.Path(self.brief("S-001")["brief"]).read_text(encoding="utf-8")
         self.assertLess(text.index("Before you start"), text.index("## Definition of Done"))
 
