@@ -153,6 +153,36 @@ class OwlTest(unittest.TestCase):
         self.assertEqual(git(self.repo, "status", "--porcelain", "--", ".accio/stories", ".accio/iterations",
                              ".accio/board.md"), "")
 
+    def outcome_rows(self, iteration_text):
+        return [line for line in iteration_text.splitlines() if line.startswith("| S-")]
+
+    def second_pass(self, rows):
+        from accio_lib import owl
+        path = self.accio / "iterations" / "1.md"
+        outcomes = {sid: ("done", words, None, False) for sid, words in rows.items()}
+        return owl._iteration_text(path, outcomes)
+
+    def test_S_027_1_a_second_pass_keeps_the_first_passes_rows(self):
+        self.close_all()
+        text = self.second_pass({"S-005": "merged"})
+        for row in ("| S-001 | merged |", "| S-004 | rejected |", "| S-007 | dropped |", "| S-003 | answered |"):
+            self.assertIn(row, text)
+
+    def test_S_027_2_a_row_for_a_listed_story_replaces_only_that_row(self):
+        self.close_all()
+        rows = self.outcome_rows(self.second_pass({"S-004": "merged"}))
+        self.assertIn("| S-004 | merged |", rows)
+        self.assertNotIn("| S-004 | rejected |", rows)
+        self.assertEqual(sum(row.startswith("| S-004 ") for row in rows), 1)
+        self.assertIn("| S-001 | merged |", rows)
+
+    def test_S_027_3_rows_for_new_stories_are_added(self):
+        self.close_all()
+        before = len(self.outcome_rows((self.accio / "iterations" / "1.md").read_text()))
+        rows = self.outcome_rows(self.second_pass({"S-005": "merged", "S-008": "dropped"}))
+        self.assertEqual(len(rows), before + 2)
+        self.assertIn("| S-008 | dropped |", rows)
+
     def test_S_022_5_a_merge_culprit_goes_back_with_the_failure_and_unmerged_stories_carry_over(self):
         answers = ("--accept", "S-001", "--accept", "S-002", "--accept", "S-004", "--accept", "S-006",
                    "--drop", "S-007", "gone", "--answer", "S-003", "Email")
