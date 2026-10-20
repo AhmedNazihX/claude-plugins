@@ -7,10 +7,11 @@
   `risky_paths` glob, or the story's `risk` field holds a security word. Paths are read NUL-separated, so a name git
   would quote (a tab, a `"`) still meets the globs as it is. The method checklists follow `references/checklists/README.md`; auror always gets the security one.
 """
+import pathlib
 import re
 import subprocess
 
-from accio_lib import brief, checks, globs, summary
+from accio_lib import breaker, brief, checks, globs, summary
 
 REFERENCES = brief.BIN.parent / "references"
 CHECKLISTS = REFERENCES / "checklists"
@@ -25,6 +26,8 @@ RISK_WORD_SPLIT = re.compile(r"[\s,\-]+")
 DIFF_NAME = "review.diff"
 PACKAGE_NAME = "review-package.md"
 REVIEWERS = ("professor", "auror", "examiner")
+NON_CODE_SUFFIXES = frozenset({".md", ".mdx", ".txt", ".rst", ".adoc", ".json", ".yaml", ".yml", ".toml", ".ini",
+                               ".cfg", ".lock"})  # docs and config: boggart has nothing to break there
 
 
 def _git(worktree, *args):
@@ -67,7 +70,7 @@ def _fix_start(worktree, since, start):
 
 
 def package(accio, parsed, worktree, settings, since=None):
-    """Write the diff and the package; return {package, diff, head, risky}."""
+    """Write the diff and the package; return {package, diff, head, risky, code, breaker}."""
     story_id = parsed.meta["id"]
     run_dir = accio / "run" / story_id
     head = _git(worktree, "rev-parse", "HEAD").strip()
@@ -79,7 +82,27 @@ def package(accio, parsed, worktree, settings, since=None):
     facts = _diff_facts(worktree, run_dir, origin, head, settings, parsed.meta.get("risk"))
     text = _render(parsed, accio, worktree, {
         **facts, "is_fix": bool(since), "findings": run_dir / "<reviewer>-findings.md"})
-    return _write(run_dir, text, facts)
+    reply = _write(run_dir, text, facts)
+    if not since:
+        _log_skip(run_dir, story_id, reply)
+    return reply
+
+
+def has_code(paths):
+    """True when any changed path is not docs or config (S-043/1); no changed path is no code."""
+    return any(pathlib.PurePosixPath(path).suffix.lower() not in NON_CODE_SUFFIXES for path in paths)
+
+
+def _log_skip(run_dir, story_id, reply):
+    """Say in run/<ID>/boggart/log.txt why boggart will not run on this story (S-043/5)."""
+    reasons = [text for skipped, text in ((not reply["code"], "the diff has no code (docs or config only)"),
+                                          (not reply["breaker"], "config.json has no `breaker` command")) if skipped]
+    if not reasons:
+        return
+    folder = run_dir / breaker.BOGGART_FOLDER
+    folder.mkdir(parents=True, exist_ok=True)
+    with (folder / breaker.LOG_NAME).open("a", encoding="utf-8") as log:
+        log.write(f"{story_id} skipped: {'; '.join(reasons)}\n")
 
 
 def _diff_facts(worktree, run_dir, origin, head, settings, risk):
@@ -89,6 +112,7 @@ def _diff_facts(worktree, run_dir, origin, head, settings, risk):
     diff = brief.write_file(run_dir / DIFF_NAME,
                             _git(worktree, "diff", "--no-color", "--no-ext-diff", "--no-textconv", origin, head))
     return {"head": head, "origin": origin, "diff": diff, "risky_files": risky_files,
+            "code": has_code(path for path in changed if path), "breaker": bool(settings.get("breaker")),
             "checklists": checklists(risk, bool(risky_files)),
             "shortstat": _git(worktree, "diff", "--shortstat", origin, head).strip() or "no changes"}
 
@@ -96,7 +120,8 @@ def _diff_facts(worktree, run_dir, origin, head, settings, risk):
 def _write(run_dir, text, facts):
     target = brief.write_file(run_dir / PACKAGE_NAME, text)
     return {"package": str(target), "diff": str(facts["diff"]), "head": facts["head"],
-            "risky": bool(facts["risky_files"]) or SECURITY in facts["checklists"]}
+            "risky": bool(facts["risky_files"]) or SECURITY in facts["checklists"],
+            "code": facts["code"], "breaker": facts["breaker"]}
 
 
 def _read_acceptance(path):

@@ -497,6 +497,25 @@ class LogTest(unittest.TestCase):
         self.assertIn("- S-005 boggart break outside the DoD: reset mail repeats", again)
         self.assertIn("- S-006 another: x", again)
 
+    def test_S_043_4_and_8_kept_boggart_breaks_outside_the_dod_and_repros_that_cannot_load_join_the_log(self):
+        import json
+        entries = [
+            {"file": "r1.py", "verdict": "kept", "claim": "empty list returns 0", "source": "src/a.py:9", "in_dod": False,
+             "reason": "failed an assertion on head in both runs"},
+            {"file": "r2.py", "verdict": "kept", "claim": "c", "source": "S-001/1", "in_dod": True,
+             "reason": "still fails on head: failed with a setup error (ImportError), not a break"},
+            {"file": "r3.py", "verdict": "kept", "claim": "in the DoD", "source": "S-001/1", "in_dod": True,
+             "reason": "failed an assertion on head in both runs"},
+            {"file": "r4.py", "verdict": "dropped", "claim": "x", "source": "src/a.py:1", "in_dod": False, "reason": "r"},
+        ]
+        write(self.run_dir / "S-001" / "boggart" / "verdicts.json", json.dumps({"repros": entries}))
+        self.close_log()
+        log = self.log()
+        self.assertIn("- S-001 boggart r1.py outside the DoD: empty list returns 0 (src/a.py:9)", log)
+        self.assertIn("- S-001 boggart r2.py: repro can't load (setup error after a fix round)", log)
+        self.assertNotIn("r3.py", log)
+        self.assertNotIn("r4.py", log)
+
     def test_S_048_7_the_question_files_are_deleted_after_the_log(self):
         write(self.run_dir / "questions" / "S-005.md", "Kept?\n")
         self.close_log()
