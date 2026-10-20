@@ -19,5 +19,8 @@
   ],
   "snapshot_skip": [
     ".remember/**"
-  ]
+  ],
+  "breaker": {
+    "command": "case {file} in *.mjs) node --test {file} ;; *) PYTHONPATH=accio/bin:accio/tests python3 {file} ;; esac"
+  }
 }
