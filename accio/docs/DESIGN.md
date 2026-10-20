@@ -632,9 +632,12 @@ workflow launch: the first `/accio:brew` asks once, and "don't ask again" covers
 ### 12.3 Worktree and branch lifecycle
 1. **Create.** `accio-brief` runs `git worktree add <wt>/<ID> -b story/<ID>` from base, or from `story/<parent>`'s
    head for a stacked child. If the branch already exists (a re-run), it reuses the branch and rebases it on base,
-   or on the parent's current head.
-2. **Rebase conflict.** If the rebase conflicts, the conflict goes into the brief and `house-elf` resolves it as
-   part of the story. If it still fails, the story goes to *Blocked*.
+   or on the parent's current head. Work an earlier build left uncommitted is first committed as a checkpoint.
+2. **Rebase conflict.** `accio-brief` starts the rebase, because `curfew` lets `house-elf` run only
+   `git rebase --continue`, `--abort` and `--skip`. If it conflicts, `accio-brief` leaves the rebase in progress and
+   the brief names the conflicted files and `git rebase --continue`; `house-elf` resolves the files and continues
+   it as part of the story. If the rebase fails for another reason, `accio-brief` exits with one plain question and
+   the story goes to *Blocked*.
 3. **Integrate.** At `owl`, `accio-merge` creates `<wt>/integrate-<N>` on `accio/integrate-<N>` from base, merges
    the accepted stories there, and fast-forwards main only after the full checks pass.
 4. **Remove.** After the fast-forward, `accio-merge` runs `git worktree remove` and `git branch -d` for each merged

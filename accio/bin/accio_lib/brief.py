@@ -4,8 +4,10 @@
 - Branch exists: reuse it (re-adding a removed or hand-deleted worktree) and rebase it. The commit it was built on
   is kept in `run/<ID>/base`, so the rebase is `--onto <new> <old>` and a rewritten parent's old commits are never
   replayed into its child.
-- Never loses work: a rebase already in progress, uncommitted work, or a conflict is written into the brief and the
-  branch is left as it was; only a rebase this run started is ever aborted.
+- Never loses work: uncommitted work is committed as a checkpoint first. A conflict leaves the rebase in progress
+  and the brief names the files and `git rebase --continue` (house-elf finishes it; curfew allows only
+  --continue, --abort and --skip). A rebase already in progress is left alone. Any other failure aborts the rebase
+  this run started and raises a BriefError whose message is one question (brew then blocks the story).
 - Existing code to reuse: the story's `## Reuse` section, plus its listed files that already exist at `onto`.
 - Paths in shell commands are shell-quoted (curfew's `cd <worktree> &&` check expects that form).
 - A relative `core.hooksPath` (husky) is shared with the worktree, so accio's git hooks run there too (S-012).
@@ -122,25 +124,37 @@ def rebase(worktree, onto, old_base=None):
     quoted = shlex.quote(str(worktree))
     usable_old = old_base and _git(worktree, "merge-base", "--is-ancestor", old_base, "HEAD", check=False).returncode == 0
     args = ("rebase", "-q", "--onto", onto, old_base) if usable_old else ("rebase", "-q", onto)
-    command = f"git -C {quoted} rebase --onto {onto} {old_base}" if usable_old else f"git -C {quoted} rebase {onto}"
+    continue_command = f"git -C {quoted} rebase --continue"
     if _rebase_in_progress(worktree):
-        return (f"A rebase in progress was found in the worktree. Finish it first: resolve, then run "
-                f"`git -C {quoted} rebase --continue` (or `--abort`), and then run `{command}`.",)
+        return (f"A rebase in progress was found in the worktree. Resolve the conflicts, `git add` the files, and "
+                f"run `{continue_command}` (or `git -C {quoted} rebase --abort`).",)
     if _git(worktree, "status", "--porcelain").stdout.strip():
-        return (f"The worktree has uncommitted changes, so it was not rebased onto {onto[:12]}. Commit them as a "
-                f"checkpoint, then run `{command}`.",)
+        _commit_checkpoint(worktree)
     if _git(worktree, "merge-base", "--is-ancestor", onto, "HEAD", check=False).returncode == 0:
         return ()
     result = _git(worktree, *args, check=False)
     if result.returncode == 0:
         return ()
     conflicted = _git(worktree, "diff", "--name-only", "--diff-filter=U", check=False).stdout.split()
+    if conflicted and _rebase_in_progress(worktree):
+        return (f"Rebase conflict: rebasing onto {onto[:12]} conflicts in {', '.join(conflicted)}, and the rebase is "
+                f"in progress in the worktree. Resolve each file, `git add` it, run `{continue_command}`, and "
+                f"repeat until it finishes, then go on.",)
     if _rebase_in_progress(worktree):
         _git(worktree, "rebase", "--abort", check=False)
-    if not conflicted:
-        return (f"Rebasing onto {onto[:12]} failed: {result.stderr.strip()}. Run `{command}` and fix what it reports.",)
-    return (f"Rebase conflict: rebasing onto {onto[:12]} conflicts in {', '.join(conflicted)}. Run `{command}`, "
-            f"resolve the conflicts, run `git -C {quoted} rebase --continue`, then go on.",)
+    reason = " ".join(result.stderr.split()) or "git gave no reason"
+    raise BriefError(f"Rebasing {branch_of(worktree)} onto {onto[:12]} failed ({reason}). "
+                     f"Can you look at the branch and say how to go on?")
+
+
+def branch_of(worktree):
+    return _git(worktree, "branch", "--show-current", check=False).stdout.strip() or "the story branch"
+
+
+def _commit_checkpoint(worktree):
+    """Keep an earlier build's uncommitted work: commit it so the rebase can run."""
+    _git(worktree, "add", "-A")
+    _git(worktree, "commit", "-q", "-m", "checkpoint: uncommitted work from an earlier build")
 
 
 def scoped_checks(checks, files):
