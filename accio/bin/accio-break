@@ -1,0 +1,61 @@
+#!/usr/bin/env python3
+"""accio-break: boggart's runner (S-041). It runs repro code in a throwaway worktree, as checks do.
+
+  accio-break <ID> try <file>   copy one repro into run/<ID>/boggart/repros/, run it on the story's head (twice) and
+                                base in throwaway worktrees with config's `breaker.command` (`{file}` is its path),
+                                and print its verdict as JSON
+  accio-break <ID> verify       judge every repro in run/<ID>/boggart/repros/, print the verdicts as JSON and write
+                                run/<ID>/boggart/verdicts.json; after a fix round, kept repros are rerun and one
+                                that now passes is "fixed"
+
+Verdicts: kept (a regression, with its claim and source), dropped, pre-existing, fixed. With no `breaker` command in
+config.json both actions skip and log it.
+"""
+import argparse
+import json
+import pathlib
+import sys
+
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+
+from accio_lib import breaker, config, paths, story  # noqa: E402
+
+
+def _context(story_id):
+    main, accio = paths.main_root(), paths.accio_dir()
+    if main is None or accio is None:
+        raise breaker.BreakerError("no .accio/ folder in this repo")
+    if not story.STORY_ID.match(story_id):
+        raise breaker.BreakerError(f"{story_id} isn't a story ID")
+    worktree = paths.worktree_root(main) / story_id
+    if not worktree.is_dir():
+        raise breaker.BreakerError(f"there is no worktree for {story_id} at {worktree}")
+    story_file = accio / "stories" / f"{story_id}.md"
+    dod_ids = breaker.dod_ids_of(story.parse(story_file)) if story_file.is_file() else frozenset()
+    return worktree, accio / "run" / story_id, config.load(accio), dod_ids
+
+
+def main(argv=None):
+    parser = argparse.ArgumentParser(prog="accio-break", description=__doc__,
+                                     formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("id")
+    parser.add_argument("action", choices=("try", "verify"))
+    parser.add_argument("file", nargs="?", help="the repro file (try)")
+    args = parser.parse_args(argv)
+    try:
+        if (args.action == "try") != bool(args.file):
+            raise breaker.BreakerError("`try` takes a repro file; `verify` takes none")
+        worktree, run_dir, settings, dod_ids = _context(args.id)
+        if args.action == "try":
+            reply = breaker.try_repro(worktree, run_dir, settings, dod_ids, args.file)
+        else:
+            reply = breaker.verify(worktree, run_dir, settings, dod_ids)
+    except (breaker.BreakerError, config.ConfigError, story.StoryError) as error:
+        print(f"accio-break: {error}", file=sys.stderr)
+        return 1
+    print(json.dumps(reply, indent=2))
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
