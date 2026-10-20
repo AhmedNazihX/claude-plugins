@@ -47,6 +47,23 @@ def alive(pid):
     return True
 
 
+# S-054: a test server that never calls socket.getfqdn (http.server's HTTPServer does, a slow reverse DNS
+# lookup on macOS CI) and prints its first line at once. It serves the current directory.
+SERVER_SCRIPT = """import socketserver
+import sys
+from http.server import SimpleHTTPRequestHandler
+
+
+class Server(socketserver.TCPServer):
+    allow_reuse_address = True
+
+
+with Server(("127.0.0.1", int(sys.argv[1])), SimpleHTTPRequestHandler) as server:
+    print("Serving on 127.0.0.1:" + sys.argv[1], flush=True)
+    server.serve_forever()
+"""
+
+
 class PreviewTest(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
@@ -56,7 +73,9 @@ class PreviewTest(unittest.TestCase):
         self.run_dir.mkdir(parents=True)
         self.port = free_port()
         self.url = f"http://127.0.0.1:{self.port}/marker.txt"
-        self.serve = f"python3 -m http.server {self.port} --bind 127.0.0.1"
+        self.server_file = pathlib.Path(self.tmp.name).resolve() / "serve.py"
+        self.server_file.write_text(SERVER_SCRIPT)
+        self.serve = f"python3 -u {self.server_file} {self.port}"
         self.configure(f"sh -c '{self.serve} & wait'")
         for story_id in ("S-001", "S-002"):
             write(self.worktree(story_id) / "marker.txt", f"hello from {story_id}\n")
@@ -77,6 +96,33 @@ class PreviewTest(unittest.TestCase):
     def preview(self, story_id, action, *extra, env=None):
         return subprocess.run([sys.executable, str(PREVIEW), story_id, action, *extra], cwd=self.root,
                               capture_output=True, text=True, timeout=60, env={**os.environ, **(env or {})})
+
+    def test_S_054_1_the_test_server_serves_files_without_a_reverse_dns_lookup(self):
+        self.assertNotIn("getfqdn", SERVER_SCRIPT)
+        guard = ("import socket, runpy, sys; "
+                 "socket.getfqdn = lambda *a, **k: sys.exit('getfqdn called'); "
+                 f"sys.argv = ['serve.py', '{self.port}']; runpy.run_path('{self.server_file}', run_name='__main__')")
+        proc = subprocess.Popen([sys.executable, "-c", guard], cwd=self.worktree("S-001"),
+                                stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        try:
+            self.assertTrue(wait_until(lambda: port_is_open(self.port)))
+            with DIRECT.open(self.url, timeout=5) as reply:
+                self.assertEqual(reply.read().decode(), "hello from S-001\n")
+        finally:
+            proc.kill()
+            proc.communicate()
+
+    def test_S_054_2_the_test_server_writes_its_first_line_unbuffered(self):
+        self.assertIn("python3 -u ", self.serve)
+        log = pathlib.Path(self.tmp.name) / "out.log"
+        with open(log, "w") as out:
+            proc = subprocess.Popen(["python3", "-u", str(self.server_file), str(self.port)],
+                                    cwd=self.worktree("S-001"), stdout=out, stderr=subprocess.STDOUT)
+        try:
+            self.assertTrue(wait_until(lambda: "Serving" in log.read_text()))
+        finally:
+            proc.kill()
+            proc.wait()
 
     def test_S_053_1_the_check_connects_directly_whatever_the_proxy_settings(self):
         from http.server import BaseHTTPRequestHandler, HTTPServer
