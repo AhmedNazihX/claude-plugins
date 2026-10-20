@@ -15,6 +15,9 @@ export const meta = {
 // left in Doing resumes at check or prepare. portkey takes the run lock at load and releases it in `finally`;
 // every step refreshes it (a board move, or prefect's and house-elf's `accio-board refresh`). The run returns the
 // build table only.
+// Failed checks (a command, an untagged DoD line, a weak test, an out-of-bounds file) go to a fix round with
+// prefect's check-findings.md, not to the user; check fixes and review fixes share MAX_FIX_ROUNDS. A change in the
+// main checkout or at origin can't be fixed that way and blocks.
 // A story that passes its checks is reviewed by its panel (Quick: examiner alone; else examiner and professor;
 // auror on a risky path, also when only a fix touches one). Findings get at most 2 fix rounds, each a fresh house-elf (one tier up in round 2), a
 // re-check, and a re-review of only the fix diff by the reviewers that raised them, plus auror whenever the
@@ -73,6 +76,7 @@ const CHECK_SCHEMA = {
     out_of_bounds: { type: 'array', items: { type: 'string' } }, untagged: { type: 'array', items: { type: 'string' } },
     main_changed: { type: 'array', items: { type: 'string' } }, remote_moved: { type: 'boolean' },
     weak_tests: { type: 'array', items: { type: 'string' } }, error: { type: 'string' },
+    findings: { type: 'string' }, check_status: { type: 'object' },
   },
 }
 const PACKAGE_SCHEMA = {
@@ -228,12 +232,38 @@ function checkQuestion(result) {
     result.weak_tests && result.weak_tests.length && `these tests miss a mutant: ${result.weak_tests.join(', ')}`,
   ].filter(Boolean)
   const why = parts.length ? parts.join('; ') : 'they failed without saying which (see its report)'
-  return `The checks stopped it: ${why}. Should it be fixed and built again?`
+  return `the checks stopped it: ${why}`
 }
 
-function checkStop(result) {
+const hasAny = (list) => Boolean(list && list.length)
+
+// null when the checks passed or were skipped; a stop for a broken check step or a failure no fix round can undo (the
+// main checkout or origin changed); else {fix: path}, the findings file for a fix round (S-034/5).
+function checkStop(story, result) {
   if (!result || result.error) return stop(`The check step failed (${(result && result.error) || 'no answer'}). Try again?`)
-  return result.skipped || result.pass ? null : stop(checkQuestion(result))
+  if (result.skipped || result.pass) return null
+  const fixable = hasAny(result.failing) || hasAny(result.out_of_bounds) || hasAny(result.untagged) || hasAny(result.weak_tests)
+  if (!fixable || hasAny(result.main_changed) || result.remote_moved) {
+    return stop(`${checkQuestion(result)}. A fix round can't undo that: fix it by hand, or change the story?`)
+  }
+  return { fix: result.findings || `.accio/run/${story.id}/check-findings.md`, why: checkQuestion(result) }
+}
+
+const tierFor = (model, fixes) => (fixes === MAX_FIX_ROUNDS ? TIER_UP[model] : model)
+
+// Check, and while the checks fail run a fix round and check again. `fixes` counts the rounds used so far, check and
+// review fixes together (S-034/7). Returns {fixes, ruling, skipped}, or a stop.
+async function checkAndFix(story, worktree, model, fixes, earlier) {
+  const result = await check(story, worktree, fixes)
+  const failed = checkStop(story, result)
+  if (!failed) return { fixes, ruling: earlier, skipped: Boolean(result.skipped) }
+  if (!failed.fix) return failed
+  if (fixes >= MAX_FIX_ROUNDS) {
+    return stop(`Findings remain after ${MAX_FIX_ROUNDS} fix rounds: ${failed.why}. Fix them by hand, or change the story?`)
+  }
+  const fixed = await fixRound(story, worktree, fixes + 1, [failed.fix], tierFor(model, fixes + 1), earlier)
+  if (fixed.stop) return fixed
+  return checkAndFix(story, worktree, model, fixes + 1, fixed.ruling)
 }
 
 function panel(story, risky) {
@@ -269,11 +299,12 @@ async function review(story, names, pkg, round, ruling) {
 }
 
 // Review, then at most MAX_FIX_ROUNDS fix rounds (S-020/1, /2, /5). Returns a stop, or {} when the story is READY.
-async function reviewAndFix(story, worktree, model, earlier) {
+async function reviewAndFix(story, worktree, model, earlier, usedFixes) {
   let pkg = await packageFor(story, 0, null)
   if (pkg.stop) return pkg
   let names = panel(story, pkg.risky)
   let ruling = earlier
+  let fixes = usedFixes
   for (let round = 0; ; round += 1) {
     const verdicts = await review(story, names, pkg, round, ruling)
     const silent = verdicts.find((each) => !each.reply)
@@ -281,16 +312,17 @@ async function reviewAndFix(story, worktree, model, earlier) {
     const failing = verdicts.filter((each) => each.reply.verdict !== 'pass')
     if (!failing.length) return {}
     const findings = failing.map((each) => each.reply.path)
-    if (round === MAX_FIX_ROUNDS) {
+    if (fixes >= MAX_FIX_ROUNDS) {
       return stop(`Findings remain after ${MAX_FIX_ROUNDS} fix rounds (${findings.join(', ')}). Fix them by hand, ` +
         'or change the story?')
     }
-    const tier = round + 1 === MAX_FIX_ROUNDS ? TIER_UP[model] : model
-    const fixed = await fixRound(story, worktree, round + 1, findings, tier, ruling)
+    fixes += 1
+    const fixed = await fixRound(story, worktree, fixes, findings, tierFor(model, fixes), ruling)
     if (fixed.stop) return fixed
-    ruling = fixed.ruling
-    const failed = checkStop(await check(story, worktree, round + 1))
-    if (failed) return failed
+    const rechecked = await checkAndFix(story, worktree, model, fixes, fixed.ruling)
+    if (rechecked.stop) return rechecked
+    ruling = rechecked.ruling
+    fixes = rechecked.fixes
     pkg = await packageFor(story, round + 1, pkg.head)
     if (pkg.stop) return pkg
     names = failing.map((each) => each.name)
@@ -316,11 +348,10 @@ async function runStory(story) {
     if (built.stop) return blocked(worktree, built)
     ruling = built.ruling
   }
-  const result = await check(story, worktree, 0)
-  if (result && result.skipped && !result.error) return record(story, worktree, 'READY')  // passed review before
-  const failed = checkStop(result)
-  if (failed) return blocked(worktree, failed)
-  const reviewed = await reviewAndFix(story, worktree, model, ruling)
+  const checked = await checkAndFix(story, worktree, model, 0, ruling)
+  if (checked.stop) return blocked(worktree, checked)
+  if (checked.skipped && checked.fixes === 0) return record(story, worktree, 'READY')  // passed review before
+  const reviewed = await reviewAndFix(story, worktree, model, checked.ruling, checked.fixes)
   return reviewed.stop ? blocked(worktree, reviewed) : record(story, worktree, 'READY')
 }
 

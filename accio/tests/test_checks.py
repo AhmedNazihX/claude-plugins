@@ -389,6 +389,76 @@ class MutationAuditTest(CheckTestBase):
         self.assertIn("{diff}", result.stderr)
 
 
+class CheckFindingsTest(CheckTestBase):
+    """S-034: failed checks are written as findings in run/<ID>/check-findings.md, for a fix round."""
+
+    def findings(self):
+        return (self.accio / "run" / "S-001" / "check-findings.md").read_text(encoding="utf-8")
+
+    def configure(self, command, extra=None):
+        write(self.accio / "config.json", json.dumps({"checks": [{"command": command, "glob": "**/*.py"}], **(extra or {})}))
+        self.check("S-001", "snapshot")
+
+    def test_S_034_1_one_finding_per_failing_command_with_the_last_2000_characters(self):
+        write(self.accio / "config.json", json.dumps({"checks": [
+            {"command": "echo first; exit 3", "glob": "**/*.py"},
+            {"command": "python3 -c \"print('x' * 3000 + 'END'); raise SystemExit(1)\"", "glob": "**/*.py"}]}))
+        self.check("S-001", "snapshot")
+        self.change({"src/a.py": "value = 2\n", "tests/test_a.py": "# S-001/1 S-001/3\n"})
+        reply = self.check("S-001")
+        text = self.findings()
+        self.assertEqual(reply["findings"], str(self.accio / "run" / "S-001" / "check-findings.md"))
+        self.assertIn("## check-1", text)
+        self.assertIn("## check-2", text)
+        self.assertNotIn("## check-3", text)
+        self.assertIn("echo first; exit 3", text)
+        self.assertIn("first", text)
+        self.assertIn("xEND", text)
+        self.assertNotIn("x" * 2001, text)
+
+    def test_S_034_1_a_passing_check_writes_no_file(self):
+        self.configure("true")
+        self.change({"src/a.py": "value = 2\n", "tests/test_a.py": "# S-001/1 S-001/3\n"})
+        reply = self.check("S-001")
+        self.assertNotIn("findings", reply)
+        self.assertFalse((self.accio / "run" / "S-001" / "check-findings.md").exists())
+
+    def test_S_034_2_an_untagged_dod_line_is_a_finding(self):
+        self.configure("true")
+        self.change({"src/a.py": "value = 2\n", "tests/test_a.py": "# S-001/1\n"})
+        self.check("S-001")
+        self.assertRegex(self.findings(), r"## check-1 \[open\] untagged DoD line: S-001/3")
+
+    def test_S_034_3_a_weak_test_is_a_finding(self):
+        script = self.repo.parent / "fake-mutation-tool.py"
+        write(script, "print('src/a.py:1: replaced 2 with 3, no test failed')\n")
+        self.configure("true", {"mutation": {"command": f"{sys.executable} {script} {{diff}}"}})
+        self.change({"src/a.py": "value = 2\n", "tests/test_a.py": "# S-001/1 S-001/3\n"})
+        self.check("S-001")
+        self.assertRegex(self.findings(), r"## check-1 \[open\] weak test: src/a.py:1: replaced 2 with 3")
+
+    def test_S_034_4_an_out_of_bounds_file_is_a_finding(self):
+        self.configure("true")
+        self.change({"src/a.py": "value = 2\n", "src/other.py": "x = 1\n", "tests/test_a.py": "# S-001/1 S-001/3\n"})
+        self.check("S-001")
+        self.assertRegex(self.findings(), r"## check-1 \[open\] file outside the story: src/other.py")
+
+    def test_S_034_6_the_re_check_marks_each_earlier_id_resolved_or_open(self):
+        write(self.accio / "config.json", json.dumps({"checks": [
+            {"command": "test -f tests/fixed.txt", "glob": "**/*.py"}, {"command": "exit 4", "glob": "**/*.py"}]}))
+        self.check("S-001", "snapshot")
+        self.change({"src/a.py": "value = 2\n", "tests/test_a.py": "# S-001/1 S-001/3\n"})
+        self.check("S-001")
+        self.assertRegex(self.findings(), r"## check-2 \[open\] failing command: test -f tests/fixed.txt")
+        self.change({"tests/fixed.txt": ""})
+        reply = self.check("S-001")
+        text = self.findings()
+        self.assertRegex(text, r"## check-2 \[resolved\] failing command: test -f tests/fixed.txt")
+        self.assertRegex(text, r"## check-1 \[open\] failing command: exit 4")
+        self.assertEqual(reply["check_status"], {"check-1": "open", "check-2": "resolved"})
+        self.assertFalse(reply["pass"])
+
+
 class AgentFilesTest(unittest.TestCase):
     def front(self, name):
         text = (AGENTS / f"{name}.md").read_text(encoding="utf-8")

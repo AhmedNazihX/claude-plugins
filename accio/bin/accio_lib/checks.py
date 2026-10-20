@@ -75,6 +75,8 @@ AUDITED = "audited"
 AUDIT_FAILED = "failed"
 SURVIVOR = re.compile(r"^\S+:\d+(?:\D|$)")
 DIFF_NAME = "story.diff"
+FINDINGS_NAME = "check-findings.md"
+FINDING_HEADING = re.compile(r"^## (?P<id>check-\d+) \[(?:open|resolved)\] (?P<title>.+)$", re.MULTILINE)
 
 
 class CheckError(Exception):
@@ -343,19 +345,76 @@ def audit(worktree, start, run_dir, mutation, deadline):
     return AUDITED, [line.strip() for line in output.splitlines() if SURVIVOR.match(line.strip())], ""
 
 
+def _one_line(text):
+    return " ".join(text.split())
+
+
+def _failures(outputs, bounds, untagged_ids, weak_tests):
+    """[(title, detail)] for every finding a check raised: failing commands first, then the scripted checks."""
+    tail = merge.OUTPUT_TAIL_CHARS
+    return ([(f"failing command: {_one_line(command)}",
+              f"Command: `{command}`\n\nLast {tail} characters of its output:\n\n```\n{output[-tail:]}\n```")
+             for command, output in sorted(outputs.items())]
+            + [(f"untagged DoD line: {tag}", f"No test code file carries the tag {tag}. Add a test and tag it.")
+               for tag in untagged_ids]
+            + [(f"weak test: {line}", f"A mutant survived: {line}. Strengthen the test so it fails on it.")
+               for line in weak_tests]
+            + [(f"file outside the story: {path}", f"{path} is not in the story's files. Undo the change.")
+               for path in bounds])
+
+
+def _earlier_findings(path):
+    """[(id, title)] from the check-findings file a previous check wrote; [] when there is none."""
+    try:
+        text = path.read_text(encoding="utf-8")
+    except OSError:
+        return []
+    return [(match["id"], match["title"]) for match in FINDING_HEADING.finditer(text)]
+
+
+def write_findings(run_dir, failures):
+    """Write run/<ID>/check-findings.md and return (its path or None, {id: status}).
+
+    A finding keeps its id from one check to the next: one the new check no longer raises is `resolved`, one it
+    still raises is `open`, and a new one gets the next id. Nothing is written when nothing failed, now or before."""
+    path = pathlib.Path(run_dir) / FINDINGS_NAME
+    earlier = _earlier_findings(path)
+    ids = {title: finding_id for finding_id, title in earlier}
+    next_number = 1 + max((int(finding_id.rsplit("-", 1)[1]) for finding_id, _ in earlier), default=0)
+    sections, status = [], {}
+    for title, detail in failures:
+        if title not in ids:
+            ids[title] = f"check-{next_number}"
+            next_number += 1
+        status[ids[title]] = "open"
+        sections.append((ids[title], f"## {ids[title]} [open] {title}\n\n{detail}\n"))
+    for finding_id, title in earlier:
+        if finding_id not in status:
+            status[finding_id] = "resolved"
+            sections.append((finding_id, f"## {finding_id} [resolved] {title}\n"))
+    if not sections:
+        return None, {}
+    sections.sort(key=lambda section: int(section[0].rsplit("-", 1)[1]))
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("# Check findings\n\n" + "\n".join(text for _, text in sections), encoding="utf-8")
+    return str(path), status
+
+
 def run(main, worktree, parsed_story, start, settings, before, run_dir):
     """prefect's reply (DESIGN § 12.5) for a story's worktree, its diff start and the snapshot taken before it."""
     deadline = time.monotonic() + CHECK_TIMEOUT_SECONDS
     changed = changed_files(worktree, start)
-    failing = sorted(_run_within_budget(worktree, scoped_to_diff(settings["checks"], changed), deadline))
+    outputs = _run_within_budget(worktree, scoped_to_diff(settings["checks"], changed), deadline)
     audited, weak_tests, audit_output = audit(worktree, start, run_dir, settings.get("mutation"), deadline)
     main_changed, remote_moved = compare(before, snapshot(main, settings["base_branch"]),
                                          settings.get("snapshot_skip", ()), pathlib.Path(run_dir).name)
-    reply = {"failing": failing, "skipped": False,
-             "out_of_bounds": out_of_bounds(changed, parsed_story.meta.get("files", ())),
-             "untagged": untagged(parsed_story.dod, test_texts(worktree)), "weak_tests": weak_tests,
-             "audit": audited, "audit_output": audit_output, "main_changed": main_changed,
-             "remote_moved": remote_moved}
-    passed = not (failing or reply["out_of_bounds"] or reply["untagged"] or weak_tests or main_changed
-                  or remote_moved)
+    bounds = out_of_bounds(changed, parsed_story.meta.get("files", ()))
+    missing_tags = untagged(parsed_story.dod, test_texts(worktree))
+    reply = {"failing": sorted(outputs), "skipped": False, "out_of_bounds": bounds, "untagged": missing_tags,
+             "weak_tests": weak_tests, "audit": audited, "audit_output": audit_output,
+             "main_changed": main_changed, "remote_moved": remote_moved}
+    findings, check_status = write_findings(run_dir, _failures(outputs, bounds, missing_tags, weak_tests))
+    if findings:
+        reply.update({"findings": findings, "check_status": check_status})
+    passed = not (outputs or bounds or missing_tags or weak_tests or main_changed or remote_moved)
     return {"pass": passed, **reply}

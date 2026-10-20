@@ -32,5 +32,8 @@ Reply with JSON only. If a script fails, reply `{"error": "<its message>"}`.
 
 Reply for step 3: `{"pass": bool, "failing": [check], "skipped": bool, "out_of_bounds": [path],
 "untagged": [dod-id], "weak_tests": [file:line], "main_changed": [path], "remote_moved": bool}`, plus `audit` and
-`audit_output` as `accio-check` gives them.
+`audit_output` as `accio-check` gives them. When checks fail, `accio-check` writes `.accio/run/<ID>/check-findings.md`
+(one finding per failing command, untagged DoD line, weak test and out-of-bounds file, ids `check-1…`, each marked
+`open` or `resolved` on a re-check) and adds `"findings": <path>` and `"check_status": {id: status}` to its JSON:
+return them as they are. The workflow sends that file to a fix round.
 Reply for step 7: `{"done": true}`.

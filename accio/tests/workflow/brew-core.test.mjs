@@ -4,7 +4,7 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { runWorkflow, happy, story, sleep } from './stub.mjs'
+import { runWorkflow, happy, story, sleep, fail } from './stub.mjs'
 
 const AGENTS = join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'agents')
 const labels = (calls) => calls.map((call) => call.label)
@@ -51,7 +51,7 @@ test('S-019/3 a child waits for its parent and its slot goes to another story', 
 test('S-019/4 a child of a BLOCKED parent never starts', async () => {
   const stories = [story('S-001'), story('S-002', { parents: ['S-001'] })]
   const { result, calls } = await runWorkflow('brew', happy(stories, {
-    'S-001 check': async () => ({ pass: false, failing: ['npm test'] }),
+    check: async () => ({ pass: false, failing: ['npm test'] }),
   }))
   assert.deepEqual(steps(calls, 'S-002'), [])
   assert.match(result, /S-001 Story S-001\s+BLOCKED/)
@@ -61,7 +61,7 @@ test('S-019/4 a child of a BLOCKED parent never starts', async () => {
 
 test('a blocked story\'s question goes to the main checkout, never into the worktree', async () => {
   const { calls } = await runWorkflow('brew', happy([story('S-001')], {
-    'S-001 check': async () => ({ pass: false, failing: ['npm test'] }),
+    check: async () => ({ pass: false, failing: ['npm test'] }),
   }))
   const prompt = calls.find((call) => call.label === 'S-001 outcome').prompt
   assert.match(prompt, /\.accio\/run\/questions\/S-001\.md in the main checkout/)
@@ -87,7 +87,7 @@ test('S-019/6 a story a crash left in Doing resumes at check or prepare', async 
 test('S-019/7 the run returns the build table only', async () => {
   const stories = [story('S-001', { title: 'Password reset email' }), story('S-002', { title: 'Reset token expiry' })]
   const { result } = await runWorkflow('brew', happy(stories, {
-    'S-002 check': async () => ({ pass: false, untagged: ['S-002/1'] }),
+    check: async (call, id) => (id === 'S-002' ? { pass: false, untagged: ['S-002/1'] } : { pass: true, failing: [] }),
   }))
   assert.equal(typeof result, 'string')
   assert.equal(result, [
@@ -220,4 +220,64 @@ test('S-015/4 a load step that returns wip 1 never has two stories in progress a
   })
   assert.equal(peak, 1)
   assert.equal(calls.filter((call) => call.label.endsWith(' prepare')).length, 3)
+})
+
+// --- S-034: check failures go to a fix round ----------------------------------------------------------------------
+
+const FINDINGS = '.accio/run/S-001/check-findings.md'
+
+test('S-034/5 failed checks start a fix round with --fix pointing at check-findings.md, and the re-check passes', async () => {
+  const { result, calls } = await runWorkflow('brew', happy([story('S-001')], {
+    'S-001 check': async () => ({ pass: false, failing: ['npm test'], findings: FINDINGS }),
+  }))
+  assert.deepEqual(steps(calls, 'S-001').slice(0, 6), ['prepare', 'implement', 'check', 'fix-brief', 'fix', 'check'])
+  const fixBrief = calls.find((call) => call.label === 'S-001 fix-brief r1')
+  assert.match(fixBrief.prompt, new RegExp(`--fix ${FINDINGS.replaceAll('.', '\\.')}`))
+  assert.match(result, /S-001 Story S-001\s+READY/)
+})
+
+test('S-034/5 each failing kind (untagged, weak test, out of bounds) goes to a fix round too', async () => {
+  for (const reply of [{ untagged: ['S-001/2'] }, { weak_tests: ['a.py:1: x'] }, { out_of_bounds: ['x.py'] }]) {
+    const { calls } = await runWorkflow('brew', happy([story('S-001')], {
+      'S-001 check': async () => ({ pass: false, ...reply }),
+    }))
+    assert.ok(labels(calls).includes('S-001 fix r1'), JSON.stringify(reply))
+  }
+})
+
+test('S-034/5 a main checkout change or a moved origin is no fix round: it blocks with a reason', async () => {
+  const { calls, result } = await runWorkflow('brew', happy([story('S-001')], {
+    check: async () => ({ pass: false, main_changed: ['src/x.py'], remote_moved: true }),
+  }))
+  assert.ok(!labels(calls).includes('S-001 fix r1'))
+  assert.match(result, /S-001 Story S-001\s+BLOCKED/)
+  assert.match(calls.find((call) => call.label === 'S-001 outcome').prompt, /main checkout changed during it: src\/x\.py/)
+})
+
+test('S-034/7 check fixes and review fixes share 2 rounds, then the story blocks', async () => {
+  const stillFailing = async () => ({ pass: false, failing: ['npm test'] })
+  const { calls, result } = await runWorkflow('brew', happy([story('S-001')], {
+    check: stillFailing,
+    'S-001 check r1': stillFailing,
+    'S-001 check r2': stillFailing,
+  }))
+  assert.deepEqual(steps(calls, 'S-001'), ['prepare', 'implement', 'check', 'fix-brief', 'fix', 'check',
+    'fix-brief', 'fix', 'check', 'outcome'])
+  assert.match(result, /S-001 Story S-001\s+BLOCKED/)
+  assert.match(calls.find((call) => call.label === 'S-001 outcome').prompt, /after 2 fix rounds/)
+})
+
+test('S-034/7 one check fix leaves one review fix round, and a second review failure blocks', async () => {
+  const { calls, result } = await runWorkflow('brew', happy([story('S-001')], {
+    'S-001 check': async () => ({ pass: false, untagged: ['S-001/1'] }),
+    examiner: async (call, id) => fail(id, 'examiner'),
+  }))
+  assert.deepEqual(labels(calls).filter((label) => /^S-001 fix r/.test(label)), ['S-001 fix r1', 'S-001 fix r2'])
+  assert.match(result, /S-001 Story S-001\s+BLOCKED/)
+  assert.match(calls.find((call) => call.label === 'S-001 outcome').prompt, /after 2 fix rounds/)
+})
+
+test('S-034/8 brew.js never asks "Should it be fixed"', () => {
+  const source = readFileSync(join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'workflows', 'brew.js'), 'utf8')
+  assert.doesNotMatch(source, /Should it be fixed/)
 })
