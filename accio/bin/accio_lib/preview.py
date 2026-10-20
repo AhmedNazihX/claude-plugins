@@ -225,6 +225,16 @@ def start(run_dir, worktree, story_id, settings, wait=DEFAULT_WAIT, timeout=DEFA
 
 def stop(run_dir, story_id, settings):
     """Kill the preview's process group and whatever still listens on its port; remove its files and lock."""
+    with runlock.guard(run_dir):  # no start can take the lock until the port is free and the lock is gone
+        return _stop_locked(run_dir, story_id, settings)
+
+
+def _another_story_holds_lock(held, story_id):
+    return (held is not None and held.get("story") != story_id
+            and isinstance(held.get("pid"), int) and _alive(held["pid"]))
+
+
+def _stop_locked(run_dir, story_id, settings):
     state = _read_json(run_dir / story_id / STATE_NAME)
     held = _read_json(run_dir / LOCK_NAME)
     owns_lock = held is not None and held.get("story") == story_id
@@ -233,7 +243,7 @@ def stop(run_dir, story_id, settings):
     if state is not None and isinstance(state.get("pid"), int) and state["pid"] > 1:
         _kill_group(state["pid"])
     url = (state or {}).get("url") or (settings or {}).get("url")
-    if url:
-        _free_port(url)
+    if url and not _another_story_holds_lock(held, story_id):
+        _free_port(url)  # the port is another story's while it holds the lock
     _clear(run_dir, story_id)
     return True
