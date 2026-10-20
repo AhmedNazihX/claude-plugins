@@ -226,6 +226,105 @@ def _iteration_text(path, outcomes):
     return storyfiles.with_section(text, "Outcome", f"| Story | Outcome |\n|---|---|\n{body}")
 
 
+FINDING_FIELD = re.compile(r"^\s*(?:-\s+)?(id|status|severity|ruling):\s*(.*?)\s*$")
+ROUND_DIR = re.compile(r"^fix-(\d+)$")
+LINE_KEY = re.compile(r"^([^:]*):")
+BLOCK_KIND = re.compile(r"^\((accio|user)\)\s*:?\s*", re.IGNORECASE)
+LOG_HEADING = "Findings and blocks"
+
+
+def _findings_in(folder):
+    """{finding id: {status, severity, ruling}} from the *-findings.md files in a folder (findings template)."""
+    found = {}
+    for path in sorted(folder.glob("*-findings.md")):
+        try:
+            lines = path.read_text(encoding="utf-8").splitlines()
+        except (OSError, UnicodeDecodeError) as error:
+            raise OwlError(f"cannot read the findings file {path}: {error}") from error
+        current = None
+        for line in lines:
+            match = FINDING_FIELD.match(line)
+            if not match:
+                continue
+            key, value = match.groups()
+            if key == "id":
+                current = found.setdefault(value, {})
+            elif current is not None:
+                current[key] = value
+    return found
+
+
+def _finding_line(sid, fid, held, latest, has_last):
+    """The log line for one finding. `held` is [(round, fields)] for the rounds that were given it, `latest` its
+    fields in the last files (None when gone)."""
+    details = {**(held[-1][1] if held else {}), **(latest or {})}
+    head = f"{sid} {fid} {details.get('severity', 'unrated')}:"
+    status = (latest or {}).get("status", "")
+    if status == "dismissed":
+        return f"{head} dismissed: {_escaped(details.get('ruling') or 'no ruling written')}"
+    if latest is not None and status != "resolved":
+        return f"{head} open"
+    if latest is None and not has_last:
+        return f"{head} open (no later findings file to say otherwise)"
+    return f"{head} fixed in round {held[-1][0]}" if held else f"{head} fixed"
+
+
+def _rounds(folder):
+    found = []
+    for path in folder.glob("fix-*"):
+        match = ROUND_DIR.match(path.name)
+        if match and path.is_dir():
+            found.append((int(match.group(1)), _findings_in(path)))
+    return sorted(found, key=lambda pair: pair[0])
+
+
+def _finding_lines(run_dir, sid):
+    folder = run_dir / sid
+    if not folder.is_dir():
+        return []
+    rounds, last = _rounds(folder), _findings_in(folder)
+    has_last = any(folder.glob("*-findings.md"))
+    ids = dict.fromkeys([*(fid for _, found in rounds for fid in found), *last])
+    return [_finding_line(sid, fid, [(number, found[fid]) for number, found in rounds if fid in found],
+                          last.get(fid), has_last) for fid in ids]
+
+
+def _block_line(run_dir, sid):
+    text = _question(run_dir, sid)
+    first = next((line.strip() for line in text.splitlines() if line.strip()), "")
+    if not first:
+        return None
+    match = BLOCK_KIND.match(first)
+    kind = match.group(1).lower() if match else "user"
+    return f"{sid} blocked ({kind}): {_escaped(first[match.end():] if match else first)}"
+
+
+def _kept_log(text):
+    """The lines already in the iteration's log section."""
+    lines, inside = [], False
+    for line in text.splitlines():
+        if re.match(r"^#{1,2}\s", line):
+            inside = line.strip() == f"## {LOG_HEADING}"
+        elif inside and line.strip().startswith("- "):
+            lines.append(line.strip()[2:])
+    return lines
+
+
+def _log_text(accio, stories, text, extra):
+    """The iteration text with its log section: a line replaces an earlier one that starts the same way."""
+    run_dir = board.run_dir(accio)
+    ids = sorted(stories)
+    fresh = [*(line for sid in ids for line in _finding_lines(run_dir, sid)),
+             *filter(None, (_block_line(run_dir, sid) for sid in ids)),
+             *(_escaped(" ".join(line.split())) for line in extra if line.strip())]
+    merged = {}
+    for line in [*_kept_log(text), *fresh]:
+        key = LINE_KEY.match(line)
+        merged[key.group(1) if key else line] = line
+    body = "\n".join(f"- {line}" for line in merged.values()) or "none"
+    return storyfiles.with_section(text, LOG_HEADING, body)
+
+
 def _config_text(accio, allow):
     path = accio / "config.json"
     try:
@@ -277,7 +376,7 @@ def _remove_worktree(root, sid):
     return None if _git(root, *SAFE_GIT, "worktree", "remove", str(worktree)).returncode == 0 else str(worktree)
 
 
-def _texts(accio, stories, status, answers, outcomes, number):
+def _texts(accio, stories, status, answers, outcomes, number, extra=()):
     run_dir = board.run_dir(accio)
     answered, dropped = _answered(answers), dict(answers.drop)
     texts = {}
@@ -288,7 +387,7 @@ def _texts(accio, stories, status, answers, outcomes, number):
                                                dropped.get(sid))
     if number is not None:
         iteration = accio / plan.ITERATIONS / f"{number}.md"
-        texts[iteration] = _iteration_text(iteration, outcomes)
+        texts[iteration] = _log_text(accio, stories, _iteration_text(iteration, outcomes), extra)
     texts[accio / board.BOARD_NAME] = board.render(stories, {**status, **{sid: change[0] for sid, change in
                                                                          outcomes.items()}})
     commands = [command for _, command in answers.allow]
@@ -297,7 +396,7 @@ def _texts(accio, stories, status, answers, outcomes, number):
     return texts
 
 
-def _settle_run(accio, answers, outcomes):
+def _settle_run(accio, answers, outcomes, logged=False):
     """Right after the write: the run's statuses (only a crash's Doing stays), the grants for the next build, the
     question files that are answered or moot. Doing this first makes a second close refuse instead of repeating."""
     run_dir = board.run_dir(accio)
@@ -316,12 +415,15 @@ def _settle_run(accio, answers, outcomes):
     for sid, (new_status, _, _, _) in outcomes.items():
         if new_status != "blocked":  # answered, or moot: the story is done, dropped or built again
             (run_dir / QUESTIONS / f"{sid}.md").unlink(missing_ok=True)
+    if logged:  # the log holds them now; a kept question lives on in its story file
+        for path in (run_dir / QUESTIONS).glob("*.md"):
+            path.unlink()
 
 
-def _tidy(accio, answers, outcomes):
+def _tidy(accio, answers, outcomes, logged=False):
     """After the write: settle the run, clear ledger entries, remove dropped worktrees; returns leftovers."""
     try:
-        _settle_run(accio, answers, outcomes)
+        _settle_run(accio, answers, outcomes, logged)
         for sid, (_, _, _, clear) in outcomes.items():
             if clear:
                 ledger.clear(board.run_dir(accio), sid)
@@ -337,8 +439,9 @@ def _on_base(root, base):
         raise OwlError(f"the main checkout is on {branch or 'a detached HEAD'}, not {base}; switch to {base} first")
 
 
-def close(accio, answers, base, merged=(), culprit=None):
-    """Apply the batch answer after the merge; returns {iteration, outcomes, leftovers, commit, commit_error}."""
+def close(accio, answers, base, merged=(), culprit=None, lines=()):
+    """Apply the batch answer after the merge; `lines` are extra entries for the iteration's `## Findings and
+    blocks` (such as a boggart break outside the DoD). Returns {iteration, outcomes, leftovers, commit, commit_error}."""
     if runlock.is_held(board.run_dir(accio)):
         raise OwlError("a build is running (run/brew.lock); review it after it ends")
     _on_base(accio.parent, base)
@@ -349,12 +452,12 @@ def close(accio, answers, base, merged=(), culprit=None):
     iterations = plan.iterations(accio)
     number = iterations[-1][0] if iterations else None
     outcomes = _outcomes(stories, status, answers, tuple(merged), culprit)
-    texts = _texts(accio, stories, status, answers, outcomes, number)
+    texts = _texts(accio, stories, status, answers, outcomes, number, tuple(lines))
     try:
         storyfiles.write_all(texts, "the review")
     except storyfiles.WriteError as error:
         raise OwlError(str(error)) from error
-    leftovers = _tidy(accio, answers, outcomes)
+    leftovers = _tidy(accio, answers, outcomes, number is not None)
     message = COMMIT_MESSAGE.format(number=number) if number is not None else NO_ITERATION_MESSAGE
     commit, why = storyfiles.commit(accio.parent, list(map(str, texts)), message)
     return {"iteration": number, "outcomes": {sid: words for sid, (_, words, _, _) in sorted(outcomes.items())},
