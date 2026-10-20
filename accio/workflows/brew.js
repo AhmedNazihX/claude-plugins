@@ -94,7 +94,10 @@ const REVIEW_SCHEMA = {
 }
 const JUDGE_SCHEMA = {
   type: 'object',
-  properties: { kind: { type: 'string', enum: ['ruling', 'question'] }, text: { type: 'string' }, path: { type: ['string', 'null'] } },
+  properties: {
+    kind: { type: 'string', enum: ['ruling', 'question'] }, text: { type: 'string' }, path: { type: ['string', 'null'] },
+    dismisses: { type: 'array', items: { type: 'string' } },
+  },
   required: ['kind', 'text'],
 }
 const OUTCOME_SCHEMA = { type: 'object', properties: { done: { type: 'boolean' }, error: { type: 'string' } }, required: ['done'] }
@@ -111,7 +114,11 @@ async function call(prompt, opts) {
 }
 
 const failed = (reply) => !reply || Boolean(reply.error)
-const ACCIO = 'accio'  // the cause of a block that is accio's own failure, not the story's
+// The cause of a block, written as the first line of its question file (S-036/1): `code` (the story's code or checks
+// failed), `accio` (accio's own failure) or `decision` (only the user can answer).
+const CODE = 'code'
+const ACCIO = 'accio'
+const DECISION = 'decision'
 
 // accio's own agents (portkey, prefect, the reviewers, headmaster) get one more try on a null or {error} reply, labelled
 // "<ID> <step> retry" so accio-cost ties it to the story (S-035/1, /2). The second reply stands, whatever it is.
@@ -125,7 +132,7 @@ const label = (story, step, round) => `${story.id} ${step}${round ? ` r${round}`
 const rulingNote = (ruling) => (ruling ? ` The judge ruled: ${ruling}` : '')
 const addRuling = (earlier, ruling) => [earlier, ruling].filter(Boolean).join(' ')
 // A step that ends the story; `asked` when headmaster already wrote the question file.
-const stop = (question, asked = false, cause = '') => ({ stop: true, question, asked, cause })
+const stop = (question, asked = false, cause = CODE) => ({ stop: true, question, asked, cause })
 const accioStop = (question) => stop(question, false, ACCIO)
 
 function parentFlag(story) {
@@ -163,19 +170,22 @@ function judge(story, worktree, round, report, findings) {
   return callRetry(
     `Step 5, judge story ${story.id}. The implementer returned NEEDS_CONTEXT; its report: ${report || 'none'}.` +
       `${about} The story: .accio/stories/${story.id}.md; worktree: ${worktree}. Rule from the story and the ` +
-      `design, or, if only the user can answer, write one question to ${QUESTIONS}/${story.id}.md ${IN_MAIN}. The workflow ` +
-      'records the outcome. Reply {kind, text, path}.',
+      `design, or, if only the user can answer, write one question to ${QUESTIONS}/${story.id}.md ${IN_MAIN}. ` +
+      `Also write your ruling or question to .accio/run/${story.id}/ruling-r${round || 0}.md ${IN_MAIN}. The workflow ` +
+      'records the outcome. Reply {kind, text, path, dismisses}, with dismisses the ids of the findings you rule out ' +
+      '(an empty list when none).',
     { agentType: HEADMASTER, model: REVIEW_MODEL, schema: JUDGE_SCHEMA, label: label(story, 'judge', round) },
   )
 }
 
-async function record(story, worktree, outcome, question, asked, cause = '') {
+async function record(story, worktree, outcome, question, asked, cause = CODE) {
+  const first = `Make the first line of the question file exactly \`${cause}\` (the cause).`
   const blocked = asked
     ? `It is BLOCKED: move it to blocked and record fail. headmaster already wrote the question to ` +
-      `${QUESTIONS}/${story.id}.md; don't add one.`
+      `${QUESTIONS}/${story.id}.md; don't add one. ${first}`
     : `It is BLOCKED: move it to blocked, record fail, and write this question to ` +
-      `${QUESTIONS}/${story.id}.md ${IN_MAIN}: ${question}`
-  const why = cause ? ` The cause is ${cause}: it is accio's own failure, not the story's.` : ''
+      `${QUESTIONS}/${story.id}.md ${IN_MAIN}: ${question}. ${first}`
+  const why = cause === ACCIO ? ` The cause is ${cause}: it is accio's own failure, not the story's.` : ''
   const reply = await callRetry(
     `Step 7, outcome of story ${story.id}. Worktree: ${worktree}. Panel: ${story.track}. ` +
       'First compute the ledger key as in step 3 (the same worktree and panel). ' +
@@ -197,6 +207,12 @@ function settle(reply, ruling) {
   return { reply, ruling }
 }
 
+// The ruling as the later steps read it: its text, and which findings it dismisses (S-036/2).
+function rulingText(judged) {
+  const dismissed = judged.dismisses && judged.dismisses.length ? ` Dismissed findings: ${judged.dismisses.join(', ')}.` : ''
+  return `${judged.text}${dismissed}`
+}
+
 // `attempt(ruling)` runs a fresh house-elf, given the story's rulings so far. NEEDS_CONTEXT goes to headmaster once
 // (S-020/3): a ruling gets one more try and holds for the rest of the story; a question stops the story, with
 // headmaster's question file when it wrote one (S-020/4).
@@ -207,8 +223,8 @@ async function build(story, worktree, round, attempt, findings = [], earlier = '
   if (!judged || !judged.text) {
     return accioStop(`The builder (house-elf) needs context (see ${first.report || 'its report'}) and the judge (headmaster) didn't answer. Try again?`)
   }
-  if (judged.kind === 'question') return stop(judged.text, Boolean(judged.path))
-  const ruling = addRuling(earlier, judged.text)
+  if (judged.kind === 'question') return stop(judged.text, Boolean(judged.path), DECISION)
+  const ruling = addRuling(earlier, rulingText(judged))
   const again = await attempt(ruling)
   if (again && again.status === 'NEEDS_CONTEXT') {
     return stop(`The builder (house-elf) still needs context after the judge's (headmaster's) ruling; its report says what: ${again.report || 'none'}.`)

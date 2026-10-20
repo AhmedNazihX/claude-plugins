@@ -114,6 +114,50 @@ test('S-020/3 a ruling holds for the rest of the story: the reviewers and every 
   }
 })
 
+test('S-036/2 the judge is told to write run/<ID>/ruling-r<N>.md and to return dismisses; the dismissed ids reach the later steps', async () => {
+  let fixes = 0
+  const { calls } = await runWorkflow('brew', happy([story('S-001')], {
+    'S-001 examiner': async (call, id) => fail(id, 'examiner'),
+    fix: async () => ({ status: (fixes += 1) === 1 ? 'NEEDS_CONTEXT' : 'DONE', report: '/run/S-001/build-report.md' }),
+    judge: async () => ({ kind: 'ruling', text: 'The story is right.', dismisses: ['F-2'], path: null }),
+  }))
+  const judge = calls.find((call) => call.label === 'S-001 judge r1')
+  assert.match(judge.prompt, /\.accio\/run\/S-001\/ruling-r1\.md/)
+  assert.match(judge.prompt, /dismisses/)
+  assert.deepEqual(Object.keys(judge.opts.schema.properties).sort(), ['dismisses', 'kind', 'path', 'text'])
+  assert.match(calls.filter((call) => call.label === 'S-001 fix r1')[1].prompt, /F-2/)
+  assert.match(calls.find((call) => call.label === 'S-001 examiner r1').prompt, /F-2/)
+})
+
+test('S-036/2 headmaster is told to return dismisses and write the ruling file', () => {
+  const text = readFileSync(join(AGENTS, 'headmaster.md'), 'utf8')
+  assert.match(text, /dismisses/)
+  assert.match(text, /ruling-r<N>\.md/)
+})
+
+test('S-036/1 each block says its cause, code, accio or decision, as the first line of the question file', async () => {
+  const cases = [
+    ['code', { examiner: async (call, id) => fail(id, 'examiner') }],
+    ['accio', { check: async () => ({ error: 'boom' }) }],
+    ['decision', {
+      implement: async () => ({ status: 'NEEDS_CONTEXT', report: 'r' }),
+      judge: async () => ({ kind: 'question', text: 'Email or SMS?', path: null }),
+    }],
+  ]
+  for (const [cause, overrides] of cases) {
+    const { calls } = await runWorkflow('brew', happy([story('S-001')], overrides))
+    assert.match(prompt(calls, 'S-001 outcome'), new RegExp(`first line[^.]*\\b${cause}\\b`), cause)
+  }
+})
+
+test('S-036/1 a question headmaster wrote itself also gets the cause as its first line', async () => {
+  const { calls } = await runWorkflow('brew', happy([story('S-001')], {
+    implement: async () => ({ status: 'NEEDS_CONTEXT', report: 'r' }),
+    judge: async () => ({ kind: 'question', text: 'Email or SMS?', path: '.accio/run/questions/S-001.md' }),
+  }))
+  assert.match(prompt(calls, 'S-001 outcome'), /first line[^.]*\bdecision\b/)
+})
+
 test('S-020/4 a question with no question file is written by prefect instead', async () => {
   const { calls } = await runWorkflow('brew', happy([story('S-001')], {
     implement: async () => ({ status: 'NEEDS_CONTEXT', report: '/run/S-001/build-report.md' }),
