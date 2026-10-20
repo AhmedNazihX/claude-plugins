@@ -13,6 +13,10 @@
       "glob": "git-guardrails/**"
     }
   ],
+  "agent_allow": [
+    "claude --plugin-dir ./accio plugin details accio",
+    "claude plugin validate accio"
+  ],
   "snapshot_skip": [
     ".remember/**"
   ]
