@@ -203,9 +203,27 @@ def _story_text(parsed, new_status, note, question, answered, dropped):
     return text
 
 
+ROW = re.compile(r"^\|\s*(S-\d+)\s*\|(.*)\|\s*$")
+
+
+def _kept_rows(text):
+    """{story id: outcome words} from the rows already in the iteration's Outcome table."""
+    rows, inside = {}, False
+    for line in text.splitlines():
+        if re.match(r"^#{1,2}\s", line):
+            inside = line.strip() == "## Outcome"
+        match = ROW.match(line.strip()) if inside else None
+        if match:
+            rows[match.group(1)] = match.group(2).strip()
+    return rows
+
+
 def _iteration_text(path, outcomes):
-    rows = "\n".join(f"| {sid} | {words} |" for sid, (_, words, _, _) in sorted(outcomes.items()))
-    return storyfiles.with_section(path.read_text(encoding="utf-8"), "Outcome", f"| Story | Outcome |\n|---|---|\n{rows}")
+    """The iteration with this pass's rows added to the Outcome table: a story already there is replaced by id."""
+    text = path.read_text(encoding="utf-8")
+    rows = {**_kept_rows(text), **{sid: words for sid, (_, words, _, _) in outcomes.items()}}
+    body = "\n".join(f"| {sid} | {words} |" for sid, words in sorted(rows.items()))
+    return storyfiles.with_section(text, "Outcome", f"| Story | Outcome |\n|---|---|\n{body}")
 
 
 def _config_text(accio, allow):
