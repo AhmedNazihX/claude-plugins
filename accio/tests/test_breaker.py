@@ -113,6 +113,35 @@ class BreakerTest(unittest.TestCase):
         self.assertEqual(entry["verdict"], "pre-existing")
         self.assertIn("out of scope", entry["reason"])
 
+    def add_module(self):
+        write(self.worktree / "src" / "b.py", "count = 5\n")
+        commit_all(self.worktree, "story adds b")
+
+    def test_S_055_1_a_setup_error_on_base_means_the_code_is_new_so_the_break_is_kept(self):
+        self.add_module()
+        entry = self.try_repro("repro_n.py", HEADER + "from src.b import count\nassert count == 1, 'count'\n")
+        self.assertEqual(entry["verdict"], "kept")
+        self.assertIn("isn't on base", entry["reason"])
+
+    def test_S_055_1_a_crash_on_head_with_a_setup_error_on_base_is_kept(self):
+        self.add_module()
+        write(self.worktree / "src" / "b.py", "raise RuntimeError('boom')\n")
+        commit_all(self.worktree, "story breaks b")
+        entry = self.try_repro("repro_o.py", HEADER + "import src.b\n")
+        self.assertEqual(entry["verdict"], "kept")
+        self.assertIn("isn't on base", entry["reason"])
+
+    def test_S_055_2_a_failure_on_base_without_a_setup_error_is_still_pre_existing(self):
+        self.add_module()
+        entry = self.try_repro("repro_p.py", HEADER + "from src.a import value\nassert value == 99, 'never'\n")
+        self.assertEqual(entry["verdict"], "pre-existing")
+        self.assertIn("out of scope", entry["reason"])
+
+    def test_S_055_3_a_repro_importing_a_new_module_that_fails_an_assertion_is_kept_end_to_end(self):
+        self.add_module()
+        result = self.run_break("try", str(self.repro("repro_r.py", HEADER + "from src.b import count\nassert count == 1\n")))
+        self.assertEqual(result["repros"][0]["verdict"], "kept")
+
     def test_S_041_7_a_missing_or_empty_claim_is_dropped(self):
         for header in ("# source: S-001/1\n", "# claim:\n# source: S-001/1\n", "# claim: a claim\n",
                        "# claim: a claim\n# source:\n"):

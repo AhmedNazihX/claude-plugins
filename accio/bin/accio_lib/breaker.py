@@ -7,8 +7,8 @@ pass. A repro that fails is read from its output:
 - a setup error (`ImportError`, `SyntaxError`, a missing fixture or command ...) is not a break: dropped
 - an assertion (`AssertionError`, a runner's own assert line), or a traceback naming a file the story changed, is one
 
-Head runs up to twice: a pass, or a failure in only one run, drops the repro. A break that also fails on base is
-`pre-existing` (out of scope). `verify` writes `run/<ID>/boggart/verdicts.json`. It judges every repro again, also
+Head runs up to twice: a pass, or a failure in only one run, drops the repro. A break that also fails on base, for
+a reason that is not a setup error, is `pre-existing` (out of scope); a setup error on base means the code is new. `verify` writes `run/<ID>/boggart/verdicts.json`. It judges every repro again, also
 those marked `fixed` or `pre-existing` before (an old verdict is never copied); one that now passes is `fixed`.
 """
 import json
@@ -116,8 +116,11 @@ def judge(worktree, repro, command, head, base, changed):
     kind, why = _kind(outputs, changed)
     if kind in ("setup", "other"):
         return _entry(repro, DROPPED, why)
-    if not _run_at(worktree, base, repro, command)[0]:
+    base_passed, base_output = _run_at(worktree, base, repro, command)
+    if not base_passed and not SETUP_ERROR.search(base_output):
         return _entry(repro, PRE_EXISTING, "fails on base too: out of scope")
+    if not base_passed:
+        why = f"{why}; the code under test isn't on base (setup error there)"
     entry = _entry(repro, KEPT, why)
     if not entry["claim"] or not entry["source"]:
         return {**entry, "verdict": DROPPED, "reason": "no written claim quoted with its source"}
