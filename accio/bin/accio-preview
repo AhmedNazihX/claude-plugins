@@ -1,0 +1,48 @@
+#!/usr/bin/env python3
+"""accio-preview <ID> start|stop: run the story's preview (config `preview: {command, url}`) in its worktree.
+
+`start` runs the command as a detached process, records it in run/<ID>/preview.json and returns once the URL
+answers. A second `start` waits on run/preview.lock until the first preview is stopped. `stop` kills the process
+group, frees the port and removes preview.json and preview-login.json.
+"""
+import argparse
+import pathlib
+import sys
+
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+
+from accio_lib import config, paths, preview, story  # noqa: E402
+
+
+def main(argv=None):
+    parser = argparse.ArgumentParser(prog="accio-preview", description=__doc__,
+                                     formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("story_id", help="the story ID, e.g. S-012")
+    parser.add_argument("action", choices=("start", "stop"))
+    parser.add_argument("--timeout", type=int, default=preview.DEFAULT_TIMEOUT,
+                        help="seconds the URL gets to answer (start)")
+    parser.add_argument("--wait", type=int, default=preview.DEFAULT_WAIT,
+                        help="seconds to wait on run/preview.lock (start)")
+    args = parser.parse_args(argv)
+    try:
+        root, accio = paths.main_root(), paths.accio_dir()
+        if root is None or accio is None:
+            raise preview.PreviewError("no .accio/ folder in this repo")
+        if not story.STORY_ID.match(args.story_id):
+            raise preview.PreviewError(f"story ids look like S-012, got {args.story_id}")
+        settings = config.load(accio)["preview"]
+        run_dir = accio / "run"
+        if args.action == "stop":
+            stopped = preview.stop(run_dir, args.story_id, settings)
+            print(f"stopped the preview of {args.story_id}" if stopped else f"no preview of {args.story_id} running")
+            return 0
+        worktree = paths.worktree_root(root) / args.story_id
+        print(preview.start(run_dir, worktree, args.story_id, settings, wait=args.wait, timeout=args.timeout))
+    except (preview.PreviewError, config.ConfigError) as error:
+        print(f"accio-preview: {error}", file=sys.stderr)
+        return 1
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

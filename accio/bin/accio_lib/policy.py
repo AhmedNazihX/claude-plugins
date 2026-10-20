@@ -32,7 +32,7 @@ BOARD_RUN = frozenset({"ready", "status", "lock", "unlock", "move", "refresh"})
 LEDGER_USE = frozenset({"key", "check", "record"})
 SCRIPTS = {  # each Bash policy's accio scripts and the subcommands it may run (None: any)
     "scripts": {"accio-board": BOARD_RUN, "accio-brief": None, "accio-hooks": frozenset({"verify"}),
-                "accio-check": None},
+                "accio-check": None, "accio-preview": frozenset({"start", "stop"})},
     "checks": {"accio-ledger": LEDGER_USE, "accio-board": frozenset({"move", "refresh"}), "accio-check": None},
     "ledger": {"accio-ledger": frozenset({"key", "check"})},  # headmaster reads; prefect records the outcome (S-020)
 }

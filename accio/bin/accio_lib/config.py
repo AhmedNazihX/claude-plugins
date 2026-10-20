@@ -19,6 +19,7 @@ DEFAULTS = freeze({
     "paid_call_cap_usd": 0,
     "mutation": None,
     "snapshot_skip": [],
+    "preview": None,
 })
 
 
@@ -68,6 +69,17 @@ def _check_mutation(value):
     return None if "{diff}" in value["command"] else "command must contain {diff}, where the story's diff file goes"
 
 
+def _check_preview(value):
+    if value is None:
+        return None
+    shape = 'must be {"command": "<starts the app>", "url": "http://..."}'
+    if not isinstance(value, dict) or set(value) != {"command", "url"}:
+        return shape
+    if not all(isinstance(value[key], str) and value[key].strip() for key in value):
+        return shape
+    return None if value["url"].startswith(("http://", "https://")) else "url must start with http:// or https://"
+
+
 CHECKERS = {
     "base_branch": lambda v: None if isinstance(v, str) and v.strip() else "must be a branch name",
     "push_mode": lambda v: None if v in PUSH_MODES else f"must be one of {', '.join(PUSH_MODES)} (\"pr\" comes in v2)",
@@ -82,6 +94,7 @@ CHECKERS = {
     else "must be a number, 0 or more",
     "mutation": _check_mutation,
     "snapshot_skip": lambda v: None if _strings(v) else "must be a list of glob strings",
+    "preview": _check_preview,
 }
 
 
