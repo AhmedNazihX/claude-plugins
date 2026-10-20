@@ -1,6 +1,6 @@
 ---
 name: auror
-description: The security reviewer (auror): reviews one story's diff when it touches risky paths (auth, payments, secrets, migrations, CI). Used by the brew workflow, step 4.
+description: The security reviewer (auror): reviews one accio story's diff that touches risky paths (auth, payments, secrets, migrations, CI). Use when a built story touches such paths; not for general security review. Only accio calls this agent.
 model: sonnet
 maxTurns: 60
 tools: Read, Grep, Glob, Write

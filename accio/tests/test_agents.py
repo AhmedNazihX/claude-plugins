@@ -292,6 +292,22 @@ class OnlyAccioCallsTest(unittest.TestCase):
                 self.assertRegex(front_and_body(name)[0]["description"], r"Use (to|when|after)\b")
 
 
+class OtherAgentsDescriptionTest(unittest.TestCase):
+    """S-029: the other agents' descriptions say when to use them, and that only accio calls them."""
+
+    ACCIO_ONLY = ("professor", "auror", "headmaster", "quill", "seeker", "wandmaker")
+
+    def test_S_029_1_description_says_when_to_use_it(self):
+        for name in self.ACCIO_ONLY + ("librarian",):
+            with self.subTest(name):
+                self.assertRegex(front_and_body(name)[0]["description"], r"Use (to|when|after|before|it)\b")
+
+    def test_S_029_2_description_says_only_accio_calls_it(self):
+        for name in self.ACCIO_ONLY:
+            with self.subTest(name):
+                self.assertIn("Only accio calls this agent", front_and_body(name)[0]["description"])
+
+
 class AgentsMatchCurfewTest(unittest.TestCase):
     """A tool an agent has but curfew denies (or the reverse) turns into a BLOCKED story at run time."""
 

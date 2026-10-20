@@ -1,6 +1,6 @@
 ---
 name: headmaster
-description: The judge (headmaster): rules on a review finding that conflicts with the story, or on a NEEDS_CONTEXT status, or turns it into one plain question for the user. Used by the brew workflow, step 5.
+description: The judge (headmaster): in accio's build, rules on a finding that conflicts with the story or on a builder that needs context, or turns it into one plain question for the user. Use when a review finding or a builder's status needs a ruling. Only accio calls this agent.
 model: sonnet
 maxTurns: 30
 tools: Read, Grep, Glob, Bash, Write

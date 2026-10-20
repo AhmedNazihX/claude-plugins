@@ -1,6 +1,6 @@
 ---
 name: wandmaker
-description: The architect (wandmaker): proposes 2–3 designs for what the user wants, each with its trade-offs, what breaks first, and four depth questions answered. Used by the wand skill.
+description: The architect (wandmaker): proposes 2–3 designs, each with trade-offs, costs and what breaks first. Use when the user's idea needs design options. Only accio calls this agent.
 model: opus
 maxTurns: 40
 tools: Read, Grep, Glob, Write
