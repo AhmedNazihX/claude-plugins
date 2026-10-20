@@ -412,3 +412,51 @@ where the words given to models and the code disagree:
   check in part 8 settles it; if it doesn't work, the field is harmless and the part says so.
 - Does a skill's tool grant end at the user's reply (audit #10)? One owl run without `--allow-tools` would tell.
   Left for later.
+
+## Guards fail open (decision 007)
+
+### Outcome
+After this ships, a guard that can't start never blocks a tool call outside accio's build agents, while an accio
+agent still gets a deny when curfew crashes at start-up. We'd know because a test runs curfew with its library made
+unimportable and sees a deny for an `accio:*` caller and a silent exit 0 for anyone else, and `hooks/hooks.json` has
+no `onFailure`.
+
+### Who and why
+The user, who has accio installed for their whole account. S-028 gave protego, fidelius and curfew
+`"onFailure": "block"`. Those guards run in every session and project, so one start-up crash (a broken update that
+makes `from accio_lib import …` fail) would block every tool call everywhere and deny every permission prompt.
+0.6.0 is installed but not restarted into; this ships as 0.6.1 first.
+
+### Requirements
+- R1 `hooks/hooks.json` has no `onFailure` on any hook. Owner: the user (a broken guard must not freeze Claude in
+  every project).
+- R2 curfew loads accio's library inside a guard: if loading fails, it reads the hook input with the standard
+  library only, answers `deny` (naming the error) when `agent_type` starts with `accio:` on `PreToolUse`, and exits 0
+  with no output for any other caller or event. Owner: the user (keeps what S-028 was for: an accio agent never
+  waits on a permission prompt because curfew crashed).
+
+### Out of scope
+- A missing `python3` or a guard past its time limit: the call goes through, as before S-028 (decision 007).
+- protego and fidelius start-up crashes: they fail open, as before S-028.
+
+### Design
+`curfew.py` keeps its stdlib imports at the top and moves `from accio_lib import …` into a function that returns the
+modules or the error. `main` reads stdin first; on a load error it answers as R2 says, using the same JSON shape as
+`_answer`. `hooks.json` drops the four `onFailure` fields. The S-028 test in `test_scaffold.py` changes to expect no
+`onFailure` anywhere.
+
+### What we build
+1. **Guards fail open; curfew catches its own start-up crash.** Files: `accio/hooks/hooks.json`,
+   `accio/hooks/curfew.py`, `accio/tests/test_scaffold.py`, `accio/tests/test_curfew.py`. Needs: none. Risk:
+   security (a guard). Checked by: a test that no hook in `hooks.json` has `onFailure`; tests that run `curfew.py` as
+   a subprocess with `accio_lib` made unimportable (for example a copy of the hooks folder with no `bin/` beside it)
+   and expect a deny for an `accio:house-elf` `PreToolUse` call, and exit 0 with no output for a main-chat call and
+   for a `PermissionRequest`.
+
+### Evidence
+- The tests above, and `claude plugin validate accio`.
+- By hand before the restart: copy the plugin, break curfew's import, and run one `PreToolUse` input through it for
+  a main-chat caller (passes) and an accio agent (denied).
+
+### Open questions
+none
