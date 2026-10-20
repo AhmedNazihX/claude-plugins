@@ -227,6 +227,66 @@ class PreviewTest(unittest.TestCase):
         self.assertFalse((self.run_dir / "preview.lock").exists())
 
 
+    def test_S_051_1_stop_holds_the_lock_until_the_port_is_free_and_the_lock_removed(self):
+        from unittest import mock
+        from accio_lib import preview, runlock
+        self.assertEqual(self.preview("S-001", "start", "--timeout", "20").returncode, 0)
+        seen = {}
+        real_free = preview._free_port
+
+        def spy(url):
+            held = json.loads((self.run_dir / "preview.lock").read_text(encoding="utf-8"))
+            seen["lock_story"] = held["story"]
+            seen["lock_alive"] = preview._alive(held["pid"])
+            real_free(url)
+            seen["port_open_after"] = port_is_open(self.port)
+
+        killed = []
+        real_kill = preview._kill_group
+
+        def kill_spy(pgid):
+            real_kill(pgid)
+            held = json.loads((self.run_dir / "preview.lock").read_text(encoding="utf-8"))
+            killed.append(preview._alive(held["pid"]))
+            # the guard is held now: another start cannot take the lock between the kill and the clear
+            with open(self.run_dir / runlock.GUARD_NAME, "a", encoding="utf-8") as handle:
+                import fcntl
+                with self.assertRaises(BlockingIOError):
+                    fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
+
+        with mock.patch.object(preview, "_free_port", spy), mock.patch.object(preview, "_kill_group", kill_spy):
+            self.assertTrue(preview.stop(self.run_dir, "S-001", None))
+        self.assertEqual(seen["lock_story"], "S-001")
+        self.assertFalse(seen["port_open_after"])
+        self.assertTrue(killed)
+        self.assertFalse((self.run_dir / "preview.lock").exists())
+
+    def test_S_051_2_stop_frees_no_port_while_another_story_holds_the_lock(self):
+        listen = ("import socket,time;s=socket.socket();s.setsockopt(socket.SOL_SOCKET,socket.SO_REUSEADDR,1);"
+                  f"s.bind(('127.0.0.1',{self.port}));s.listen(5);time.sleep(120)")
+        other = subprocess.Popen([sys.executable, "-c", listen], start_new_session=True)
+        try:
+            self.assertTrue(wait_until(lambda: port_is_open(self.port)))
+            write(self.run_dir / "preview.lock", json.dumps({"story": "S-002", "pid": other.pid}))
+            write(self.run_dir / "S-001" / "preview.json", json.dumps({"story": "S-001", "url": self.url}))
+            self.assertEqual(self.preview("S-001", "stop").returncode, 0)
+            self.assertIsNone(other.poll(), "S-002's listener must survive S-001's stop")
+            self.assertTrue(port_is_open(self.port))
+            self.assertFalse((self.run_dir / "S-001" / "preview.json").exists())
+            held = json.loads((self.run_dir / "preview.lock").read_text(encoding="utf-8"))
+            self.assertEqual(held["story"], "S-002")
+        finally:
+            other.kill()
+            other.wait()
+
+    def test_S_051_3_two_story_hand_over_passes_twenty_times_in_a_row(self):
+        for round_number in range(20):
+            with self.subTest(round=round_number):
+                self.test_S_045_2_second_start_waits_on_the_lock_until_the_first_is_stopped()
+                self.preview("S-002", "stop")
+                self.assertTrue(wait_until(lambda: not port_is_open(self.port)))
+
+
 class PolicyTest(unittest.TestCase):
     def test_S_045_1_portkey_may_run_accio_preview(self):
         from accio_lib import policy
