@@ -26,8 +26,9 @@ $reuse
 ## Checks to run
 $checks
 
-## Scripts (absolute paths)
-$scripts
+## Scripts you may run
+- `accio-claim`
+- `accio-board refresh`
 
 ## Review notes
 $review_notes

@@ -6,7 +6,7 @@ import unittest
 
 from support import ROOT
 
-from accio_lib import policy
+from accio_lib import bashpolicy, brief, policy
 
 AGENTS = ROOT / "agents"
 REFERENCES = ROOT / "references"
@@ -127,6 +127,46 @@ class HouseElfFixRoundTest(unittest.TestCase):
         self.assertNotIn("Read only your brief", self.body())
         self.assertIn("Take your task only from your brief", self.body())
         self.assertIn("read whatever code you need", self.body())
+
+
+class HouseElfCommandsTest(unittest.TestCase):
+    """S-023: the commands house-elf's body lists are the ones curfew allows, and the body says what is denied."""
+
+    WORKTREE = pathlib.Path("/work/S-023")
+
+    def body(self):
+        return front_and_body("house-elf")[1]
+
+    def listed(self):
+        section = self.body().split("**Commands you may run.**", 1)[1].split("\n\n**", 1)[0]
+        return [line.strip()[2:].strip("`").replace("<worktree>", str(self.WORKTREE)).replace("<file>", "a.py")
+                for line in section.splitlines() if line.strip().startswith("- `")]
+
+    def judge(self):
+        ctx = policy.Context(root=pathlib.Path("/work"), accio=pathlib.Path("/work/.accio"),
+                             bin_dir=pathlib.Path("/bin"), config={"checks": []}, claims={}, statuses={})
+        return policy._house_elf_judge(self.WORKTREE, ctx)
+
+    def test_S_023_1_body_lists_commands_and_why_substitution_and_heredocs_are_denied(self):
+        body = " ".join(self.body().split())
+        self.assertGreaterEqual(len(self.listed()), 8)
+        for words in ("**Commands you may run.**", "`$(…)`", "backticks", "heredocs", "can't be checked",
+                      "git rebase --continue", "accio-board refresh"):
+            self.assertIn(words, body)
+
+    def test_S_023_2_each_listed_command_is_allowed_for_house_elf(self):
+        for command in self.listed():
+            with self.subTest(command):
+                self.assertIsNone(bashpolicy.check(command, self.judge(), start_in=self.WORKTREE))
+
+    def test_S_023_3_a_command_substitution_is_denied(self):
+        command = f'cd {self.WORKTREE} && git commit -m "$(cat msg.txt)"'
+        self.assertIn("substitution", bashpolicy.check(command, self.judge(), start_in=self.WORKTREE))
+
+    def test_S_023_4_the_brief_lists_only_claim_and_board_refresh(self):
+        text = (brief.TEMPLATES / "brief.md").read_text(encoding="utf-8")
+        section = text.split("## Scripts", 1)[1].split("\n## ", 1)[0]
+        self.assertEqual(re.findall(r"`([^`]+)`", section), ["accio-claim", "accio-board refresh"])
 
 
 class SubagentFileNamesTest(unittest.TestCase):
