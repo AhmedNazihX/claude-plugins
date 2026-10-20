@@ -1,6 +1,6 @@
 ---
 name: professor
-description: The code reviewer (professor): reviews one story's diff for correctness bugs, error handling and code that will be hard to change. Used by the brew workflow, step 4, after the spec review.
+description: The code reviewer (professor): reviews one accio story's diff for bugs, silent errors and code that will be hard to change. Use after the spec review of a built story; not for general code review. Only accio calls this agent.
 model: sonnet
 maxTurns: 60
 tools: Read, Grep, Glob, Write

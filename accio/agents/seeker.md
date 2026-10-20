@@ -1,6 +1,6 @@
 ---
 name: seeker
-description: The researcher (seeker): checks live documentation and the existing code for the facts a design depends on, each with its source, and treats anything the docs don't mention as unavailable. Used by the wand skill.
+description: The researcher (seeker): checks the facts a design rests on against live docs and the code, each with its source; what the docs don't mention counts as unavailable. Use before a design is settled. Only accio calls this agent.
 model: sonnet
 maxTurns: 40
 tools: Read, Grep, Glob, WebSearch, WebFetch, Write
