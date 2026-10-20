@@ -48,3 +48,31 @@ No hang, no load error for the agent.
 - **S-046 or S-049:** `.playwright-mcp/` in the main checkout must not count as `main_changed` (add it to the
   snapshot's skipped paths), or a mad-eye story blocks on its own logs.
 - **S-045:** unchanged.
+
+## S-050: a plugin agent under curfew. Pass; go for S-047.
+Date: 2026-10-20, by hand, after 0.7.1 (curfew from S-046) was released. Claude Code 2.1.304.
+
+**Setup.** A throwaway copy of accio (main at `9ab533f`) with a minimal `agents/mad-eye.md`, loaded with
+`claude -p --plugin-dir <copy>` (`plugin details` showed `Source: accio@inline`, 14 agents with `mad-eye`). Its
+`tools:` listed `Read` and six Playwright tools, `browser_evaluate` among them on purpose, so curfew and not `tools:`
+is the wall being tested. `.accio/config.json` had a temporary `preview` with `url: http://127.0.0.1:8765`, served
+by `python3 -m http.server` from a scratch folder. A toy workflow ran one `agent()` with `agentType: 'accio:mad-eye'`.
+Only `Workflow` was pre-allowed, so every browser call that went through was let through by curfew's `allow`, with
+no permission prompt.
+
+| Call | Expected | Result |
+|---|---|---|
+| `browser_navigate` to `http://127.0.0.1:8765/` | allowed | allowed; page title "S-050 preview" |
+| `browser_take_screenshot` to `.accio/run/S-050/mad-eye/shot.png` (absolute path) | allowed | allowed; 5.8 KB PNG showing the page's marker |
+| `browser_navigate` to `https://example.com/` | denied | denied: "browser_navigate may only go to the preview's origin … (rule: preview origin)" |
+| `browser_evaluate` | denied | denied: "browser_evaluate isn't on accio:mad-eye's browser list (rule: fixed browser list)" |
+
+**Findings.**
+1. A plugin agent's `tools:` can name the Playwright MCP tools, and the workflow agent gets them (S-050/1).
+2. Hooks see the plugin agent as `accio:mad-eye`, so curfew's mad-eye rules apply as written (S-050/2).
+3. The Playwright server again wrote `page-*.yml` and `console-*.log` into `<repo>/.playwright-mcp/`. The build's
+   main-checkout snapshot already skips that folder (S-049/7, `PLAYWRIGHT_FOLDER` in `checks.py`); it is not in
+   `.gitignore`, so a by-hand session leaves it untracked until removed.
+4. A `--allowedTools` flag with a list swallows a prompt given after it; pass the prompt on stdin.
+
+**Verdict: go for S-047.**
