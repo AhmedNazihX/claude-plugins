@@ -10,7 +10,8 @@ PermissionRequest: no hook answer counts inside a workflow agent (spike S-015), 
 tool and command in `run/stuck.json`, for `map` and `owl` to show what froze.
 
 Other callers get no answer and go through the normal permission flow. Exits 0 silently in a repo without
-`.accio/` and on bad input. A call it fails to check is denied.
+`.accio/` and on bad input. A call it fails to check is denied. If `accio_lib` won't import, an accio agent's call
+is denied naming the error and everyone else gets no answer (guards fail open, decision 007).
 """
 import json
 import os
@@ -21,10 +22,14 @@ import time
 BIN = pathlib.Path(__file__).resolve().parents[1] / "bin"
 sys.path.insert(0, str(BIN))
 
-from accio_lib import askrules, config, paths, policy, runlock  # noqa: E402
-
 AGENT_PREFIX = "accio:"
-STUCK_NAME = runlock.STUCK_NAME
+
+try:
+    from accio_lib import askrules, config, paths, policy, runlock  # noqa: E402
+    STUCK_NAME = runlock.STUCK_NAME
+    IMPORT_ERROR = None
+except Exception as import_error:  # noqa: BLE001 — a start-up crash is handled in `_startup_crash`, never raised
+    IMPORT_ERROR = import_error
 
 
 def _payload(raw):
@@ -125,7 +130,25 @@ def _pre_tool_use(payload, root, accio):
     return (False, refused) if refused else (True, decision.reason)
 
 
+def _startup_crash(raw):
+    """`accio_lib` didn't load (decision 007): deny an accio agent's call, naming the error, since it can't be
+    checked; every other caller and event gets no answer, so a broken update never blocks anyone else."""
+    try:
+        data = json.loads(raw)
+    except (json.JSONDecodeError, UnicodeDecodeError):
+        return 0
+    if not isinstance(data, dict) or data.get("hook_event_name") == "PermissionRequest":
+        return 0
+    agent = data.get("agent_type")
+    if not isinstance(agent, str) or not agent.startswith(AGENT_PREFIX):
+        return 0
+    _answer(False, f"could not start ({type(IMPORT_ERROR).__name__}: {IMPORT_ERROR}).")
+    return 0
+
+
 def main():
+    if IMPORT_ERROR is not None:
+        return _startup_crash(sys.stdin.read())
     payload = _payload(sys.stdin.read())
     if payload is None:
         return 0
