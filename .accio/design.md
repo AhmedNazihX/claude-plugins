@@ -285,3 +285,130 @@ gaps in accio, not in the story:
 
 ### Open questions
 none
+
+## Fixes from the 2026-10-20 audit
+
+### Outcome
+After this ships, every instruction accio hands a model matches what accio's guards and scripts allow, a step skill
+knows for certain whether `/accio` called it, and the iteration records keep every outcome. We'd know because no
+story in the next two iterations is blocked by a fix round touching files outside its story, a rebase the builder
+can't run, or a command curfew denies that its instructions told it to use; and `claude plugin details accio`
+measures accio's descriptions at 2,000 tokens or fewer.
+
+### Who and why
+The user, building accio with accio and running `/accio` in their repos. Three research notes (2026-10-20) found
+where the words given to models and the code disagree:
+- `accio/docs/research/prompt-audit.md`: findings 1–9 of its top 10.
+- `accio/docs/research/improvements.md`: items 3, 4, 11 and 12.
+- The rest (fewer stops for failed checks, a log of why findings and blocks ended, boggart the breaker) needs a
+  design and comes in the next note.
+
+### Requirements
+- R1 A fix round's builder gets its story's limits: the story brief (with the Definition of Done), the files it may
+  change and the checks to run. Owner: the user (today a fix can touch a file outside the story and block it;
+  `templates/fix-brief.md` has none of these).
+- R2 The builder is never told to run a git command curfew denies. A rebase on a re-run is started by `accio-brief`;
+  a conflict is left in progress for house-elf to resolve and `git rebase --continue` (decision 005). Owner: the user
+  (DESIGN § 12.3 promises house-elf resolves conflicts; curfew allows only `--continue`, `--abort`, `--skip`).
+- R3 house-elf's instructions say which commands it may run, and why `$(…)`, backticks and heredocs are denied; the
+  brief lists only the two scripts it may run. Owner: the user (each denied guess costs a turn out of 150).
+- R4 Only the workflow's last step releases the run lock, and prefect's outcome step knows how to get the ledger key.
+  Owner: the user (a portkey call that fails mid-build may unlock while stories still run; step 7's prompt gives no
+  key).
+- R5 A step skill knows `/accio` called it from an argument, not from a guess about the chat (decision 006). Owner:
+  the user (a hand-typed `/accio:owl` after `/accio` can take the accept-everything path).
+- R6 wand sets accio up in a repo only when the user asked for accio. Owner: anyone with accio installed (a plain
+  "I want to build …" in any git repo can add `.accio/` and git hooks).
+- R7 Every description says when to use it, and the build agents say only accio calls them; the total stays within
+  about 2,000 tokens. The out-of-date "two checkpoints" text and token count are corrected. Owner: the user (in this
+  session Claude Code dropped `map`'s and `vow`'s descriptions because the listing overflowed).
+- R8 A second owl pass adds to the iteration's Outcome table instead of replacing it. Owner: the user (iteration 5
+  lost two "merged" rows; future retros read these files).
+- R9 The agents that only run scripts start cheaper: `effort: low` and `omitClaudeMd: true` for portkey, prefect,
+  howler and librarian, plus `maxTurns: 20` for portkey, prefect and librarian. Owner: the user (several of these
+  calls per story each load the user's CLAUDE.md and rules).
+- R10 The guard hooks block the tool call when they can't run at all. Owner: the user (a missing `python3`, a crash
+  or a timeout lets every call through today, and an agent can then meet a permission prompt and hang the build).
+
+### Out of scope
+- Whether a skill's tool grant ends at the user's reply (audit #10): untested, see Open questions.
+- Sending failed checks into fix rounds, retrying accio's own failures, logging why findings ended, boggart: the next
+  design note.
+- Moving the reviewers' repeated rules into the review package, and the low-severity wording findings in the audit.
+
+### Design
+- **Fix brief (R1).** `render_fix` passes the same `files` and `checks` as `render_brief`, plus the story brief's
+  path. house-elf's body gets a short "In a fix round" section. "Read only your brief" becomes "Take your task only
+  from your brief; read whatever code you need".
+- **Rebase (R2, decision 005).** `accio-brief` runs the rebase itself. On a conflict it leaves the rebase in
+  progress and the brief says: resolve these files, `git add` them, run `git rebase --continue`. Uncommitted changes
+  left by an earlier build are committed by `accio-brief` as a checkpoint before it rebases. Any other failure goes
+  to Blocked with one plain question. DESIGN § 12.3 is updated to match.
+- **Allowed commands (R3).** A short list in `agents/house-elf.md`, kept true by a test that runs each listed
+  command through curfew's real policy for house-elf, and checks that `$(…)` is denied.
+- **Lock and key (R4).** portkey unlocks only when the workflow asks it to; prefect's step 7 computes the key as in
+  step 3; each step's reply shape is stated apart.
+- **Driven (R5, decision 006).** The conductor loads each step skill with the argument `driven`; Claude Code appends
+  it as `ARGUMENTS: driven` (skills docs; seen in this session when wand was loaded with arguments). Each step skill
+  has one line: if ARGUMENTS says `driven`, /accio is driving. With no argument it keeps every question.
+- **wand's setup (R6).** New description; step 1 asks once before setting accio up when there is no `.accio/` and
+  the user didn't type `/accio:wand` or `/accio`.
+- **Descriptions (R7).** The rewrites in `prompt-audit.md` ("Description budget" and the two before → after tables),
+  measured with `claude plugin details accio`; `plugin.json`, README and DESIGN P3 say accio stops only for your
+  decisions.
+- **Outcome rows (R8).** `owl`'s iteration writer merges new rows into the existing Outcome table by story id.
+- **Cheaper script agents (R9).** Frontmatter only. The sub-agents docs list the fields plugin agents ignore
+  (`hooks`, `mcpServers`, `permissionMode`, `initialPrompt`); these three are not on it.
+- **Fail closed (R10).** `"onFailure": "block"` on protego, fidelius and both curfew entries in `hooks/hooks.json`
+  (hooks docs, Claude Code 2.1.295 and later). Not on `doc_size` or `session_start`: if they fail, work should go on.
+
+### What we build
+1. **Fix rounds keep the story's limits.** Files: `accio/bin/accio_lib/templates/fix-brief.md`,
+   `accio/bin/accio_lib/brief.py`, `accio/bin/accio_lib/templates/brief.md`, `accio/agents/house-elf.md`,
+   `accio/tests/test_brief.py`, `accio/tests/test_agents.py`. Needs: none. Risk: none. Checked by: a unittest that a
+   fix brief holds the story brief's path, its files and its checks; a test that house-elf's body has the fix-round
+   section.
+2. **A rebase the builder can finish.** Files: `accio/bin/accio_lib/brief.py`, `accio/tests/test_brief.py`,
+   `accio/docs/DESIGN.md`. Needs: 1 (same files). Risk: none. Checked by: unittests on a temporary repo: a re-run
+   with a conflicting base leaves the rebase in progress and the brief names the files and `git rebase --continue`;
+   uncommitted changes become a checkpoint commit before the rebase; no brief text names a `git rebase` command that
+   curfew's policy denies for house-elf.
+3. **The builder knows its commands.** Files: `accio/agents/house-elf.md`, `accio/bin/accio_lib/templates/brief.md`,
+   `accio/tests/test_agents.py`. Needs: 1 (same files). Risk: none. Checked by: a test that runs each command in
+   house-elf's list through `bashpolicy` as house-elf and expects it allowed, and `$(…)` denied; a test that the brief
+   lists exactly `accio-claim` and `accio-board refresh`.
+4. **Script agents: right steps, cheaper.** Files: `accio/agents/portkey.md`, `accio/agents/prefect.md`,
+   `accio/agents/howler.md`, `accio/agents/librarian.md`, `accio/workflows/brew.js`, `accio/tests/test_agents.py`,
+   `accio/tests/workflow/*.test.mjs`. Needs: none. Risk: none. Checked by: tests that portkey's body ties unlock to
+   the workflow's request only, that prefect's step 7 and brew's step 7 prompt say to compute the key, and that the
+   four agents' frontmatter has the new fields; `claude plugin validate accio` passes.
+5. **/accio passes driven.** Files: `accio/skills/accio/SKILL.md`, `accio/skills/owl/SKILL.md`,
+   `accio/skills/prophecy/SKILL.md`, `accio/skills/sort/SKILL.md`, `accio/skills/wand/SKILL.md`,
+   `accio/tests/test_accio_skill.py`, `accio/tests/test_step_endings.py`. Needs: none. Risk: none. Checked by: tests
+   that the conductor loads each step with `driven` and each step skill keys its driving line on `ARGUMENTS` and no
+   longer on "loaded earlier in this chat".
+6. **Descriptions that route right, and wand asks first.** Files: every `accio/agents/*.md` and
+   `accio/skills/*/SKILL.md` frontmatter, `accio/skills/wand/SKILL.md` step 1, `accio/.claude-plugin/plugin.json`,
+   `accio/README.md`, `accio/docs/DESIGN.md` (P3), `accio/evals/README.md`, `accio/tests/test_agents.py`,
+   `accio/tests/test_readme.py`, `accio/tests/test_wand.py`. Needs: 4 and 5 (same files). Risk: none. Checked by: a
+   test that each build agent's description says only accio calls it; a test that wand's step 1 asks before setup
+   with no `.accio/`; `claude plugin details accio` at 2,000 tokens or fewer, noted in the build report (no test).
+7. **owl keeps every outcome.** Files: `accio/bin/accio_lib/owl.py`, `accio/tests/test_owl.py`. Needs: none. Risk:
+   none. Checked by: a unittest where a second owl pass on the same iteration keeps the first pass's rows and adds
+   its own.
+8. **Guards fail closed.** Files: `accio/hooks/hooks.json`, `accio/tests/test_scaffold.py` (or the hooks test).
+   Needs: none. Risk: security (the guards). Checked by: a test that protego, fidelius and both curfew entries carry
+   `"onFailure": "block"` and doc_size and session_start don't; `claude plugin validate accio` passes; a by-hand
+   check that a broken curfew path blocks a tool call in a plugin (no test, see Open questions).
+
+### Evidence
+- The unittests and workflow tests above, and `claude plugin validate accio`.
+- `claude plugin details accio`: descriptions at 2,000 tokens or fewer.
+- The next two iterations: no block from a fix round outside its files, a rebase the builder can't run, or a denied
+  command its instructions named; `.accio/iterations/<N>.md` keeps every outcome row.
+
+### Open questions
+- Does `onFailure: "block"` work in a plugin's `hooks/hooks.json`? The hooks docs don't say either way. A by-hand
+  check in part 8 settles it; if it doesn't work, the field is harmless and the part says so.
+- Does a skill's tool grant end at the user's reply (audit #10)? One owl run without `--allow-tools` would tell.
+  Left for later.
