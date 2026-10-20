@@ -20,6 +20,7 @@ DEFAULTS = freeze({
     "mutation": None,
     "snapshot_skip": [],
     "preview": None,
+    "breaker": None,
 })
 
 
@@ -67,6 +68,14 @@ def _check_mutation(value):
     if not isinstance(value, dict) or set(value) != {"command"} or not isinstance(value["command"], str):
         return 'must be {"command": "<the mutation tool, with {diff} where the story\'s diff file goes>"}'
     return None if "{diff}" in value["command"] else "command must contain {diff}, where the story's diff file goes"
+
+
+def _check_breaker(value):
+    if value is None:
+        return None
+    if not isinstance(value, dict) or set(value) != {"command"} or not isinstance(value["command"], str):
+        return 'must be {"command": "<runs one repro file, with {file} where its path goes>"}'
+    return None if "{file}" in value["command"] else "command must contain {file}, where the repro's path goes"
 
 
 PREVIEW_KEYS = {"command", "url", "test_data", "login", "env"}
@@ -121,6 +130,7 @@ CHECKERS = {
     "mutation": _check_mutation,
     "snapshot_skip": lambda v: None if _strings(v) else "must be a list of glob strings",
     "preview": _check_preview,
+    "breaker": _check_breaker,
 }
 
 
