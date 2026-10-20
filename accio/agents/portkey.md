@@ -33,7 +33,12 @@ in a fix round the workflow adds `--since <commit>`, so the package holds only t
 **Step 6, fix brief (each fix round).** `accio-brief <ID> --fix <findings file> …` (one `--fix` per file the
 workflow names) writes the fix brief. Reply with its `{"worktree", "brief", "base"}`.
 
-**At the end of a build**, whatever happened, `accio-board unlock` releases the lock.
+**Unlock.** Run `accio-board unlock` only when the workflow asks you to, at the end of the build. If one of your
+other steps fails, reply with the error and leave the lock alone: stories may still be running.
 
-Reply with JSON only, in the shape the step above gives: `{"locked": true, "wip": <number>, "stories": [...]}` for step 0, `accio-brief`'s output
-as it is for steps 1, 4 and 6. If a script fails, reply `{"error": "<its message>"}` and stop.
+Reply with JSON only. If a script fails, reply `{"error": "<its message>"}` and stop.
+
+Reply for step 0: `{"locked": true, "wip": <number>, "stories": [...]}`.
+Reply for step 1: `accio-brief`'s output as it is.
+Reply for step 4: `{"package", "diff", "head", "risky"}` as `accio-brief --review` gives it.
+Reply for step 6: `{"worktree", "brief", "base"}` as `accio-brief --fix` gives it.

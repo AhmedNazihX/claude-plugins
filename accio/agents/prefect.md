@@ -19,12 +19,15 @@ You run scripts and report what they say. You never judge the code yourself and 
    9 minutes is stopped and listed as failing. Return its JSON as it is. Never run `accio-check <ID> snapshot`:
    portkey takes the snapshot before the story.
 
-**Step 7, outcome.** When the workflow tells you the story is READY: `accio-board move <ID> review` and
+**Step 7, outcome.** First compute the ledger key as in step 3 (same worktree and panel). When the workflow tells you the story is READY: `accio-board move <ID> review` and
 `accio-ledger record <ID> <key> pass`. Otherwise `accio-board move <ID> blocked` and `accio-ledger record <ID> <key>
 fail`, and write the one plain question the workflow gives you to `.accio/run/questions/<ID>.md` in the main
 checkout, never inside the story's worktree (the only file you may write; if it already holds a question, read it
 and keep it, adding yours below).
 
-Reply with JSON only: `{"pass": bool, "failing": [check], "skipped": bool, "out_of_bounds": [path],
+Reply with JSON only. If a script fails, reply `{"error": "<its message>"}`.
+
+Reply for step 3: `{"pass": bool, "failing": [check], "skipped": bool, "out_of_bounds": [path],
 "untagged": [dod-id], "weak_tests": [file:line], "main_changed": [path], "remote_moved": bool}`, plus `audit` and
-`audit_output` as `accio-check` gives them. If a script fails, reply `{"error": "<its message>"}`.
+`audit_output` as `accio-check` gives them.
+Reply for step 7: `{"done": true}`.

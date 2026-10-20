@@ -70,6 +70,22 @@ class BrewRolesTest(unittest.TestCase):
         for words in ("--review", "--since", "--fix", '"package"', '"head"', '"risky"'):
             self.assertIn(words, body)
 
+    def test_S_024_1_portkey_unlocks_only_when_the_workflow_asks(self):
+        body = " ".join(front_and_body("portkey")[1].split())
+        self.assertIn("only when the workflow asks", body)
+        self.assertNotIn("whatever happened", body)
+
+    def test_S_024_2_prefect_step_7_computes_the_key_as_in_step_3(self):
+        body = " ".join(front_and_body("prefect")[1].split())
+        self.assertIn("compute the ledger key as in step 3", body)
+
+    def test_S_024_4_each_step_has_its_own_reply_line(self):
+        for name, steps in (("portkey", (0, 1, 4, 6)), ("prefect", (3, 7))):
+            lines = front_and_body(name)[1].splitlines()
+            for n in steps:
+                with self.subTest(f"{name} {n}"):
+                    self.assertEqual(sum(l.startswith(f"Reply for step {n}:") for l in lines), 1)
+
     def test_reviewers_let_a_ruling_stand(self):
         for name in REVIEWERS:
             with self.subTest(name):

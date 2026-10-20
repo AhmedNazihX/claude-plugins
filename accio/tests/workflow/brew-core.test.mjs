@@ -167,6 +167,11 @@ test('S-019/3 a child with two parents in this run waits for the next run; a par
   assert.deepEqual(steps(calls, 'S-005'), ['prepare', 'implement', 'check', 'package', 'examiner', 'professor', 'outcome'])
 })
 
+test('S-024/3 step 7 tells prefect to compute the ledger key', async () => {
+  const { calls } = await runWorkflow('brew', happy([story('S-001')]))
+  assert.match(calls.find((call) => call.label === 'S-001 outcome').prompt, /compute the ledger key as in step 3/)
+})
+
 test('S-019/7 an outcome the board did not take, or a check with no reasons, still reads plainly', async () => {
   const stories = [story('S-001'), story('S-002')]
   const { result, calls } = await runWorkflow('brew', happy(stories, {

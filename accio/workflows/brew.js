@@ -161,6 +161,7 @@ async function record(story, worktree, outcome, question, asked) {
       `${QUESTIONS}/${story.id}.md ${IN_MAIN}: ${question}`
   const reply = await call(
     `Step 7, outcome of story ${story.id}. Worktree: ${worktree}. Panel: ${story.track}. ` +
+      'First compute the ledger key as in step 3 (the same worktree and panel). ' +
       `${outcome === 'READY' ? 'It is READY: move it to review and record pass.' : blocked} ` +
       'Reply {"done": true} or {error}.',
     { agentType: PREFECT, model: 'haiku', schema: OUTCOME_SCHEMA, label: label(story, 'outcome') })
