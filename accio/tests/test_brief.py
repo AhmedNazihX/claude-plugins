@@ -208,7 +208,7 @@ class BriefTest(unittest.TestCase):
         reply = self.brief("S-001")
         text = pathlib.Path(reply["brief"]).read_text(encoding="utf-8")
         for expected in ("S-001/1 WHEN a user asks", "S-001/2 (no test)", "src/a.py", "src/new.py",
-                         "Use the mailer in src/mail.py.", "python3 -m unittest", str(ROOT / "bin" / "accio-board"),
+                         "Use the mailer in src/mail.py.", "python3 -m unittest", "`accio-board refresh`",
                          "15 minutes, not 30", str(self.wt_root / "S-001")):
             self.assertIn(expected, text)
         self.assertNotIn("npm test", text)

@@ -19,6 +19,28 @@ command. Don't `cd` anywhere else. A command that accio's guard denies comes bac
 don't work around it. If you truly need a command it denies, stop and return BLOCKED with
 `needs override: <command>`.
 
+**Commands you may run.** After `cd <worktree> &&` (or in the `git -C <worktree>` form for git), and nothing else:
+
+- `cd <worktree> && git status`
+- `cd <worktree> && git diff`
+- `cd <worktree> && git log`
+- `cd <worktree> && git add <file>`
+- `cd <worktree> && git commit -m "message"`
+- `cd <worktree> && git rebase --continue`
+- `git -C <worktree> status`
+- `cd <worktree> && ls`
+- `cd <worktree> && cat <file>`
+- `cd <worktree> && rg pattern`
+- `cd <worktree> && mkdir -p dir`
+- `cd <worktree> && touch <file>`
+- `cd <worktree> && accio-board refresh`
+
+Also the checks your brief lists, and `accio-claim <ID>` first. The brief's scripts are only `accio-claim` and
+`accio-board refresh`. `git rebase` also takes `--abort` and `--skip`, only to go on with a rebase portkey
+started: you can't start one, and you can't push or merge. `$(…)`, backticks and heredocs are
+denied because what they would run can't be checked: write the inner command on its own Bash call, and
+write a file with the Write tool, not a heredoc. Write a commit message with `-m "…"`.
+
 **How you work.**
 1. Take your task only from your brief, and read whatever code you need. The brief names the story, its DoD lines,
    the files, the code to reuse and the checks.
