@@ -14,6 +14,7 @@ from support import ROOT, init_repo, write
 
 from accio_lib import config, paths
 
+DIRECT = urllib.request.build_opener(urllib.request.ProxyHandler({}))  # no proxy, as in accio-preview
 PREVIEW = ROOT / "bin" / "accio-preview"
 
 
@@ -77,6 +78,44 @@ class PreviewTest(unittest.TestCase):
         return subprocess.run([sys.executable, str(PREVIEW), story_id, action, *extra], cwd=self.root,
                               capture_output=True, text=True, timeout=60, env={**os.environ, **(env or {})})
 
+    def test_S_053_1_the_check_connects_directly_whatever_the_proxy_settings(self):
+        from http.server import BaseHTTPRequestHandler, HTTPServer
+        import threading
+        from unittest import mock
+        from accio_lib import preview as preview_lib
+
+        class Handler(BaseHTTPRequestHandler):
+            def do_GET(self):
+                self.send_response(200)
+                self.end_headers()
+
+            def log_message(self, *args):
+                pass
+
+        server = HTTPServer(("127.0.0.1", 0), Handler)
+        threading.Thread(target=server.serve_forever, daemon=True).start()
+        dead = f"http://127.0.0.1:{free_port()}"
+        try:
+            with mock.patch.dict(os.environ, {"http_proxy": dead, "HTTP_PROXY": dead}):
+                with mock.patch("urllib.request.getproxies", return_value={"http": dead}):
+                    self.assertTrue(preview_lib._answers(f"http://127.0.0.1:{server.server_port}/"))
+        finally:
+            server.shutdown()
+            server.server_close()
+
+    def test_S_053_2_a_dead_proxy_in_the_environment_does_not_hide_the_preview(self):
+        dead = f"http://127.0.0.1:{free_port()}"
+        proxies = {"http_proxy": dead, "HTTP_PROXY": dead, "all_proxy": dead, "ALL_PROXY": dead}
+        result = self.preview("S-001", "start", "--timeout", "20", env=proxies)
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_S_053_3_a_start_that_never_answers_shows_the_commands_last_output(self):
+        self.configure("echo S053-banner-line; sleep 60")
+        result = self.preview("S-001", "start", "--timeout", "1")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("did not answer", result.stderr)
+        self.assertIn("S053-banner-line", result.stderr)
+
     def test_S_049_1_start_refuses_without_test_data_true(self):
         for extra in ({"test_data": False}, {"test_data": None}):
             self.configure(f"sh -c '{self.serve} & wait'", **extra)
@@ -126,7 +165,7 @@ class PreviewTest(unittest.TestCase):
         self.configure(f"sh -c 'echo $A49_MODE > marker.txt; {self.serve} & wait'", env={"A49_MODE": "demo"})
         result = self.preview("S-001", "start", "--timeout", "20")
         self.assertEqual(result.returncode, 0, result.stderr)
-        with urllib.request.urlopen(self.url, timeout=5) as response:
+        with DIRECT.open(self.url, timeout=5) as response:
             self.assertEqual(response.read().decode(), "demo\n")
 
     def state(self, story_id):
@@ -135,7 +174,7 @@ class PreviewTest(unittest.TestCase):
     def test_S_045_1_start_runs_in_the_worktree_records_pid_and_waits_for_the_url(self):
         result = self.preview("S-001", "start", "--timeout", "20")
         self.assertEqual(result.returncode, 0, result.stderr)
-        with urllib.request.urlopen(self.url, timeout=5) as response:
+        with DIRECT.open(self.url, timeout=5) as response:
             self.assertEqual(response.read().decode(), "hello from S-001\n")
         state = self.state("S-001")
         self.assertTrue(alive(state["pid"]))
@@ -187,7 +226,7 @@ class PreviewTest(unittest.TestCase):
             if second.poll() is None:
                 second.kill()
         self.assertEqual(second.returncode, 0, err)
-        with urllib.request.urlopen(self.url, timeout=5) as response:
+        with DIRECT.open(self.url, timeout=5) as response:
             self.assertEqual(response.read().decode(), "hello from S-002\n")
 
     def test_S_045_2_second_start_gives_up_naming_the_lock(self):
