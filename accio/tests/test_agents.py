@@ -116,6 +116,19 @@ class StartingMessageOptInTest(unittest.TestCase):
             self.assertIn(words, body)
 
 
+class HouseElfFixRoundTest(unittest.TestCase):
+    def body(self):
+        return " ".join(front_and_body("house-elf")[1].split())
+
+    def test_S_021_3_house_elf_has_an_in_a_fix_round_section(self):
+        self.assertIn("**In a fix round.**", self.body())
+
+    def test_S_021_4_house_elf_takes_its_task_only_from_its_brief_but_reads_code(self):
+        self.assertNotIn("Read only your brief", self.body())
+        self.assertIn("Take your task only from your brief", self.body())
+        self.assertIn("read whatever code you need", self.body())
+
+
 class SubagentFileNamesTest(unittest.TestCase):
     """Claude Code (2.1.302) refuses a subagent's Write to a file named `^(REPORT|SUMMARY|FINDINGS|ANALYSIS).*\.md$`,
     in any case ("Subagents should return findings as text"), so no file an accio agent writes may be named so."""

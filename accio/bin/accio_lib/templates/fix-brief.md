@@ -12,5 +12,13 @@ report; accio's judge rules on it.
 - Write your report to `$report` again, in full, with these short sections: $report_sections (the
   review summary quotes them).
 
+The story's own brief is `$story_brief`. Read it for the Definition of Done and the code to reuse.
+
+## Files you may change (plus their tests)
+$files
+
+## Checks to run
+$checks
+
 ## Findings to fix
 $findings

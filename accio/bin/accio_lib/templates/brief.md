@@ -1,6 +1,6 @@
 # Brief: $story_id $title
 
-You implement this one story. Read only this brief; everything you need is here.
+You implement this one story. Take your task only from this brief, and read whatever code you need.
 $notes$earlier
 
 ## Context
