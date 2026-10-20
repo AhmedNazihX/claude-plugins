@@ -81,9 +81,14 @@ def _lock_wait(run_dir, story_id, seconds):
         time.sleep(POLL)
 
 
+# A preview check connects directly: no proxy from the environment or (on macOS) the system settings.
+DIRECT = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+LOG_TAIL_LINES = 20
+
+
 def _answers(url):
     try:
-        urllib.request.urlopen(url, timeout=REQUEST_TIMEOUT).close()
+        DIRECT.open(url, timeout=REQUEST_TIMEOUT).close()
     except urllib.error.HTTPError:
         return True  # the server answered, even if with an error page
     except (urllib.error.URLError, OSError, ValueError):
@@ -216,11 +221,22 @@ def start(run_dir, worktree, story_id, settings, wait=DEFAULT_WAIT, timeout=DEFA
                 {"story": story_id, "pid": process.pid, "url": settings["url"], "command": settings["command"]})
     try:
         _wait_for_url(settings["url"], process, timeout)
-    except PreviewError:
+    except PreviewError as error:
+        tail = _log_tail(run_dir / story_id / LOG_NAME)  # stop deletes the log, so read it first
         stop(run_dir, story_id, settings)
         process.wait()
+        if tail and "did not answer" in str(error):
+            raise PreviewError(f"{error}\nlast output of the preview command:\n{tail}") from error
         raise
     return settings["url"]
+
+
+def _log_tail(path):
+    try:
+        lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
+    except OSError:
+        return ""
+    return "\n".join(lines[-LOG_TAIL_LINES:])
 
 
 def stop(run_dir, story_id, settings):
