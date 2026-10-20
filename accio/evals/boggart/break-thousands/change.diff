@@ -1,0 +1,20 @@
+--- a/price.py
++++ b/price.py
+@@ -1,3 +1,4 @@
+ def parse_price(text):
+     """Dollars as a float. Thousands commas are allowed: '1,234.50' is 1234.5."""
+-    return float(text.strip().replace(",", ""))
++    text = text.strip().lstrip("$")
++    return float(text.replace(",", "."))
+--- a/test_price.py
++++ b/test_price.py
+@@ -1,4 +1,8 @@
+ from price import parse_price
+
+
++def test_S_903_1_sign():
++    assert parse_price("$12.5") == 12.5
++
++
+ def test_S_903_2_plain():
+     assert parse_price("12.5") == 12.5

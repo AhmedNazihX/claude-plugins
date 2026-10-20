@@ -308,13 +308,16 @@ class OtherAgentsDescriptionTest(unittest.TestCase):
                 self.assertIn("Only accio calls this agent", front_and_body(name)[0]["description"])
 
 
+NOT_YET_IN_CURFEW = ("boggart",)  # S-042 adds the agent; its curfew list (policy.AGENTS) is a later story
+
+
 class AgentsMatchCurfewTest(unittest.TestCase):
     """A tool an agent has but curfew denies (or the reverse) turns into a BLOCKED story at run time."""
 
     def test_every_agents_tools_match_its_curfew_list(self):
         for path in sorted(AGENTS.glob("*.md")):
             name = path.stem
-            if name == "house-elf":
+            if name in ("house-elf", *NOT_YET_IN_CURFEW):
                 continue
             with self.subTest(name):
                 lists = policy.AGENTS[name]
@@ -322,6 +325,48 @@ class AgentsMatchCurfewTest(unittest.TestCase):
                 self.assertEqual("Bash" in agent_tools, bool(lists.bash))
                 self.assertEqual("Write" in agent_tools, bool(lists.writes))
                 self.assertEqual(bool({"WebSearch", "WebFetch"} & agent_tools), lists.web)
+
+
+class BoggartTest(unittest.TestCase):
+    """S-042: boggart's prompt holds the breaker checklist, its tools, and what it reads and writes."""
+
+    def body(self):
+        return " ".join(front_and_body("boggart")[1].split())
+
+    def test_S_042_1_sonnet_and_no_edit_tool(self):
+        fields, _ = front_and_body("boggart")
+        self.assertEqual(fields["name"].strip(), "boggart")
+        self.assertEqual(fields["model"].strip(), "sonnet")
+        self.assertTrue({"Read", "Write", "Bash"} <= tools("boggart"))
+        self.assertFalse({"Edit", "MultiEdit", "NotebookEdit"} & tools("boggart"))
+        self.assertIn("Only accio calls this agent", fields["description"])
+
+    def test_S_042_2_the_checklist_steps(self):
+        body = self.body()
+        for words in ("Read the claims", "3-6 risks", "at most 3 charters", "about 5 properties",
+                      "written claim", "never edit", "claim: <quoted text>",
+                      "source: <DoD id like S-012/3, or file:line>"):
+            with self.subTest(words):
+                self.assertIn(words, body)
+
+    def test_S_042_3_reads_the_review_package_and_writes_only_to_its_folder(self):
+        body = self.body()
+        for words in ("review package", "not house-elf's report", "run/<ID>/boggart/", "accio-break <ID> try <file>"):
+            with self.subTest(words):
+                self.assertIn(words, body)
+
+    def test_S_042_4_the_eval_set_has_three_breaks_three_clean_and_a_readme(self):
+        evals = ROOT / "evals" / "boggart"
+        self.assertIn("by hand", (evals / "README.md").read_text(encoding="utf-8"))
+        cases = sorted(path for path in evals.iterdir() if path.is_dir())
+        self.assertEqual(len([c for c in cases if c.name.startswith("break-")]), 3)
+        self.assertEqual(len([c for c in cases if c.name.startswith("clean-")]), 3)
+        for case in cases:
+            with self.subTest(case.name):
+                for name in ("story.md", "change.diff", "expected.md"):
+                    self.assertTrue((case / name).read_text(encoding="utf-8").strip())
+                first = (case / "expected.md").read_text(encoding="utf-8").splitlines()[0]
+                self.assertEqual("none" in first.lower(), case.name.startswith("clean-"))
 
 
 if __name__ == "__main__":
