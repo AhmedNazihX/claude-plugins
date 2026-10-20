@@ -1,7 +1,7 @@
 ---
 name: owl
-description: Review (owl): reviews accio's last build with the user. Shows each finished story and each blocked question from one short summary, takes one batch answer (accept, reject or drop each story, answer the questions, push or not), merges what was accepted, and records the iteration.
-when_to_use: When the user says "review the build", "what did brew do/build", "the build finished", "accept/reject/drop S-012", "answer the build's questions", "merge and push the build", or runs /accio:owl, in a repo with an .accio/ folder. Not for planning (prophecy), writing stories (sort), design (wand), building (/accio:brew), reviewing a code diff or PR, or merging a branch by hand.
+description: Review (owl): reviews accio's last build with the user in one summary, merges what was accepted, and records the iteration.
+when_to_use: When the user says "review the build", "the build finished", "accept/reject S-012", "merge and push the build", or runs /accio:owl, in a repo with an .accio/ folder. Not for planning (prophecy), stories (sort), design (wand), building (/accio:brew), reviewing a code diff or PR, or merging a branch by hand.
 allowed-tools: Read, Glob, Agent, Bash(${CLAUDE_PLUGIN_ROOT}/bin/accio-summary *), Bash(${CLAUDE_PLUGIN_ROOT}/bin/accio-owl *), Bash(${CLAUDE_PLUGIN_ROOT}/bin/accio-merge *), Bash(${CLAUDE_PLUGIN_ROOT}/bin/accio-hooks verify), Bash(${CLAUDE_PLUGIN_ROOT}/bin/accio-hooks install)
 ---
 
