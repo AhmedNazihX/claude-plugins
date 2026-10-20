@@ -63,7 +63,10 @@ AGENTS = {
     "librarian": Lists(),
     "howler": Lists(bash="howler"),
     "mad-eye": Lists(),  # reads, and the browser tools below; nothing else
+    "boggart": Lists(writes=("run/S-[0-9]*/boggart/repros/*",), bash="boggart"),  # S-052: repros, and `accio-break try`
 }
+BREAK_SCRIPT = "accio-break"
+REPRO_NAME = r"[A-Za-z0-9_][A-Za-z0-9._-]*"  # one file name: no `..`, no slash
 
 BROWSER_AGENT = "mad-eye"
 DEFAULT_MCP_PREFIX = "mcp__plugin_playwright_playwright__"
@@ -287,11 +290,21 @@ def _house_elf_judge(worktree, ctx):
 def _other_judge(agent, kind, ctx):
     if kind == "howler":
         return bashpolicy.Judge(agent=agent, forms=HOWLER_FORMS, bin_dir=ctx.bin_dir)
+    if kind == "boggart":
+        return bashpolicy.Judge(agent=agent, scripts={BREAK_SCRIPT: None}, bin_dir=ctx.bin_dir,
+                                script_args={BREAK_SCRIPT: _break_try(ctx)})
     if kind != "checks":
         return bashpolicy.Judge(agent=agent, scripts=SCRIPTS[kind], bin_dir=ctx.bin_dir)
     return bashpolicy.Judge(agent=agent, prefixes=_check_prefixes(ctx), read_only=True, git=bashpolicy.READ_ONLY_GIT,
                             scripts=SCRIPTS[kind], bin_dir=ctx.bin_dir, may_cd=True,
                             script_args={"accio-check": PREFECT_CHECK})
+
+
+def _break_try(ctx):
+    """The only arguments boggart may give accio-break: `<ID> try <file in run/<ID>/boggart/repros/>` (same ID)."""
+    folders = {str(ctx.accio), os.path.realpath(ctx.accio)}
+    roots = "|".join(re.escape(folder.rstrip("/")) for folder in sorted(folders))
+    return re.compile(rf"(S-[0-9]+) try (?:{roots})/run/\1/boggart/repros/{REPRO_NAME}")
 
 
 def _check_prefixes(ctx):

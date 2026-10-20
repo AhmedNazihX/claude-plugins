@@ -527,6 +527,62 @@ class OtherAgentsTest(CurfewTestBase):
         self.assert_denied("Read", {"file_path": "x"}, "accio:nobody", agent="accio:nobody")
 
 
+class BoggartTest(CurfewTestBase):
+    AGENT = "accio:boggart"
+
+    def setUp(self):
+        super().setUp()
+        self.repros = self.run_dir / "S-001" / "boggart" / "repros"
+        self.brk = shlex.quote(str(ROOT / "bin" / "accio-break"))
+
+    def write(self, target):
+        return self.decision("Write", {"file_path": str(target), "content": "x"}, agent=self.AGENT)[0]
+
+    def test_S_052_4_a_write_under_its_repros_folder_is_allowed(self):
+        self.assertEqual(self.write(self.repros / "repro_a.py"), "allow")
+        self.assertEqual(self.write(self.run_dir / "S-123" / "boggart" / "repros" / "r.js"), "allow")
+
+    def test_S_052_5_verdicts_and_any_other_path_are_denied(self):
+        link = self.repros / "link"
+        self.repros.mkdir(parents=True)
+        os.symlink(self.tmp.name, link)
+        for target in (self.run_dir / "S-001" / "boggart" / "verdicts.json", self.run_dir / "S-001" / "boggart" / "log.txt",
+                       self.repros / "sub" / "r.py", self.repros, self.repros / ".." / "verdicts.json",
+                       link / "r.py", self.run_dir / "S-001" / "build-report.md", self.run_dir / "S-001" / "repros" / "r.py",
+                       self.run_dir / "x" / "boggart" / "repros" / "r.py", self.worktree / "a.py",
+                       self.run_dir / "push-ok"):
+            with self.subTest(target=str(target)):
+                self.assertEqual(self.write(target), "deny")
+
+    def test_S_052_7_it_may_read(self):
+        for tool, tool_input in (("Read", {"file_path": str(self.worktree / "a.py")}),
+                                 ("Grep", {"pattern": "x", "path": str(self.worktree)}),
+                                 ("Glob", {"pattern": "*.py"}), ("LS", {"path": str(self.worktree)})):
+            with self.subTest(tool=tool):
+                self.assert_allowed(tool, tool_input, agent=self.AGENT)
+        self.assert_denied("WebFetch", {"url": "https://example.com"}, agent=self.AGENT)
+
+    def bash_verdict(self, command):
+        return self.decision("Bash", self.bash(command), agent=self.AGENT)[0]
+
+    def test_S_052_8_accio_break_try_on_its_own_repro_is_allowed(self):
+        self.assertEqual(self.bash_verdict(f"{self.brk} S-001 try {self.repros}/repro_a.py"), "allow")
+        self.assertEqual(self.bash_verdict(f"accio-break S-001 try {self.repros}/repro_a.py"), "allow")
+
+    def test_S_052_8_every_other_command_is_denied(self):
+        good = f"{self.brk} S-001 try {self.repros}/r.py"
+        for command in (f"{self.brk} S-001 verify", f"{self.brk} S-002 try {self.repros}/r.py",
+                        f"{self.brk} S-001 try {self.run_dir}/S-001/boggart/verdicts.json",
+                        f"{self.brk} S-001 try {self.repros}/../verdicts.json",
+                        f"{self.brk} S-001 try {self.repros}/sub/r.py", f"{self.brk} S-001 try {self.repros}/",
+                        f"{self.brk} S-001 try {self.worktree}/a.py", f"{self.brk} S-001 try r.py",
+                        f"{self.brk} S-001 try {self.repros}/r.py extra", f"{self.brk} S-001",
+                        f"{good} && rm -rf x", f"{good} > {self.run_dir}/S-001/boggart/verdicts.json",
+                        f"/tmp/accio-break S-001 try {self.repros}/r.py", "ls", "python3 x.py", "git status"):
+            with self.subTest(command=command):
+                self.assertEqual(self.bash_verdict(command), "deny")
+
+
 class HowlerTest(CurfewTestBase):
     SHA = "a" * 40
     OTHER = "b" * 40

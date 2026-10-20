@@ -8,8 +8,8 @@ pass. A repro that fails is read from its output:
 - an assertion (`AssertionError`, a runner's own assert line), or a traceback naming a file the story changed, is one
 
 Head runs up to twice: a pass, or a failure in only one run, drops the repro. A break that also fails on base is
-`pre-existing` (out of scope). `verify` writes `run/<ID>/boggart/verdicts.json`; after a fix round it reruns the
-repros it kept, and one that now passes is `fixed`.
+`pre-existing` (out of scope). `verify` writes `run/<ID>/boggart/verdicts.json`. It judges every repro again, also
+those marked `fixed` or `pre-existing` before (an old verdict is never copied); one that now passes is `fixed`.
 """
 import json
 import pathlib
@@ -30,6 +30,8 @@ RUN_TIMEOUT_SECONDS = 120
 HEAD_RUNS = 2
 CLAIM_SCAN_LINES = 10
 KEPT, DROPPED, PRE_EXISTING, FIXED = "kept", "dropped", "pre-existing", "fixed"
+PASSED_ON_HEAD = "passed on head"
+FAILED_ONCE = "failed on head in only 1 of 2 runs"
 SETUP_ERROR = re.compile(r"ImportError|ModuleNotFoundError|SyntaxError|IndentationError|fixture '[^']*' not found"
                          r"|command not found")
 ASSERTION = re.compile(r"AssertionError|^FAIL\b|^not ok\b|Assertion failed|^E\s+assert\b", re.MULTILINE)
@@ -109,8 +111,7 @@ def judge(worktree, repro, command, head, base, changed):
     for _ in range(HEAD_RUNS):
         passed, output = _run_at(worktree, head, repro, command)
         if passed:
-            reason = "passed on head" if not outputs else "failed on head in only 1 of 2 runs"
-            return _entry(repro, DROPPED, reason)
+            return _entry(repro, DROPPED, FAILED_ONCE if outputs else PASSED_ON_HEAD)
         outputs.append(output)
     kind, why = _kind(outputs, changed)
     if kind in ("setup", "other"):
@@ -123,12 +124,19 @@ def judge(worktree, repro, command, head, base, changed):
     return entry
 
 
-def _rerun(worktree, repro, command, head, earlier):
-    """A kept repro after a fix round: a pass on head is `fixed`; a failure stays kept."""
-    passed, _ = _run_at(worktree, head, repro, command)
-    if passed:
+def _rerun(worktree, repro, command, head, base, changed, earlier):
+    """A repro judged before, judged again on the code as it is now; the old verdict is never copied (S-052).
+    A `kept` or `fixed` repro that passes on head is `fixed`; one that fails twice is `kept` again; one that fails
+    only once keeps its earlier verdict. A `pre-existing` one is judged from scratch, base included."""
+    entry = judge(worktree, repro, command, head, base, changed)
+    if earlier["verdict"] == PRE_EXISTING:
+        return entry
+    if entry["verdict"] == DROPPED and entry["reason"] == PASSED_ON_HEAD:
         return {**earlier, "verdict": FIXED, "reason": "passes on head after the fix round"}
-    return earlier
+    if entry["verdict"] == DROPPED and entry["reason"] == FAILED_ONCE:
+        return earlier
+    # failed twice on head, whatever the cause: only a clean pass may change a kept or fixed verdict
+    return {**earlier, "verdict": KEPT, "reason": f"still fails on head: {entry['reason']}"}
 
 
 def _with_scope(entry, dod_ids):
@@ -191,10 +199,8 @@ def verify(worktree, run_dir, settings, dod_ids):
     entries = []
     for repro in sorted((pathlib.Path(run_dir) / BOGGART_FOLDER / REPRO_FOLDER).glob("*")):
         before = earlier.get(repro.name)
-        if before and before["verdict"] == KEPT:
-            entry = _rerun(worktree, repro, command, head, before)
-        elif before and before["verdict"] in (FIXED, PRE_EXISTING):
-            entry = before
+        if before and before["verdict"] in (KEPT, FIXED, PRE_EXISTING):
+            entry = _rerun(worktree, repro, command, head, base, changed, before)
         else:
             entry = judge(worktree, repro, command, head, base, changed)
         entries.append(_with_scope(entry, dod_ids))
