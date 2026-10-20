@@ -62,6 +62,30 @@ class RunsTest(unittest.TestCase):
         self.brew("s2", "wf_twin", 2_000, cwd=self.repo.parent / "my-app")  # my.app and my-app share a slug
         self.assertEqual(runs.brew_runs(self.repo, environ=self.env), [mine])
 
+    def brew_in(self, folder_path, name, when, cwd):
+        folder = workflow(folder_path / "s1" / "subagents" / "workflows" / name,
+                          [("accio:portkey", "load", 10), ("accio:house-elf", "S-001 implement", 1)], cwd)
+        os.utime(folder, (when, when))
+        return folder
+
+    def projects_for(self, path):
+        return self.home / "projects" / runs.project_slug(path)
+
+    def test_S_039_1_a_run_under_a_subfolders_slug_whose_cwd_is_inside_the_root_is_counted(self):
+        sub = self.repo / "accio"
+        found = self.brew_in(self.projects_for(sub), "wf_sub", 2_000, sub)
+        self.assertEqual(runs.brew_runs(self.repo, environ=self.env), [found])
+
+    def test_S_039_2_a_run_under_a_sibling_folders_slug_is_not_counted(self):
+        other = self.repo.parent / "my.app-other"
+        self.brew_in(self.projects_for(other), "wf_sibling", 2_000, other)
+        self.brew_in(self.projects_for(other), "wf_liar", 2_000, other / "x")
+        self.assertEqual(runs.brew_runs(self.repo, environ=self.env), [])
+
+    def test_S_039_3_a_run_under_the_roots_own_slug_is_counted_as_before(self):
+        mine = self.brew("s1", "wf_mine", 2_000)
+        self.assertEqual(runs.brew_runs(self.repo, environ=self.env), [mine])
+
     def test_summary_latest_refuses_while_a_build_runs(self):
         write(self.repo / ".accio" / "stories" / "S-001.md", STORY)
         write(self.repo / ".accio" / "run" / "brew.lock", "1\n")
