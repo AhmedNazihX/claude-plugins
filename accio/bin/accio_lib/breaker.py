@@ -135,7 +135,8 @@ def _rerun(worktree, repro, command, head, base, changed, earlier):
         return {**earlier, "verdict": FIXED, "reason": "passes on head after the fix round"}
     if entry["verdict"] == DROPPED and entry["reason"] == FAILED_ONCE:
         return earlier
-    return entry
+    # failed twice on head, whatever the cause: only a clean pass may change a kept or fixed verdict
+    return {**earlier, "verdict": KEPT, "reason": f"still fails on head: {entry['reason']}"}
 
 
 def _with_scope(entry, dod_ids):

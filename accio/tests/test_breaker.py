@@ -166,6 +166,25 @@ class BreakerTest(unittest.TestCase):
         path.write_text(json.dumps({"repros": [{**data["repros"][0], "verdict": "fixed"}]}))
         self.assertEqual(self.verdicts_by_file()["repro_o.py"]["verdict"], "kept")
 
+    def test_S_052_1_a_setup_error_on_head_keeps_an_earlier_kept_or_fixed_repro_kept(self):
+        self.try_repro("repro_r.py", KEEPS_VALUE)
+        self.verdicts_by_file()
+        self.change("other = 1\n")  # `from src.a import value` now raises ImportError
+        self.assertEqual(self.verdicts_by_file()["repro_r.py"]["verdict"], "kept")
+        self.change("value = 1\n")
+        self.assertEqual(self.verdicts_by_file()["repro_r.py"]["verdict"], "fixed")
+        self.change("other = 1\n")
+        self.assertEqual(self.verdicts_by_file()["repro_r.py"]["verdict"], "kept")
+
+    def test_S_052_1_a_crash_outside_the_changed_files_keeps_an_earlier_repro_kept(self):
+        self.try_repro("repro_s.py", KEEPS_VALUE)
+        self.verdicts_by_file()
+        write(self.worktree / "src" / "a.py", "value = 1\n")
+        commit_all(self.worktree, "fix")
+        self.assertEqual(self.verdicts_by_file()["repro_s.py"]["verdict"], "fixed")
+        write(self.boggart / "repros" / "repro_s.py", HEADER + "raise RuntimeError('elsewhere')\n")
+        self.assertEqual(self.verdicts_by_file()["repro_s.py"]["verdict"], "kept")
+
     def test_S_052_2_a_fixed_repro_that_passes_stays_fixed(self):
         self.try_repro("repro_p.py", KEEPS_VALUE)
         self.verdicts_by_file()
