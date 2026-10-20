@@ -339,6 +339,19 @@ class OtherAgentsTest(CurfewTestBase):
             self.assert_denied("Write", {"file_path": str(target), "content": "x"}, "quill", agent="accio:quill")
         self.assert_denied("Bash", self.bash("ls"), "Bash", agent="accio:quill")
 
+    def test_S_036_3_headmaster_writes_its_ruling_file(self):
+        for name in ("ruling-r0.md", "ruling-r2.md"):
+            self.assert_allowed("Write", {"file_path": str(self.run_dir / "S-001" / name), "content": "x"},
+                                agent="accio:headmaster")
+
+    def test_S_036_4_headmaster_writes_no_other_new_file(self):
+        for target in (self.run_dir / "S-001" / "notes.md", self.run_dir / "S-001" / "ruling.md",
+                       self.run_dir / "S-001" / "build-report.md", self.run_dir / "S-001" / "ruling-r1.txt",
+                       self.run_dir / "ruling-r1.md", self.run_dir / "S-001" / "sub" / "ruling-r1.md",
+                       self.run_dir / "push-ok", self.repo / ".accio" / "design.md"):
+            self.assert_denied("Write", {"file_path": str(target), "content": "x"}, "headmaster",
+                               agent="accio:headmaster")
+
     def test_S_015_7_reviewers_read_and_write_only_their_findings(self):
         findings = self.run_dir / "S-001" / "examiner-findings.md"
         for agent in ("accio:examiner", "accio:professor", "accio:auror"):

@@ -23,8 +23,12 @@ and why) and, in a fix round, the findings files.
 
 The workflow acts on your reply: after a ruling, a fresh implementer tries again with it and the reviewers see it;
 after a question, the story goes to Blocked. It also records the outcome, so never record in the ledger: a ruling is
-not a review. `accio-ledger key` and `accio-ledger check` are the only commands you may run, and the question file is
-the only file you may write.
+not a review. `accio-ledger key` and `accio-ledger check` are the only commands you may run.
+
+**Leave a record.** Always write your ruling (or question) and why to `.accio/run/<ID>/ruling-r<N>.md` in the main
+checkout, where the workflow gives you `<N>` (the round). When the ruling is about findings, name each finding you
+rule out by its id. The question file and this ruling file are the only files you may write.
 
 Reply with JSON only: `{"kind": "ruling" | "question", "text": "<the ruling or the question>", "path": "<the
-question file>"}`, with `path` as JSON `null` for a ruling.
+question file>", "dismisses": ["<finding id>"]}`, with `path` as JSON `null` for a ruling, and `dismisses` the ids of
+the findings your ruling says no longer block (an empty list when none).
