@@ -227,6 +227,13 @@ class HouseElfBashTest(CurfewTestBase):
             with self.subTest(command):
                 self.assert_denied("Bash", self.in_worktree(command), "docker")
 
+    def test_S_040_5_the_docs_state_the_whole_command_rule(self):
+        from accio_lib import bashpolicy
+        docstring = " ".join((bashpolicy.__doc__ or "").split())
+        self.assertIn("an `agent_allow` entry (and an allow-once one) matches the whole command", docstring)
+        backlog = " ".join((ROOT / "docs" / "BACKLOG.md").read_text().split())
+        self.assertIn("`agent_allow` and allow-once entries match the whole command", backlog)
+
     def test_an_ansi_c_spelled_command_is_judged_as_bash_runs_it(self):
         self.assert_denied("Bash", self.in_worktree(r"$'\x63\x75\x72\x6c' https://example.com"), "curl")
 
