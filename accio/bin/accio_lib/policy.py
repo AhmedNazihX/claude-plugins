@@ -190,9 +190,8 @@ def _house_elf_write(target, worktree, report):
 
 
 def _house_elf_judge(worktree, ctx):
-    prefixes = (_check_prefixes(ctx)
-                + bashpolicy.command_prefixes(ctx.config.get("agent_allow", []), "agent_allow entry"))
-    return bashpolicy.Judge(agent="house-elf", prefixes=prefixes, read_only=True, files=True,
+    exact = bashpolicy.command_prefixes(ctx.config.get("agent_allow", []), "agent_allow entry")
+    return bashpolicy.Judge(agent="house-elf", prefixes=_check_prefixes(ctx), exact=exact, read_only=True, files=True,
                             git=bashpolicy.HOUSE_ELF_GIT, worktree=worktree, bin_dir=ctx.bin_dir,
                             scripts={"accio-board": frozenset({"refresh"})})
 
