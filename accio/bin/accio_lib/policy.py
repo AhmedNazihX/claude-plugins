@@ -13,12 +13,14 @@ symlinks and `..` resolved, and its Bash commands follow `bashpolicy`: they star
 checks, `agent_allow`, read-only tools, file tools in the worktree and a short list of git subcommands. The other
 agents run only the accio scripts and subcommands their step needs (SCRIPTS).
 """
+import collections.abc
 import dataclasses
 import fnmatch
 import os
 import pathlib
 import re
 import shlex
+import urllib.parse
 
 from accio_lib import bashpolicy, paths, shellwords, story, summary
 
@@ -60,7 +62,18 @@ AGENTS = {
     "quill": Lists(writes=("stories/S-*.md", "run/sort/quill-summary.md")),
     "librarian": Lists(),
     "howler": Lists(bash="howler"),
+    "mad-eye": Lists(),  # reads, and the browser tools below; nothing else
 }
+
+BROWSER_AGENT = "mad-eye"
+DEFAULT_MCP_PREFIX = "mcp__plugin_playwright_playwright__"
+BROWSER_TOOLS = frozenset({"browser_navigate", "browser_snapshot", "browser_click", "browser_type",
+                           "browser_fill_form", "browser_select_option", "browser_hover", "browser_press_key",
+                           "browser_wait_for", "browser_take_screenshot", "browser_resize",
+                           "browser_console_messages", "browser_close"})
+DEFAULT_PORTS = {"http": 80, "https": 443}
+SHOT_FOLDER = "mad-eye"
+UNSAFE_URL = re.compile(r"[\\\s\x00-\x1f\x7f]")  # a browser reads these differently from urlsplit
 
 HEX_SHA = r"[0-9a-f]{40}"
 NUMBER = r"[0-9]+"  # ASCII digits only (`\d` would take other scripts' digits)
@@ -111,6 +124,9 @@ def decide(agent, agent_id, tool, tool_input, ctx):
     """The answer for one call by `accio:<agent>`."""
     if tool in REPLY_TOOLS and (agent == "house-elf" or agent in AGENTS):
         return allow()
+    browser = _browser(agent, tool, tool_input, ctx)
+    if browser is not None:
+        return browser
     if agent == "house-elf":
         return _house_elf(agent_id, tool, tool_input, ctx)
     lists = AGENTS.get(agent)
@@ -127,6 +143,76 @@ def decide(agent, agent_id, tool, tool_input, ctx):
     if tool == "Bash" and lists.bash:
         return _verdict(bashpolicy.check(_command(tool_input), _other_judge(agent, lists.bash, ctx)))
     return deny(f"{tool} isn't on accio:{agent}'s list.")
+
+
+# --- browser tools (mad-eye, on the preview only) -------------------------------------------------------------------
+
+def _preview(ctx):
+    preview = ctx.config.get("preview")
+    return preview if isinstance(preview, collections.abc.Mapping) else {}
+
+
+def _browser(agent, tool, tool_input, ctx):
+    """The answer for a browser tool call (a tool under `preview.mcp_prefix`), or None for any other tool."""
+    prefix = _preview(ctx).get("mcp_prefix") or DEFAULT_MCP_PREFIX
+    if not tool.startswith(prefix):
+        return None
+    name = tool[len(prefix):]
+    if agent != BROWSER_AGENT:
+        return deny(f"browser tools are for accio:{BROWSER_AGENT} only (rule: browser tools), not accio:{agent}.")
+    if name not in BROWSER_TOOLS:
+        return deny(f"{name} isn't on accio:{BROWSER_AGENT}'s browser list (rule: fixed browser list).")
+    if name == "browser_navigate":
+        return _navigate(tool_input, _preview(ctx).get("url"))
+    if name == "browser_take_screenshot" or "filename" in tool_input:
+        return _screenshot(tool_input, ctx, required=name == "browser_take_screenshot")
+    return allow()
+
+
+def _origin(url):
+    """(scheme, host, port) of an http(s) URL, or None."""
+    if UNSAFE_URL.search(url):
+        return None
+    try:
+        parts = urllib.parse.urlsplit(url)
+        scheme, host, port = parts.scheme.lower(), parts.hostname, parts.port
+    except ValueError:
+        return None
+    if "@" in parts.netloc or scheme not in DEFAULT_PORTS or not host:
+        return None
+    return scheme, host.lower(), port or DEFAULT_PORTS[scheme]
+
+
+def _navigate(tool_input, preview_url):
+    if not isinstance(preview_url, str) or not preview_url:
+        return deny("browser_navigate is denied without `preview.url` in .accio/config.json (rule: preview origin).")
+    wanted, url = _origin(preview_url), tool_input.get("url")
+    if wanted is None or not isinstance(url, str) or _origin(url) != wanted:
+        return deny(f"browser_navigate may only go to the preview's origin, the scheme, host and port of {preview_url} "
+                    f"(rule: preview origin), not {url if isinstance(url, str) and url else 'this URL'}.")
+    return allow()
+
+
+def _screenshot(tool_input, ctx, required=True):
+    """The folder rule for a `filename` argument; a screenshot must have one, since Playwright would save elsewhere."""
+    folder = ctx.accio / "run" / "<ID>" / SHOT_FOLDER
+    filename = tool_input.get("filename")
+    if filename is None and not required:
+        return allow()
+    if not isinstance(filename, str) or not filename:
+        return deny(f"a browser tool's `filename` must be a path inside {folder}, or it would be saved elsewhere "
+                    "(rule: screenshot folder).")
+    if not os.path.isabs(filename):
+        return deny(f"a browser tool's filename must be an absolute path inside {folder} (rule: screenshot folder).")
+    run = pathlib.Path(os.path.realpath(ctx.accio / "run"))
+    try:
+        target = pathlib.Path(os.path.realpath(filename))
+        parts = target.relative_to(run).parts if target.is_relative_to(run) else ()
+    except (OSError, ValueError):
+        parts = ()
+    if len(parts) >= 3 and story.STORY_ID.match(parts[0]) and parts[1] == SHOT_FOLDER:
+        return allow()
+    return deny(f"a screenshot may be saved only inside {folder} (rule: screenshot folder), not {filename}.")
 
 
 def _verdict(reason):

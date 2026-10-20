@@ -78,7 +78,7 @@ def _check_breaker(value):
     return None if "{file}" in value["command"] else "command must contain {file}, where the repro's path goes"
 
 
-PREVIEW_KEYS = {"command", "url", "test_data", "login", "env"}
+PREVIEW_KEYS = {"command", "url", "test_data", "login", "env", "mcp_prefix"}
 LOGIN_KEYS = {"username_env", "password_env"}
 
 
@@ -107,6 +107,9 @@ def _check_preview(value):
         return "url must start with http:// or https://"
     if "test_data" in value and not isinstance(value["test_data"], bool):
         return "test_data must be true or false"
+    prefix = value.get("mcp_prefix", "x")
+    if not isinstance(prefix, str) or not prefix.strip():
+        return "mcp_prefix must be the browser tools' name prefix, like mcp__plugin_playwright_playwright__"
     env = value.get("env", {})
     if not isinstance(env, dict) or not all(isinstance(k, str) and k.strip() and isinstance(v, str)
                                             for k, v in env.items()):
