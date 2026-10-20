@@ -652,3 +652,7 @@ Option C: staged, with a live browser for mad-eye (decision 008).
   if it happens often, raise the cap.
 - boggart's token cost (50–100k Sonnet a story, unmeasured) and mad-eye's (likely above 60k, since each page
   snapshot enters its context): measured on the first stories with `accio-cost`.
+- Repros run as untrusted code (security review of S-052, 2026-10-20): `accio-break try` and `verify` run files
+  boggart wrote, with the user's rights. Not a new hole (house-elf already runs anything in its worktree, and
+  prefect runs the same files), but a sandbox (macOS `sandbox-exec` or a container: only the throwaway worktree
+  writable, no network, no `.accio/` or main checkout) would close it. Needs a wand round before it becomes a story.
