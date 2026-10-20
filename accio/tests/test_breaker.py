@@ -147,6 +147,39 @@ class BreakerTest(unittest.TestCase):
         self.change("value = 3\n")
         self.assertEqual(self.run_break("verify")["repros"][0]["verdict"], "kept")
 
+    def verdicts_by_file(self):
+        return {entry["file"]: entry for entry in self.run_break("verify")["repros"]}
+
+    def test_S_052_1_a_fixed_repro_that_fails_again_is_kept_again(self):
+        self.try_repro("repro_n.py", KEEPS_VALUE)
+        self.verdicts_by_file()
+        self.change("value = 1\n")
+        self.assertEqual(self.verdicts_by_file()["repro_n.py"]["verdict"], "fixed")
+        self.change("value = 5\n")
+        self.assertEqual(self.verdicts_by_file()["repro_n.py"]["verdict"], "kept")
+
+    def test_S_052_1_a_fixed_verdict_forged_in_verdicts_json_is_not_trusted(self):
+        self.try_repro("repro_o.py", KEEPS_VALUE)
+        self.run_break("verify")
+        path = self.boggart / "verdicts.json"
+        data = json.loads(path.read_text())
+        path.write_text(json.dumps({"repros": [{**data["repros"][0], "verdict": "fixed"}]}))
+        self.assertEqual(self.verdicts_by_file()["repro_o.py"]["verdict"], "kept")
+
+    def test_S_052_2_a_fixed_repro_that_passes_stays_fixed(self):
+        self.try_repro("repro_p.py", KEEPS_VALUE)
+        self.verdicts_by_file()
+        self.change("value = 1\n")
+        self.assertEqual(self.verdicts_by_file()["repro_p.py"]["verdict"], "fixed")
+        self.assertEqual(self.verdicts_by_file()["repro_p.py"]["verdict"], "fixed")
+
+    def test_S_052_3_a_pre_existing_repro_is_run_on_base_again(self):
+        self.try_repro("repro_q.py", HEADER + "assert False, 'always'\n")
+        self.assertEqual(self.verdicts_by_file()["repro_q.py"]["verdict"], "pre-existing")
+        # the repro file now passes on base, so the old verdict must not be copied
+        write(self.boggart / "repros" / "repro_q.py", HEADER + "from src.a import value\nassert value == 1\n")
+        self.assertEqual(self.verdicts_by_file()["repro_q.py"]["verdict"], "kept")
+
     def test_S_041_8_config_needs_a_file_placeholder(self):
         for bad in ({"command": "pytest"}, {"cmd": "x {file}"}, "pytest {file}"):
             self.configure(bad)
