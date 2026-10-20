@@ -13,7 +13,9 @@ A real `.env` file is where secrets belong, so one is exempt when its real path 
 (`secret_scan.is_secret_file`) with no template word in it (`example`, `sample`, `template`, `dist`), and git ignores
 it (an untracked, ignored file, checked from its nearest existing folder). Symlinks are judged by their target. The
 repo is found from the payload's `cwd` (the hook's folder when that is missing) and from the file's folder; either
-one having `.accio/` turns the guard on. Exits 0 silently otherwise, for other tools and on bad input.
+one having `.accio/` turns the guard on. Exits 0 silently otherwise, for other tools and on bad input. If
+`accio_lib` won't import, an accio agent's call is denied naming the error (`_startup.py`) and everyone else passes
+(guards fail open, decision 007).
 """
 import json
 import os
@@ -22,11 +24,20 @@ import re
 import subprocess
 import sys
 
-sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1] / "bin"))
+HOOKS = pathlib.Path(__file__).resolve().parent
+sys.path.insert(0, str(HOOKS))
+sys.path.insert(0, str(HOOKS.parent / "bin"))
 
-from accio_lib import paths, secret_scan  # noqa: E402
+import _startup  # noqa: E402  (stdlib only, so it loads even when `accio_lib` doesn't)
+
+try:
+    from accio_lib import paths, secret_scan  # noqa: E402
+    IMPORT_ERROR = None
+except Exception as import_error:  # noqa: BLE001 — a start-up crash is handled in `main`, never raised
+    IMPORT_ERROR = import_error
 
 BLOCK_EXIT = 2
+PREFIX = "fidelius (accio's secret keeper): "
 PATH_KEYS = ("file_path", "notebook_path")
 MAX_FILE_BYTES = 2_000_000
 QUOTES = str.maketrans("\u2018\u2019\u201c\u201d", "''\"\"")
@@ -146,8 +157,16 @@ def _payload(raw):
     return payload if isinstance(payload, dict) and isinstance(payload.get("tool_input"), dict) else None
 
 
+def _deny(message):
+    print(f"{PREFIX}{message}", file=sys.stderr)
+    return BLOCK_EXIT
+
+
 def main():
-    payload = _payload(sys.stdin.read())
+    raw = sys.stdin.read()
+    if IMPORT_ERROR is not None:
+        return _startup.handle_crash(raw, IMPORT_ERROR, _deny)
+    payload = _payload(raw)
     if payload is None or not is_guarded(payload):
         return 0
     try:
@@ -155,10 +174,7 @@ def main():
     except Exception as error:  # noqa: BLE001 — a guard that crashes must stop the write, not wave it through
         reason = (f"could not check this write ({type(error).__name__}), so it is stopped. Write the file without "
                   "secrets, or ask the user to look at the hook.")
-    if reason:
-        print(f"fidelius (accio's secret keeper): {reason}", file=sys.stderr)
-        return BLOCK_EXIT
-    return 0
+    return _deny(reason) if reason else 0
 
 
 if __name__ == "__main__":
