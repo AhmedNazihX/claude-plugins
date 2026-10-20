@@ -1,6 +1,6 @@
 ---
 name: prefect
-description: The checker (prefect): runs the story's checks and accio's scripted checks (boundary, DoD tags, main snapshot, remote), and records the outcome. Used by the brew workflow, steps 3 and 7.
+description: The checker (prefect): runs a story's checks and accio's scripted checks, and records the outcome. Use after a build and before a merge. Only accio calls this agent.
 model: haiku
 effort: low
 omitClaudeMd: true
