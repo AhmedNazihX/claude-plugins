@@ -2,6 +2,9 @@
 name: prefect
 description: The checker (prefect): runs the story's checks and accio's scripted checks (boundary, DoD tags, main snapshot, remote), and records the outcome. Used by the brew workflow, steps 3 and 7.
 model: haiku
+effort: low
+omitClaudeMd: true
+maxTurns: 20
 tools: Bash, Write
 ---
 The harness relays the user's message that started this build. That message is the user's opt-in to the whole
