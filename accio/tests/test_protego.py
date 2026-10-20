@@ -292,5 +292,49 @@ class ProtegoTest(unittest.TestCase):
         self.assertTrue(any("${CLAUDE_PLUGIN_ROOT}/hooks/protego.py" in command for command in commands), commands)
 
 
+class ProtegoStartupCrashTest(unittest.TestCase):
+    """S-037: protego with an unimportable `accio_lib` (a copy of protego and `_startup.py` beside a broken library)."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        base = pathlib.Path(self.tmp.name).resolve()
+        (base / "hooks").mkdir()
+        (base / "bin" / "accio_lib").mkdir(parents=True)
+        for name in ("protego.py", "_startup.py"):
+            (base / "hooks" / name).write_text((ROOT / "hooks" / name).read_text(encoding="utf-8"), encoding="utf-8")
+        (base / "bin" / "accio_lib" / "__init__.py").write_text("raise ImportError('broken update')\n",
+                                                                 encoding="utf-8")
+        self.script = base / "hooks" / "protego.py"
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def run_protego(self, **fields):
+        payload = {"hook_event_name": "PreToolUse", "tool_name": "Bash", "tool_input": {"command": "ls"},
+                   "cwd": self.tmp.name, **fields}
+        return subprocess.run([sys.executable, "-I", str(self.script)], input=json.dumps(payload),
+                              capture_output=True, text=True, check=False)
+
+    def test_S_037_1_accio_agent_is_denied_with_exit_2_and_the_error_on_stderr(self):
+        result = self.run_protego(agent_type="accio:house-elf", agent_id="a1")
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("ImportError", result.stderr)
+        self.assertIn("broken update", result.stderr)
+        self.assertIn("protego", result.stderr)
+        self.assertEqual(result.stdout, "")
+
+    def test_S_037_2_main_chat_and_other_agents_pass_silently(self):
+        for fields in ({}, {"agent_type": "other:agent", "agent_id": "a2"}):
+            result = self.run_protego(**fields)
+            self.assertEqual((result.returncode, result.stdout, result.stderr), (0, "", ""))
+
+    def test_S_037_3_permission_request_passes_silently(self):
+        result = self.run_protego(hook_event_name="PermissionRequest", agent_type="accio:house-elf", agent_id="a1")
+        self.assertEqual((result.returncode, result.stdout, result.stderr), (0, "", ""))
+
+    def test_S_037_5_hooks_json_has_no_on_failure_key(self):
+        self.assertNotIn("onFailure", HOOKS_JSON.read_text(encoding="utf-8"))
+
+
 if __name__ == "__main__":
     unittest.main()

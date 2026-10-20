@@ -14,7 +14,8 @@ judged in (a subshell's `cd` stays inside it; `accio_lib.shellpaths` says where 
 inside `$(…)` and backticks, `sh -c '…'`, `eval '…'` and a heredoc or here-string fed to a shell are checked too;
 git's shortened long options count. `rm -rf` may also clean temp scratch away from the repo. Wrapping a command
 further (a pipe into `sh`, an alias) is an accepted bypass (decision 004). Exits 0 silently in a repo without
-`.accio/`, for other tools and on bad input.
+`.accio/`, for other tools and on bad input. If `accio_lib` won't import, an accio agent's call is denied naming the
+error (`_startup.py`) and everyone else passes (guards fail open, decision 007).
 """
 import dataclasses
 import json
@@ -24,13 +25,24 @@ import re
 import shutil
 import sys
 
-sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1] / "bin"))
+HOOKS = pathlib.Path(__file__).resolve().parent
+sys.path.insert(0, str(HOOKS))
+sys.path.insert(0, str(HOOKS.parent / "bin"))
 
-from accio_lib import paths, shellpaths, shellwords  # noqa: E402
+import _startup  # noqa: E402  (stdlib only, so it loads even when `accio_lib` doesn't)
 
 BLOCK_EXIT = 2
+PREFIX = "protego (accio's guard against destructive commands): "
+
+try:
+    from accio_lib import paths, shellpaths, shellwords  # noqa: E402
+    IMPORT_ERROR = None
+    ASSIGNMENT = shellpaths.ASSIGNMENT
+except Exception as import_error:  # noqa: BLE001 — a start-up crash is handled in `main`, never raised
+    IMPORT_ERROR = import_error
+    ASSIGNMENT = None
+
 MAX_DEPTH = 3
-ASSIGNMENT = shellpaths.ASSIGNMENT
 RESERVED = {"{", "}", "!", "if", "then", "elif", "else", "do", "while", "until", "coproc"}
 WRAPPERS = {"sudo", "command", "builtin", "exec", "nohup", "time", "nice", "xargs"}
 WRAPPER_OPTIONS_WITH_VALUE = {"-u", "-g", "-n", "-C", "-p"}
@@ -416,8 +428,16 @@ def _command_and_cwd(raw):
         return None, None
 
 
+def _deny(message):
+    print(f"{PREFIX}{message}", file=sys.stderr)
+    return BLOCK_EXIT
+
+
 def main():
-    command, cwd = _command_and_cwd(sys.stdin.read())
+    raw = sys.stdin.read()
+    if IMPORT_ERROR is not None:
+        return _startup.handle_crash(raw, IMPORT_ERROR, _deny)
+    command, cwd = _command_and_cwd(raw)
     if command is None or paths.accio_dir(cwd) is None:
         return 0
     try:
@@ -425,10 +445,7 @@ def main():
         reason = check_command(command, cwd, Scope(root, generic=not dcg_is_active(root)))
     except Exception as error:  # noqa: BLE001  (in an accio repo a guard that fails blocks, never lets it through)
         reason = f"couldn't check this command ({type(error).__name__}), so it is blocked"
-    if reason:
-        print(f"protego (accio's guard against destructive commands): {reason}", file=sys.stderr)
-        return BLOCK_EXIT
-    return 0
+    return _deny(reason) if reason else 0
 
 
 if __name__ == "__main__":
