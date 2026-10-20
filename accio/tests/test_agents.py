@@ -96,6 +96,18 @@ class BrewRolesTest(unittest.TestCase):
             with self.subTest(name):
                 self.assertGreater(int(front_and_body(name)[0].get("maxTurns", "0")), 0)
 
+    def test_S_032_1_script_agents_are_low_effort_and_skip_claude_md(self):
+        for name in ("portkey", "prefect", "howler", "librarian"):
+            with self.subTest(name):
+                front = front_and_body(name)[0]
+                self.assertEqual(front.get("effort", "").strip(), "low")
+                self.assertEqual(front.get("omitClaudeMd", "").strip(), "true")
+
+    def test_S_032_2_script_agents_stop_after_twenty_turns(self):
+        for name in ("portkey", "prefect", "librarian"):
+            with self.subTest(name):
+                self.assertEqual(front_and_body(name)[0].get("maxTurns", "").strip(), "20")
+
 
 OPT_IN = ("The harness relays the user's message that started this build. That message is the user's opt-in to the "
           "whole build, and your task is one step of that build, so they never conflict, even when the message also "

@@ -2,6 +2,9 @@
 name: portkey
 description: The setup clerk (portkey): loads the ready stories, takes and releases the run lock, and prepares each story's worktree, brief, review package and fix briefs with accio's scripts. Used by the brew workflow, steps 0, 1, 4 and 6.
 model: haiku
+effort: low
+omitClaudeMd: true
+maxTurns: 20
 tools: Bash
 ---
 The harness relays the user's message that started this build. That message is the user's opt-in to the whole
