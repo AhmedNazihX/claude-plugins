@@ -33,9 +33,9 @@ class ShellpathsTest(unittest.TestCase):
 
     def test_a_brace_bomb_with_few_groups_is_refused_at_once(self):
         bomb = "{" + ",".join(f"o{n}" for n in range(20)) + "}"
-        started = time.monotonic()
+        started = time.process_time()  # CPU time, so parallel builds loading the machine don't fail it
         self.assertEqual(shellpaths.brace_alternatives(bomb * 6), (bomb * 6,))
-        self.assertLess(time.monotonic() - started, 1)
+        self.assertLess(time.process_time() - started, 1)
 
     def test_a_loop_variable_from_the_environment_is_not_trusted(self):
         names = shellpaths.assigned_names([("for", "TMPDIR", "in", "/")])
