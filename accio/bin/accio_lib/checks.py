@@ -48,7 +48,8 @@ from accio_lib import brief, globs, merge
 
 TEST_FOLDERS = frozenset({"test", "tests", "__tests__", "spec", "specs", "__snapshots__", "testdata", "fixtures",
                           "e2e", "cypress"})
-TEST_FOLDER_NAME = re.compile(r"^.+Tests$")  # Xcode's AppTests/
+EVAL_FOLDERS = frozenset({"evals", "eval", "__mocks__", "__fixtures__"})  # part of a story's test area (S-035/4)
+TEST_FOLDER_NAME =re.compile(r"^.+Tests$")  # Xcode's AppTests/
 TEST_STEMS = (re.compile(r"^test_.+"), re.compile(r"^.+_(test|spec)$"), re.compile(r"^.+\.(test|spec|cy)$"),
               re.compile(r"^tests?$"), re.compile(r"^.+Tests?$"), re.compile(r"^conftest$"))
 CODE_EXTENSIONS = frozenset({"py", "js", "jsx", "ts", "tsx", "mjs", "cjs", "go", "rs", "rb", "java", "kt", "kts",
@@ -119,8 +120,12 @@ def is_test_file(path):
 def in_test_area(path):
     """A test file, or a data file (a fixture) in a test folder; never under a dot-folder."""
     parts = _parts(path)
+    if _under_dot_folder(parts):
+        return False
+    if any(part.lower() in EVAL_FOLDERS for part in parts[:-1]):
+        return True  # evals, mocks and fixtures: whatever the file is
     is_fixture = _in_test_folder(parts) and parts[-1].rpartition(".")[2].lower() in DATA_EXTENSIONS
-    return not _under_dot_folder(parts) and (is_fixture or is_test_file(path))
+    return is_fixture or is_test_file(path)
 
 
 def scoped_to_diff(configured, changed):

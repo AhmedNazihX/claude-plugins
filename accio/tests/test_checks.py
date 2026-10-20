@@ -83,6 +83,12 @@ class ScopeAndBoundsTest(CheckTestBase):
         self.assertEqual(checks.out_of_bounds(changed, ["src/a.py", "src/new.py"]),
                          ["README.md", ".github/workflows/ci.yml"])
 
+    def test_S_035_4_evals_mocks_and_fixtures_folders_are_the_test_area(self):
+        exempt = ["evals/case-1.md", "eval/run.sh", "src/__mocks__/api.js", "src/__fixtures__/user.bin",
+                  "accio/evals/README.md"]
+        flagged = [".accio/evals/x.md", "src/evaluate/a.py", "src/evals.py"]
+        self.assertEqual(checks.out_of_bounds(exempt + flagged, ["src/a.py"]), flagged)
+
     def test_S_017_2_test_files_are_known_by_common_layouts_but_never_under_dot_folders(self):
         exempt = ["Tests/FooTests.swift", "Tests/Helpers.swift", "app/tests.py", "src/FooTest.java", "pkg/a_test.go",
                   "tests/fixtures/x.json", "src/__tests__/a.tsx", "spec/models/user_spec.rb", "tests/test_hook.sh",
