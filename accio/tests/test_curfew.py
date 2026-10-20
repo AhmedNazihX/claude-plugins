@@ -317,6 +317,90 @@ class FlagsAndFormsTest(CurfewTestBase):
         self.assert_denied("Bash", self.in_worktree("git branch -D story/S-001"), "branch", agent="accio:prefect")
 
 
+PREVIEW_URL = "http://localhost:3000/app"
+BROWSER = "mcp__plugin_playwright_playwright__browser_"
+MAD_EYE = "accio:mad-eye"
+
+
+class MadEyeBrowserTest(CurfewTestBase):
+    def setUp(self):
+        super().setUp()
+        config = {**CONFIG, "preview": {"command": "npm start", "url": PREVIEW_URL}}
+        write(self.repo / ".accio" / "config.json", json.dumps(config))
+        self.shots = self.run_dir / "S-001" / "mad-eye"
+
+    def browse(self, name, tool_input, **kwargs):
+        return self.decision(BROWSER + name, tool_input, agent=MAD_EYE, **kwargs)
+
+    def test_S_046_1_navigate_to_the_preview_origin_is_allowed(self):
+        for url in (PREVIEW_URL, "http://localhost:3000/other?x=1", "HTTP://LOCALHOST:3000"):
+            with self.subTest(url):
+                self.assertEqual(self.browse("navigate", {"url": url})[0], "allow")
+
+    def test_S_046_2_navigate_to_another_origin_is_denied(self):
+        for url in ("http://localhost:3001/", "https://localhost:3000/", "http://example.com/",
+                    "http://localhost:3000@evil.com/", "file:///etc/passwd", "localhost:3000", ""):
+            with self.subTest(url):
+                verdict, reason = self.browse("navigate", {"url": url})
+                self.assertEqual(verdict, "deny")
+                self.assertIn("origin", reason)
+
+    def test_S_046_2_navigate_is_denied_without_a_preview_url(self):
+        write(self.repo / ".accio" / "config.json", json.dumps(CONFIG))
+        verdict, reason = self.browse("navigate", {"url": PREVIEW_URL})
+        self.assertEqual(verdict, "deny")
+        self.assertIn("preview.url", reason)
+
+    def test_S_046_3_screenshot_into_the_mad_eye_folder_is_allowed(self):
+        for story_id in ("S-001", "S-123"):
+            shot = self.run_dir / story_id / "mad-eye" / "home.png"
+            self.assertEqual(self.browse("take_screenshot", {"filename": str(shot)})[0], "allow", story_id)
+
+    def test_S_046_4_screenshot_outside_the_folder_is_denied(self):
+        outside = self.tmp.name
+        (self.shots).mkdir(parents=True)
+        os.symlink(outside, self.shots / "link")
+        for name in (str(self.repo / "home.png"), str(self.run_dir / "S-001" / "home.png"),
+                     str(self.shots / ".." / "home.png"), str(self.shots / "link" / "home.png"),
+                     str(self.run_dir / "notes" / "mad-eye" / "home.png"), str(self.shots), "home.png", ""):
+            with self.subTest(name):
+                verdict, reason = self.browse("take_screenshot", {"filename": name})
+                self.assertEqual(verdict, "deny")
+                self.assertIn("mad-eye", reason)
+
+    def test_S_046_4_screenshot_without_a_filename_is_denied(self):
+        self.assertEqual(self.browse("take_screenshot", {})[0], "deny")
+
+    def test_S_046_5_a_tool_off_the_list_is_denied(self):
+        for name in ("evaluate", "run_code_unsafe", "file_upload", "network_requests", "drop"):
+            with self.subTest(name):
+                verdict, reason = self.browse(name, {})
+                self.assertEqual(verdict, "deny")
+                self.assertIn("browser_" + name, reason)
+
+    def test_S_046_5_the_fixed_list_is_allowed(self):
+        for name in ("snapshot", "click", "type", "fill_form", "select_option", "hover", "press_key", "wait_for",
+                     "resize", "console_messages", "close"):
+            with self.subTest(name):
+                self.assertEqual(self.browse(name, {})[0], "allow")
+
+    def test_S_046_6_any_other_agent_is_denied(self):
+        for agent in ("accio:house-elf", "accio:portkey", "accio:seeker", "accio:librarian"):
+            for name in ("snapshot", "navigate"):
+                with self.subTest(agent + name):
+                    self.assert_denied(BROWSER + name, {"url": PREVIEW_URL}, "mad-eye", agent=agent)
+
+    def test_S_046_7_the_configured_prefix_replaces_the_default(self):
+        config = {"preview": {"url": PREVIEW_URL, "mcp_prefix": "mcp__pw__"}}
+        ctx = policy.Context(root=self.repo, accio=self.repo / ".accio", bin_dir=ROOT / "bin", config=config,
+                             claims={}, statuses={})
+        self.assertTrue(policy.decide("mad-eye", "a1", "mcp__pw__browser_snapshot", {}, ctx).allow)
+        self.assertTrue(policy.decide("mad-eye", "a1", "mcp__pw__browser_navigate", {"url": PREVIEW_URL}, ctx).allow)
+        self.assertFalse(policy.decide("mad-eye", "a1", BROWSER + "snapshot", {}, ctx).allow)
+        self.assertFalse(policy.decide("house-elf", "a1", "mcp__pw__browser_snapshot", {}, ctx).allow)
+        self.assertFalse(policy.decide("mad-eye", "a1", "mcp__pw__browser_evaluate", {}, ctx).allow)
+
+
 class OtherAgentsTest(CurfewTestBase):
     def test_S_024_seeker_and_wandmaker_write_only_their_notes(self):
         accio = self.repo / ".accio"
