@@ -99,10 +99,11 @@ def _kind(outputs, changed):
     return "other", "failed, but neither an assertion nor a crash in a changed file"
 
 
-def _entry(repro, verdict, reason):
+def _entry(repro, verdict, reason, cant_load=False):
+    """`cant_load` is true only when the head runs failed with a setup error: the repro could not load (S-043/8)."""
     text = repro.read_text(encoding="utf-8", errors="replace")
     return {"file": repro.name, "verdict": verdict, "reason": reason, "claim": read_field(text, "claim"),
-            "source": read_field(text, "source")}
+            "source": read_field(text, "source"), "cant_load": cant_load}
 
 
 def judge(worktree, repro, command, head, base, changed):
@@ -115,7 +116,7 @@ def judge(worktree, repro, command, head, base, changed):
         outputs.append(output)
     kind, why = _kind(outputs, changed)
     if kind in ("setup", "other"):
-        return _entry(repro, DROPPED, why)
+        return _entry(repro, DROPPED, why, cant_load=kind == "setup")
     base_passed, base_output = _run_at(worktree, base, repro, command)
     if not base_passed and not SETUP_ERROR.search(base_output):
         return _entry(repro, PRE_EXISTING, "fails on base too: out of scope")
@@ -135,11 +136,13 @@ def _rerun(worktree, repro, command, head, base, changed, earlier):
     if earlier["verdict"] == PRE_EXISTING:
         return entry
     if entry["verdict"] == DROPPED and entry["reason"] == PASSED_ON_HEAD:
-        return {**earlier, "verdict": FIXED, "reason": "passes on head after the fix round"}
+        return {**earlier, "verdict": FIXED, "reason": "passes on head after the fix round",
+                "cant_load": False}
     if entry["verdict"] == DROPPED and entry["reason"] == FAILED_ONCE:
-        return earlier
+        return {**earlier, "cant_load": False}
     # failed twice on head, whatever the cause: only a clean pass may change a kept or fixed verdict
-    return {**earlier, "verdict": KEPT, "reason": f"still fails on head: {entry['reason']}"}
+    return {**earlier, "verdict": KEPT, "reason": f"still fails on head: {entry['reason']}",
+            "cant_load": entry["cant_load"]}
 
 
 def _with_scope(entry, dod_ids):

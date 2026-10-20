@@ -502,8 +502,10 @@ class LogTest(unittest.TestCase):
         entries = [
             {"file": "r1.py", "verdict": "kept", "claim": "empty list returns 0", "source": "src/a.py:9", "in_dod": False,
              "reason": "failed an assertion on head in both runs"},
-            {"file": "r2.py", "verdict": "kept", "claim": "c", "source": "S-001/1", "in_dod": True,
+            {"file": "r2.py", "verdict": "kept", "claim": "c", "source": "S-001/1", "in_dod": True, "cant_load": True,
              "reason": "still fails on head: failed with a setup error (ImportError), not a break"},
+            {"file": "r5.py", "verdict": "kept", "claim": "new code", "source": "src/b.py:2", "in_dod": False,
+             "cant_load": False, "reason": "failed an assertion on head in both runs; setup error there"},
             {"file": "r3.py", "verdict": "kept", "claim": "in the DoD", "source": "S-001/1", "in_dod": True,
              "reason": "failed an assertion on head in both runs"},
             {"file": "r4.py", "verdict": "dropped", "claim": "x", "source": "src/a.py:1", "in_dod": False, "reason": "r"},
@@ -513,6 +515,7 @@ class LogTest(unittest.TestCase):
         log = self.log()
         self.assertIn("- S-001 boggart r1.py outside the DoD: empty list returns 0 (src/a.py:9)", log)
         self.assertIn("- S-001 boggart r2.py: repro can't load (setup error after a fix round)", log)
+        self.assertIn("- S-001 boggart r5.py outside the DoD: new code (src/b.py:2)", log)  # reason text decides nothing
         self.assertNotIn("r3.py", log)
         self.assertNotIn("r4.py", log)
 

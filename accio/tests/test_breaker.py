@@ -205,6 +205,26 @@ class BreakerTest(unittest.TestCase):
         self.change("other = 1\n")
         self.assertEqual(self.verdicts_by_file()["repro_r.py"]["verdict"], "kept")
 
+    def test_S_043_8_cant_load_is_set_only_when_head_failed_with_a_setup_error(self):
+        self.try_repro("repro_c.py", KEEPS_VALUE)
+        first = self.verdicts_by_file()["repro_c.py"]
+        self.assertEqual((first["verdict"], first["cant_load"]), ("kept", False))  # an assertion, base has a setup error
+        self.change("other = 1\n")  # the import now fails on head
+        stuck = self.verdicts_by_file()["repro_c.py"]
+        self.assertEqual((stuck["verdict"], stuck["cant_load"]), ("kept", True))
+        self.change("value = 1\n")
+        fixed = self.verdicts_by_file()["repro_c.py"]
+        self.assertEqual((fixed["verdict"], fixed["cant_load"]), ("fixed", False))
+
+    def test_S_043_8_a_new_module_break_whose_reason_says_setup_error_on_base_is_not_cant_load(self):
+        write(self.worktree / "src" / "b.py", "value = 2\n")
+        commit_all(self.worktree, "new module")
+        text = HEADER + "from src.b import value\nassert value == 1, 'value changed'\n"
+        entry = self.try_repro("repro_n.py", text)
+        self.assertEqual(entry["verdict"], "kept")
+        self.assertIn("setup error", entry["reason"])
+        self.assertFalse(entry["cant_load"])
+
     def test_S_052_1_a_crash_outside_the_changed_files_keeps_an_earlier_repro_kept(self):
         self.try_repro("repro_s.py", KEEPS_VALUE)
         self.verdicts_by_file()

@@ -313,7 +313,7 @@ def _boggart_lines(run_dir, sid):
         if not isinstance(entry, dict) or entry.get("verdict") != "kept":
             continue
         name = entry.get("file", "repro")
-        if "setup error" in str(entry.get("reason", "")):
+        if entry.get("cant_load") is True:  # set by breaker.py only for a setup error on head, never read from reason text
             lines.append(f"{sid} boggart {name}: repro can't load (setup error after a fix round)")
         elif not entry.get("in_dod"):
             lines.append(f"{sid} boggart {name} outside the DoD: {entry.get('claim', '')} ({entry.get('source', '')})")

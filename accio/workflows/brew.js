@@ -103,7 +103,7 @@ const VERIFY_SCHEMA = {
         type: 'object',
         properties: {
           file: { type: 'string' }, verdict: { type: 'string' }, reason: { type: 'string' }, claim: { type: 'string' },
-          source: { type: 'string' }, in_dod: { type: 'boolean' },
+          source: { type: 'string' }, in_dod: { type: 'boolean' }, cant_load: { type: 'boolean' },
         },
       },
     },
@@ -353,20 +353,29 @@ async function review(story, names, pkg, round, ruling) {
   return names.map((name, index) => ({ name, reply: replies[index] }))
 }
 
-// Review, then at most MAX_FIX_ROUNDS fix rounds (S-020/1, /2, /5). Returns a stop, or {} when the story is READY.
+// Review, then at most MAX_FIX_ROUNDS fix rounds (S-020/1, /2, /5), then boggart (S-043). Returns a stop, or what
+// boggart left ({note}) when the story is READY.
 async function reviewAndFix(story, worktree, model, earlier, usedFixes) {
-  let pkg = await packageFor(story, 0, null)
-  if (pkg.stop) return pkg
-  const whole = pkg  // the whole story's package: its `code` and `breaker` flags decide whether boggart runs
-  let names = panel(story, pkg.risky)
+  const whole = await packageFor(story, 0, null)  // the whole story's package: its `code` and `breaker` flags decide whether boggart runs
+  if (whole.stop) return whole
+  const reviewed = await reviewLoop(story, worktree, model, earlier, usedFixes, whole, panel(story, whole.risky), 0)
+  if (reviewed.stop) return reviewed
+  return boggartStage(story, worktree, model, reviewed.ruling, reviewed.fixes, whole, reviewed.head)
+}
+
+// The review rounds for `first`, a package: review, and while a reviewer fails run a fix round and review the fix diff.
+// Returns a stop, or {fixes, ruling, head} (head: the commit the last review judged).
+async function reviewLoop(story, worktree, model, earlier, usedFixes, first, firstNames, startRound) {
+  let pkg = first
+  let names = firstNames
   let ruling = earlier
   let fixes = usedFixes
-  for (let round = 0; ; round += 1) {
+  for (let round = startRound; ; round += 1) {
     const verdicts = await review(story, names, pkg, round, ruling)
     const silent = verdicts.find((each) => failed(each.reply))
     if (silent) return accioStop(`The ${ROLES[silent.name]} (${silent.name}) stopped answering for over 20 minutes. Review it again?`)
     const failing = verdicts.filter((each) => each.reply.verdict !== 'pass')
-    if (!failing.length) return boggartStage(story, worktree, model, ruling, fixes, whole)
+    if (!failing.length) return { fixes, ruling, head: pkg.head }
     const findings = failing.map((each) => each.reply.path)
     if (fixes >= MAX_FIX_ROUNDS) {
       return stop(`Findings remain after ${MAX_FIX_ROUNDS} fix rounds (${findings.join(', ')}). Fix them by hand, ` +
@@ -396,7 +405,9 @@ async function reviewAndFix(story, worktree, model, earlier, usedFixes) {
 
 const brokenPath = (story) => `.accio/run/${story.id}/boggart-findings.md`
 const reproPath = (story, file) => `.accio/run/${story.id}/boggart/repros/${file}`
-const cantLoad = (item) => item.verdict === 'kept' && /setup error/.test(item.reason || '')
+// `cant_load` is set by breaker.py only when the head runs failed with a setup error. The reason text is never read:
+// a break in code the story added says "setup error" for base, and it is a real break.
+const cantLoad = (item) => item.verdict === 'kept' && item.cant_load === true
 const plural = (count, word) => `${count} ${word}${count === 1 ? '' : 's'}`
 
 function tryToBreak(story, pkg) {
@@ -451,19 +462,25 @@ function boggartNote(kept) {
 
 const verified = (reply) => !failed(reply) && Array.isArray(reply.repros)
 
-// One fix round for the kept in-DoD breaks: write boggart-findings.md, fix, re-check. Returns a stop or {fixes, ruling}.
-async function fixBreaks(story, worktree, model, used, ruling, broken) {
+// One fix round for the kept in-DoD breaks: write boggart-findings.md, fix, re-check, then review the fix diff (since
+// `head`) as reviewAndFix does, with auror added when it is risky. Returns a stop or {fixes, ruling, head}.
+async function fixBreaks(story, worktree, model, used, ruling, broken, head) {
   const round = used + 1
   const wrote = await writeBrokenFindings(story, round, broken)
   if (failed(wrote)) return accioStop(`Writing the boggart findings failed (${(wrote && wrote.error) || 'no answer'}). Try again?`)
   const fixed = await fixRound(story, worktree, round, [brokenPath(story)], tierFor(model, round), ruling)
   if (fixed.stop) return fixed
-  return checkAndFix(story, worktree, model, round, fixed.ruling)
+  const checked = await checkAndFix(story, worktree, model, round, fixed.ruling)
+  if (checked.stop) return checked
+  const pkg = await packageFor(story, `${checked.fixes}c`, head)
+  if (pkg.stop) return pkg
+  return reviewLoop(story, worktree, model, checked.ruling, checked.fixes, pkg, panel(story, pkg.risky), checked.fixes)
 }
 
-async function boggartStage(story, worktree, model, ruling, fixes, whole) {
+async function boggartStage(story, worktree, model, ruling, fixes, whole, reviewedHead) {
   if (!whole.code || !whole.breaker) return {}  // docs-only, or no `breaker` command: review.py logged the skip
   let pkg = whole
+  let head = reviewedHead  // the commit the last review judged: a fix round's diff starts there
   if (fixes > 0) {  // a re-review package holds only a fix diff: boggart reads the whole story
     pkg = await packageFor(story, `${fixes}b`, null)
     if (pkg.stop) return { note: 'boggart did not run: its package failed' }
@@ -488,10 +505,11 @@ async function boggartStage(story, worktree, model, ruling, fixes, whole) {
     const broken = kept.filter((item) => item.in_dod && !cantLoad(item))
     if (!broken.length) return { fixes: used, ruling: current, note: boggartNote(kept) }
     if (used >= MAX_FIX_ROUNDS) return stop(brokenQuestion(story, broken))
-    const fixed = await fixBreaks(story, worktree, model, used, current, broken)
+    const fixed = await fixBreaks(story, worktree, model, used, current, broken, head)
     if (fixed.stop) return fixed
     used = fixed.fixes
     current = fixed.ruling
+    head = fixed.head
     reply = await verify(story, 'verify', used)
   }
 }
