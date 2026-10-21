@@ -134,8 +134,10 @@ def refresh(run_dir):
 
 
 def release(run_dir):
-    """End the build: the grants of the stories it built are used up, then the lock goes."""
+    """End the build: its claims and the grants of the stories it built are used up, then the lock goes (S-057/2)."""
     try:
+        with guard(run_dir):
+            (run_dir / CLAIMS_NAME).unlink(missing_ok=True)
         _expire_grants(run_dir)
         lock_path(run_dir).unlink(missing_ok=True)
     except OSError as error:

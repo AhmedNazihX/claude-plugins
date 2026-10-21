@@ -203,6 +203,27 @@ class BriefTest(unittest.TestCase):
         left = json.loads((self.accio / "run" / "claims.json").read_text(encoding="utf-8"))
         self.assertEqual(sorted(left), ["a2"])
 
+    def test_S_057_1_release_drops_the_storys_claim_and_leaves_the_brief_alone(self):
+        claims = {"a1": {"story": "S-001", "worktree": "x"}, "a2": {"story": "S-002", "worktree": "y"}}
+        write(self.accio / "run" / "claims.json", json.dumps(claims))
+        reply = self.brief("S-001")  # the brief a first builder had
+        write(self.accio / "run" / "claims.json", json.dumps(claims))
+        before = pathlib.Path(reply["brief"]).read_text(encoding="utf-8")
+        released = self.brief("S-001", "--release")
+        self.assertEqual(released, {"released": "S-001"})
+        left = json.loads((self.accio / "run" / "claims.json").read_text(encoding="utf-8"))
+        self.assertEqual(sorted(left), ["a2"])  # S-057/3: the other story's claim stays
+        self.assertEqual(pathlib.Path(reply["brief"]).read_text(encoding="utf-8"), before)
+
+    def test_S_057_2_the_end_of_a_build_leaves_no_claim(self):
+        sys.path.insert(0, str(ROOT / "bin"))
+        from accio_lib import runlock
+        run = self.accio / "run"
+        runlock.take(run)
+        write(run / "claims.json", json.dumps({"a1": {"story": "S-001", "worktree": "x"}}))
+        runlock.release(run)
+        self.assertFalse((run / "claims.json").exists() and json.loads((run / "claims.json").read_text("utf-8")))
+
     def test_S_007_4_the_brief_holds_everything_the_implementer_needs(self):
         self.add_story("S-001", notes="The link must expire in 15 minutes, not 30.")
         reply = self.brief("S-001")

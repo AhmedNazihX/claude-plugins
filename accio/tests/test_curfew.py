@@ -205,7 +205,8 @@ class HouseElfBashTest(CurfewTestBase):
         self.assert_denied("Bash", self.in_worktree("docker compose up -d"), "docker")  # another story's grant
         grants.write_text(json.dumps({"stories": {"S-001": ["docker compose up -d"]}}))
         self.assert_allowed("Bash", self.in_worktree("docker compose up -d"))
-        runlock.release(self.run_dir)
+        runlock.release(self.run_dir)  # the build ends and drops its claims (S-057/2)
+        self.claim()
         self.assert_denied("Bash", self.in_worktree("docker compose up -d"), "docker")
 
     def test_S_040_1_the_exact_agent_allow_command_is_allowed(self):

@@ -7,6 +7,7 @@ With --fix: write run/<ID>/fix-brief.md listing only the given findings; the wor
 Prints {"worktree", "brief", "base"} as JSON (portkey's reply).
 With --review: write run/<ID>/review.diff and review-package.md for the reviewers; --since <commit> limits the diff
 to a fix round's. Prints {"package", "diff", "head", "risky"}; the worktree is not touched.
+With --release: drop the story's claim and nothing else (for a builder after a ruling); prints {"released": ID}.
 With --review --fix-branch <branch> --acceptance <file> (no ID): the same package for a direct fix on a branch that
 is not a story, with the acceptance list in place of the DoD and a findings path for each reviewer.
 """
@@ -47,6 +48,8 @@ def run(args):
     if args.review:
         return review.package(accio, parsed, _existing_worktree(main, args.id), settings, args.since)
     runlock.release_claim(accio / "run", args.id)  # the house-elf of this brief claims afresh (S-015)
+    if args.release:  # a builder after a ruling has no new brief, only a free claim (S-057)
+        return {"released": args.id}
     if args.fix:
         worktree = _existing_worktree(main, args.id)
         text = brief.render_fix(parsed, accio, worktree, brief.read_findings(args.fix))
@@ -70,6 +73,7 @@ def main(argv=None):
     modes = parser.add_mutually_exclusive_group()
     modes.add_argument("--fix", action="append", type=pathlib.Path, default=[])
     modes.add_argument("--review", action="store_true")
+    modes.add_argument("--release", action="store_true")
     parser.add_argument("--since")
     args = parser.parse_args(argv)
     if args.since and not args.review:
