@@ -1,0 +1,30 @@
+{
+  "session_id": "829a5b94-94cf-4831-8fc5-37827bd072dd",
+  "transcript_path": "<home>/.claude/projects/<project>/829a5b94-94cf-4831-8fc5-37827bd072dd.jsonl",
+  "cwd": "<scratch>/s-l5/repo",
+  "prompt_id": "54a13e60-49c8-432c-acdf-8242abb7f0f8",
+  "permission_mode": "auto",
+  "agent_id": "a9549e371ba1e3b80",
+  "agent_type": "accio:mad-eye",
+  "effort": {
+    "level": "medium"
+  },
+  "hook_event_name": "PostToolUse",
+  "tool_name": "mcp__plugin_playwright_playwright__browser_click",
+  "tool_input": {
+    "target": "e4",
+    "element": "Details link"
+  },
+  "tool_response": [
+    {
+      "type": "text",
+      "text": "### Ran Playwright code\n```js\nawait page.getByRole('link', { name: 'Details' }).click();\n```\n### Page\n- Page URL: http://localhost:8766/\n- Page Title: Elsewhere\n### Snapshot\n- [Snapshot](.playwright-mcp/page-2026-10-21T11-02-23-314Z.yml)"
+    }
+  ],
+  "tool_use_id": "toolu_01L3fa5AWwrQnUcciYDePjsD",
+  "duration_ms": 624,
+  "mcp_server": {
+    "name": "plugin:playwright:playwright",
+    "source": "plugin"
+  }
+}
