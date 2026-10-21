@@ -12,6 +12,7 @@ import time
 
 LOCK_NAME = "brew.lock"
 CLAIMS_NAME = "claims.json"
+FENCE_NAME = "mad-eye-fence.json"  # fence hook: {agent_id: {"url": off-origin page}} for mad-eye agents off the preview (S-063)
 ALLOW_ONCE_NAME = "allow-once.json"  # commands owl allowed once, per story, until its next build (S-022)
 STATUS_NAME = "status.json"
 STUCK_NAME = "stuck.json"  # curfew records an agent that reached a permission question  # the build's statuses (accio_lib.board writes it)

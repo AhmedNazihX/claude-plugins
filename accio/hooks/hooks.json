@@ -18,6 +18,12 @@
         "hooks": [{ "type": "command", "command": "python3 -I \"${CLAUDE_PLUGIN_ROOT}/hooks/curfew.py\"" }]
       }
     ],
+    "PostToolUse": [
+      {
+        "matcher": "mcp__.*__browser_.*",
+        "hooks": [{ "type": "command", "command": "python3 -I \"${CLAUDE_PLUGIN_ROOT}/hooks/fence.py\"" }]
+      }
+    ],
     "SessionStart": [
       {
         "hooks": [{ "type": "command", "command": "python3 -I \"${CLAUDE_PLUGIN_ROOT}/hooks/session_start.py\"" }]
