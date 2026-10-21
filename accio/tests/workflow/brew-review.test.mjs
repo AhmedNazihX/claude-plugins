@@ -4,7 +4,7 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { runWorkflow, happy, story, fail } from './stub.mjs'
+import { runWorkflow, happy, story, fail, pass } from './stub.mjs'
 
 const AGENTS = join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'agents')
 const labels = (calls) => calls.map((call) => call.label)
@@ -418,4 +418,137 @@ test('S-043 a boggart or verify step that gives no answer does not block the sto
   assert.match(result, /S-001 Story S-001\s+READY\s+boggart gave no answer/)
   assert.match(result, /S-002 Story S-002\s+READY\s+boggart's verify gave no answer/)
   assert.ok(labels(calls).includes('S-001 boggart retry'))
+})
+
+// --- S-047: mad-eye after boggart ----------------------------------------------------------------------------------
+
+const withUi = (extra = {}) => async (call, id) => ({
+  package: `/run/${id}/review-package.md`, head: 'h0', risky: false, ui: true, preview: true, test_data: true, ...extra,
+})
+const SEEN = { findings: [{ id: 'mad-eye-1', where: '/login', claim: 'shows a Sign in button', dod: 'S-001/1', failure: 'no button', screenshot: '/r/.accio/run/S-001/mad-eye/S-001-1.png' }] }
+const WALK = ['preview-start', 'mad-eye', 'preview-stop']
+const frontMatter = (name) => readFileSync(join(AGENTS, `${name}.md`), 'utf8').split('\n---\n')[0]
+const README = join(AGENTS, '..', 'README.md')
+const madEyeSection = () => readFileSync(README, 'utf8').split('## mad-eye')[1].split('\n## ')[0].replace(/\s+/g, ' ')
+
+test('S-047/1 the package reply schema carries the ui, preview and test_data flags, and the prompt names ui_globs', async () => {
+  const { calls } = await runWorkflow('brew', happy([story('S-001')]))
+  const props = calls.find((call) => call.label === 'S-001 package').opts.schema.properties
+  for (const key of ['ui', 'preview', 'test_data']) assert.equal(props[key].type, 'boolean', key)
+  assert.match(prompt(calls, 'S-001 package'), /ui_globs[\s\S]*empty list/)
+})
+
+test('S-047/2 a diff that touches no ui_globs file never calls mad-eye, or starts a preview', async () => {
+  const { calls } = await runWorkflow('brew', happy([story('S-001')], { package: withUi({ ui: false }) }))
+  assert.deepEqual(steps(calls, 'S-001').slice(-2), ['professor', 'outcome'])
+  assert.ok(!types(calls, 'S-001').includes('accio:mad-eye'))
+})
+
+test('S-047/3 a UI diff with no preview in config logs a skip that names the preview', async () => {
+  const { result, calls } = await runWorkflow('brew', happy([story('S-001')], { package: withUi({ preview: false, test_data: false }) }))
+  assert.deepEqual(steps(calls, 'S-001').slice(-2), ['professor', 'outcome'])
+  assert.match(result, /S-001 Story S-001\s+READY\s+mad-eye skipped: config\.json has no `preview`/)
+})
+
+test('S-047/3 a UI diff whose preview lacks test_data true logs a skip that names test_data', async () => {
+  const { result, calls } = await runWorkflow('brew', happy([story('S-001')], { package: withUi({ test_data: false }) }))
+  assert.deepEqual(steps(calls, 'S-001').slice(-2), ['professor', 'outcome'])
+  assert.match(result, /READY\s+mad-eye skipped: config\.json preview has no `"test_data": true`/)
+})
+
+test('S-047/4 the missing browser tools outcome of S-044 logs a skip, and the preview still stops', async () => {
+  const missing = [
+    ['the agent says so', async () => ({ no_browser_tools: true })],
+    ['the call errors', async () => ({ error: 'Error: No such tool available: mcp__plugin_playwright_playwright__browser_navigate' })],
+  ]
+  for (const [name, reply] of missing) {
+    const { result, calls } = await runWorkflow('brew', happy([story('S-001')], { package: withUi(), 'mad-eye': reply }))
+    assert.deepEqual(steps(calls, 'S-001').slice(-4), WALK.concat('outcome'), name)
+    assert.match(result, /READY\s+mad-eye skipped: the browser tools are missing from this session/, name)
+  }
+})
+
+test('S-047/5 mad-eye runs between accio-preview start and stop, run by prefect, in that order', async () => {
+  const { calls } = await runWorkflow('brew', happy([story('S-001')], { package: withUi() }))
+  assert.deepEqual(steps(calls, 'S-001').slice(-4), WALK.concat('outcome'))
+  assert.match(prompt(calls, 'S-001 preview-start'), /accio-preview S-001 start/)
+  assert.match(prompt(calls, 'S-001 preview-stop'), /accio-preview S-001 stop/)
+  assert.equal(calls.find((call) => call.label === 'S-001 preview-start').opts.agentType, 'accio:prefect')
+  assert.equal(calls.find((call) => call.label === 'S-001 mad-eye').opts.agentType, 'accio:mad-eye')
+  assert.equal(calls.find((call) => call.label === 'S-001 mad-eye').opts.model, 'sonnet')
+})
+
+test('S-047/6 mad-eye failing, erroring or throwing still stops the preview', async () => {
+  const bad = [async () => null, async () => ({ error: 'it broke' }), async () => { throw new Error('boom') }]
+  for (const reply of bad) {
+    const { result, calls } = await runWorkflow('brew', happy([story('S-001')], { package: withUi(), 'mad-eye': reply }))
+    assert.deepEqual(steps(calls, 'S-001').slice(-4), WALK.concat('outcome'))
+    assert.match(result, /READY\s+mad-eye skipped/)
+  }
+})
+
+test('S-047/6 a preview that fails to start still gets a stop and no mad-eye call', async () => {
+  const { result, calls } = await runWorkflow('brew', happy([story('S-001')], {
+    package: withUi(), 'preview-start': async () => ({ done: false, error: 'port in use' }),
+  }))
+  assert.ok(!labels(calls).includes('S-001 mad-eye'))
+  assert.ok(labels(calls).includes('S-001 preview-stop'))
+  assert.match(result, /mad-eye skipped: the preview did not start \(port in use\)/)
+})
+
+test('S-047/7 mad-eye findings are written to mad-eye-findings.md and go to a fix round, then the fix diff is reviewed', async () => {
+  const { result, calls } = await runWorkflow('brew', happy([story('S-001')], { package: withUi(), 'mad-eye': async () => SEEN }))
+  assert.deepEqual(steps(calls, 'S-001').slice(6), WALK.concat(['mad-eye-findings r1', 'fix-brief r1', 'fix r1', 'check r1',
+    'package r1c', 'examiner r1', 'professor r1', 'outcome']))
+  assert.match(prompt(calls, 'S-001 mad-eye-findings r1'), /\.accio\/run\/S-001\/mad-eye-findings\.md[\s\S]*no button/)
+  assert.match(prompt(calls, 'S-001 fix-brief r1'), /accio-brief S-001 --fix \.accio\/run\/S-001\/mad-eye-findings\.md/)
+  assert.match(result, /S-001 Story S-001\s+READY/)
+})
+
+test('S-047/7 findings that mad-eye still reports after two fix rounds block the story with a question', async () => {
+  const { result, calls } = await runWorkflow('brew', happy([story('S-001')], {
+    package: withUi(), 'mad-eye': async () => SEEN,
+    examiner: async (call, id) => (call.label.endsWith(' r2') ? pass(id, 'examiner') : fail(id, 'examiner')),
+  }))
+  assert.match(prompt(calls, 'S-001 outcome'), /BLOCKED/)
+  assert.match(result, /S-001 Story S-001\s+BLOCKED/)
+})
+
+test('S-047/8 mad-eye.md names Sonnet, lists the fixed browser tools and reads, has no edit tool, and logs in only with preview-login.json', () => {
+  const text = readFileSync(join(AGENTS, 'mad-eye.md'), 'utf8')
+  const front = frontMatter('mad-eye')
+  assert.match(front, /^model: sonnet$/m)
+  const tools = front.match(/^tools: (.*)$/m)[1].split(',').map((tool) => tool.trim())
+  const prefix = 'mcp__plugin_playwright_playwright__browser_'
+  assert.deepEqual(tools.filter((tool) => !tool.startsWith(prefix)), ['Read', 'Grep', 'Glob'])
+  assert.deepEqual(tools.filter((tool) => tool.startsWith(prefix)).map((tool) => tool.slice(prefix.length)).sort(),
+    ['click', 'close', 'console_messages', 'fill_form', 'hover', 'navigate', 'press_key', 'resize', 'select_option',
+      'snapshot', 'take_screenshot', 'type', 'wait_for'])
+  assert.ok(!tools.some((tool) => /Edit|Write|Bash|evaluate|run_code|file_upload/.test(tool)))
+  assert.match(text, /only with the account in `\.accio\/run\/<ID>\/preview-login\.json`/)
+  assert.match(text.replace(/\s+/g, ' '), /opt-in to the whole build/)
+})
+
+test('S-047/11 mad-eye.md tells it to save screenshots at an absolute path under .accio/run/<ID>/mad-eye/', async () => {
+  const text = readFileSync(join(AGENTS, 'mad-eye.md'), 'utf8').replace(/\s+/g, ' ')
+  assert.match(text, /absolute path inside the repo/)
+  assert.match(text, /\.accio\/run\/<ID>\/mad-eye\/<line>\.png/)
+  const { calls } = await runWorkflow('brew', happy([story('S-001')], { package: withUi() }))
+  assert.match(prompt(calls, 'S-001 mad-eye'), /absolute path[\s\S]*\.accio\/run\/S-001\/mad-eye\//)
+})
+
+test('S-047/12 mad-eye.md tells it to take a full page snapshot before each click', () => {
+  const text = readFileSync(join(AGENTS, 'mad-eye.md'), 'utf8').replace(/\s+/g, ' ')
+  assert.match(text, /full page snapshot before each click/)
+})
+
+test('S-047/9 the README mad-eye section says test data and test keys, that test_data is the user\'s word, and env-var logins', () => {
+  const section = madEyeSection()
+  assert.match(section, /preview must use test data and test keys/)
+  assert.match(section, /`test_data` is your word, and accio can't check it/)
+  assert.match(section, /Login details come from environment variables/)
+})
+
+test('S-047/13 the README mad-eye section tells the user to start the Playwright MCP server with --allowed-origins', () => {
+  assert.match(madEyeSection(), /--allowed-origins <preview origin>/)
 })

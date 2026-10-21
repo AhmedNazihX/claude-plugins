@@ -41,6 +41,7 @@ accio's names come from a school of magic; each comes with a plain role.
 | `professor` | `sonnet` | the code reviewer | looks for bugs, silent errors and code that's hard to change |
 | `auror` | `sonnet` | the security reviewer | reviews changes that touch risky paths |
 | `boggart` | `sonnet` | the breaker | tries to break a built story with inputs its DoD never named; writes a repro per break |
+| `mad-eye` | `sonnet` | the preview walker | opens a UI story's preview, walks each visible DoD line, saves one screenshot per line |
 | `headmaster` | `sonnet` | the judge | settles a disagreement, or turns it into one question for you |
 | `quill` | `sonnet` | the story writer | turns the design into small, testable story files |
 | `seeker` | `sonnet` | the researcher | checks facts against live docs and the code |
@@ -56,6 +57,27 @@ Haiku runs the clerks that run scripts and read CI, Sonnet builds and reviews, a
 | `fidelius` | the secret keeper | keeps secrets out of files and commits |
 | `curfew` | the gatekeeper | lets each build agent run only its own job |
 | `doc-size` | the long-document guard | sends a read of a very long document to `librarian` or to one section |
+
+## mad-eye: a look at the preview
+
+When a story's diff touches a file that matches `ui_globs` in `.accio/config.json`, the build starts the story's
+preview (`accio-preview <ID> start`), and `mad-eye` opens it in a browser, walks each DoD line a user can see and saves
+one screenshot per line to `.accio/run/<ID>/mad-eye/`. Anything that does not hold goes to a fix round as
+`mad-eye-findings.md`. The preview is stopped afterwards, even when mad-eye fails. It never edits anything.
+
+It needs three things in `config.json`: `ui_globs` (a list of path globs; empty by default, so nothing runs),
+a `preview` (`command` and `url`), and `"test_data": true` inside it. Without one of them the build skips mad-eye and
+says which is missing.
+
+- **The preview must use test data and test keys.** mad-eye clicks and types in it, so it must never hold real
+  customers, real money or live keys.
+- **`test_data` is your word, and accio can't check it.** Set it to `true` only when the preview really runs on test
+  data and test keys.
+- **Login details come from environment variables.** Name them in `preview.login` (`username_env`, `password_env`);
+  the config never holds the values. mad-eye logs in only with that account.
+- **Start the browser server with `--allowed-origins <preview origin>`** (for example
+  `--allowed-origins http://localhost:3000`). accio checks only where `browser_navigate` goes, so a click on a link
+  could still leave the preview; this flag stops that.
 
 ## Install
 
