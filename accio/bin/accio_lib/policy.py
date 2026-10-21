@@ -74,6 +74,9 @@ BROWSER_TOOLS = frozenset({"browser_navigate", "browser_snapshot", "browser_clic
                            "browser_fill_form", "browser_select_option", "browser_hover", "browser_press_key",
                            "browser_wait_for", "browser_take_screenshot", "browser_resize",
                            "browser_console_messages", "browser_close"})
+FENCED_BROWSER_TOOLS = frozenset({"browser_navigate", "browser_take_screenshot", "browser_close"})
+FENCED_READ_TOOLS = frozenset({"Read", "Grep", "Glob"})
+FENCE_REASON = "the page is off the preview's origin, so mad-eye is fenced until it is back on the preview."
 DEFAULT_PORTS = {"http": 80, "https": 443}
 SHOT_FOLDER = "mad-eye"
 UNSAFE_URL = re.compile(r"[\\\s\x00-\x1f\x7f]")  # a browser reads these differently from urlsplit
@@ -106,6 +109,7 @@ class Context:
     config: dict
     claims: dict            # agent_id -> {"story", "worktree"}
     statuses: dict          # story -> status, from run/status.json
+    fenced: bool = False    # mad-eye is on a page off the preview (the fence record names this agent, S-064)
 
 
 @dataclasses.dataclass(frozen=True)
@@ -127,6 +131,9 @@ def decide(agent, agent_id, tool, tool_input, ctx):
     """The answer for one call by `accio:<agent>`."""
     if tool in REPLY_TOOLS and (agent == "house-elf" or agent in AGENTS):
         return allow()
+    if agent == BROWSER_AGENT and ctx.fenced and tool in FENCED_READ_TOOLS:
+        return deny(FENCE_REASON + f" {tool} is denied, since the off-origin page is also saved under "
+                    ".playwright-mcp/ (rule: fence).")
     browser = _browser(agent, tool, tool_input, ctx)
     if browser is not None:
         return browser
@@ -165,6 +172,9 @@ def _browser(agent, tool, tool_input, ctx):
         return deny(f"browser tools are for accio:{BROWSER_AGENT} only (rule: browser tools), not accio:{agent}.")
     if name not in BROWSER_TOOLS:
         return deny(f"{name} isn't on accio:{BROWSER_AGENT}'s browser list (rule: fixed browser list).")
+    if ctx.fenced and name not in FENCED_BROWSER_TOOLS:
+        return deny(FENCE_REASON + f" {name} is denied; only navigate to the origin, screenshot and close "
+                    "are allowed (rule: fence).")
     if name == "browser_navigate":
         return _navigate(tool_input, _preview(ctx).get("url"))
     if name == "browser_take_screenshot" or "filename" in tool_input:

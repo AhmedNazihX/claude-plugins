@@ -115,13 +115,18 @@ def _statuses(run_dir):
     return {story: status for story, status in statuses.items() if isinstance(status, str)}
 
 
+def _is_fenced(run_dir, agent_id):
+    """True when the fence hook's record names this agent (S-064); a missing or unreadable record is no fence."""
+    return agent_id in _read_json(run_dir / runlock.FENCE_NAME, {})
+
+
 def _pre_tool_use(payload, root, accio):
     run_dir = accio / "run"
     agent, agent_id = payload["agent_type"][len(AGENT_PREFIX):], str(payload.get("agent_id", ""))
     claims = _claims(run_dir)
     context = policy.Context(root=root, accio=accio, bin_dir=BIN,
                              config=_settings(accio, run_dir, claims.get(agent_id, {}).get("story")),
-                             claims=claims, statuses=_statuses(run_dir))
+                             claims=claims, statuses=_statuses(run_dir), fenced=_is_fenced(run_dir, agent_id))
     tool = payload.get("tool_name") if isinstance(payload.get("tool_name"), str) else ""
     decision = policy.decide(agent, agent_id, tool, payload["tool_input"], context)
     if not decision.allow:
