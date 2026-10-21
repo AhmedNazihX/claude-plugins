@@ -92,7 +92,7 @@ test('S-019/7 the run returns the build table only', async () => {
   assert.equal(typeof result, 'string')
   assert.equal(result, [
     'Build finished: 2 stories',
-    '  S-001 Password reset email  READY',
+    '  S-001 Password reset email  READY        boggart skipped: the code and breaker flags are false',
     '  S-002 Reset token expiry    BLOCKED      1 question for you',
     'Next: /accio:owl',
   ].join('\n'))
@@ -179,7 +179,7 @@ test('S-019/7 an outcome the board did not take, or a check with no reasons, sti
     'S-001 outcome retry': async () => ({ done: false, error: 'move failed' }),  // S-035: the retry fails too
     'S-002 check': async () => ({ pass: false }),
   }))
-  assert.match(result, /S-001 Story S-001\s+READY\s+the board was not updated; the next brew resumes it/)
+  assert.match(result, /S-001 Story S-001\s+READY\s+[^;\n]*; the board was not updated; the next brew resumes it/)
   assert.match(calls.find((call) => call.label === 'S-002 outcome').prompt, /failed without saying which/)
 })
 

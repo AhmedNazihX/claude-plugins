@@ -36,7 +36,7 @@ test('S-020/1 a fix round that clears the findings makes the story READY', async
 test('S-020/2 a fix round re-runs only the reviewers that raised findings, on the fix diff only', async () => {
   const heads = { package: 'h0', 'package r1': 'h1' }
   const { calls } = await runWorkflow('brew', happy([story('S-001')], {
-    package: async (call) => ({ package: '/run/S-001/review-package.md', head: heads[call.label.slice(6)] || 'h2', risky: true }),
+    package: async (call) => ({ package: '/run/S-001/review-package.md', head: heads[call.label.slice(6)] || 'h2', risky: true, code: false, breaker: false }),
     'S-001 examiner': async (call, id) => fail(id, 'examiner'),
     'S-001 auror': async (call, id) => fail(id, 'auror'),
   }))
@@ -55,7 +55,7 @@ test('S-020/2 a fix round re-runs only the reviewers that raised findings, on th
 
 test('S-020/5 a fix diff that touches a risky path brings auror into the re-review', async () => {
   const { calls } = await runWorkflow('brew', happy([story('S-001'), story('S-002')], {
-    package: async (call, id) => ({ package: `/run/${id}/review-package.md`, head: 'h', risky: call.label === 'S-001 package r1' }),
+    package: async (call, id) => ({ package: `/run/${id}/review-package.md`, head: 'h', risky: call.label === 'S-001 package r1', code: false, breaker: false }),
     examiner: async (call, id) => (call.label.endsWith(' r1') ? { verdict: 'pass', counts: { critical: 0, major: 0, minor: 0 }, path: 'p' } : fail(id, 'examiner')),
   }))
   assert.deepEqual(steps(calls, 'S-001').filter((step) => step.endsWith(' r1')),
@@ -184,7 +184,7 @@ test('S-020/5 the panel: Quick gets one combined reviewer, Story two, and a risk
   const stories = [story('S-001', { track: 'quick' }), story('S-002'), story('S-003', { track: 'feature' }),
     story('S-004', { track: 'quick' })]
   const { calls } = await runWorkflow('brew', happy(stories, {
-    package: async (call, id) => ({ package: `/run/${id}/review-package.md`, head: 'h0', risky: ['S-003', 'S-004'].includes(id) }),
+    package: async (call, id) => ({ package: `/run/${id}/review-package.md`, head: 'h0', risky: ['S-003', 'S-004'].includes(id), code: false, breaker: false }),
   }))
   const reviewers = (id) => types(calls, id).filter((type) => /examiner|professor|auror/.test(type))
   assert.deepEqual(reviewers('S-001'), ['accio:examiner'])
@@ -327,6 +327,34 @@ test('S-043/5 a docs-only diff, or a config with no breaker command, never calls
   }
 })
 
+test('S-058/1 the package schema requires the code and breaker flags', async () => {
+  const { calls } = await runWorkflow('brew', happy([story('S-001')]))
+  const schema = calls.find((call) => call.label === 'S-001 package').opts.schema
+  assert.ok(schema.required.includes('code'))
+  assert.ok(schema.required.includes('breaker'))
+})
+
+test('S-058/1 a package reply without the flags is retried, not read as false', async () => {
+  let tries = 0
+  const { calls } = await runWorkflow('brew', happy([story('S-001')], {
+    package: async (call, id) => (++tries === 1 ? { package: `/run/${id}/review-package.md`, head: 'h0', risky: false }
+      : withCode(call, id)),
+    boggart: async () => ({ breaks: [] }),
+  }))
+  assert.ok(steps(calls, 'S-001').includes('boggart'))
+})
+
+test('S-058/2 a boggart skip names the false flag in the story note', async () => {
+  const cases = [[{ code: false, breaker: true }, /code/], [{ code: true, breaker: false }, /breaker/]]
+  for (const [flags, word] of cases) {
+    const { result } = await runWorkflow('brew', happy([story('S-001')], {
+      package: async (call, id) => ({ package: `/run/${id}/review-package.md`, head: 'h0', risky: false, ...flags }),
+    }))
+    assert.match(result, /boggart skipped: [^;\n]*`?\w*`? flag is false/i, JSON.stringify(flags))
+    assert.match(result, new RegExp(`boggart skipped:[^\\n]*${word.source}`), JSON.stringify(flags))
+  }
+})
+
 test('S-043/6 a kept in-DoD break that survives both fix rounds blocks the story with its repro', async () => {
   const { result, calls } = await runWorkflow('brew', happy([story('S-001')], {
     package: withCode, boggart: found, verify: verdicts(entry()),
@@ -423,7 +451,7 @@ test('S-043 a boggart or verify step that gives no answer does not block the sto
 // --- S-047: mad-eye after boggart ----------------------------------------------------------------------------------
 
 const withUi = (extra = {}) => async (call, id) => ({
-  package: `/run/${id}/review-package.md`, head: 'h0', risky: false, ui: true, preview: true, test_data: true, ...extra,
+  package: `/run/${id}/review-package.md`, head: 'h0', risky: false, code: false, breaker: false, ui: true, preview: true, test_data: true, ...extra,
 })
 const SEEN = { findings: [{ id: 'mad-eye-1', where: '/login', claim: 'shows a Sign in button', dod: 'S-001/1', failure: 'no button', screenshot: '/r/.accio/run/S-001/mad-eye/S-001-1.png' }] }
 const WALK = ['preview-start', 'mad-eye', 'preview-stop']
@@ -447,13 +475,13 @@ test('S-047/2 a diff that touches no ui_globs file never calls mad-eye, or start
 test('S-047/3 a UI diff with no preview in config logs a skip that names the preview', async () => {
   const { result, calls } = await runWorkflow('brew', happy([story('S-001')], { package: withUi({ preview: false, test_data: false }) }))
   assert.deepEqual(steps(calls, 'S-001').slice(-2), ['professor', 'outcome'])
-  assert.match(result, /S-001 Story S-001\s+READY\s+mad-eye skipped: config\.json has no `preview`/)
+  assert.match(result, /S-001 Story S-001\s+READY\s+(?:boggart skipped[^;\n]*; )?mad-eye skipped: config\.json has no `preview`/)
 })
 
 test('S-047/3 a UI diff whose preview lacks test_data true logs a skip that names test_data', async () => {
   const { result, calls } = await runWorkflow('brew', happy([story('S-001')], { package: withUi({ test_data: false }) }))
   assert.deepEqual(steps(calls, 'S-001').slice(-2), ['professor', 'outcome'])
-  assert.match(result, /READY\s+mad-eye skipped: config\.json preview has no `"test_data": true`/)
+  assert.match(result, /READY\s+(?:boggart skipped[^;\n]*; )?mad-eye skipped: config\.json preview has no `"test_data": true`/)
 })
 
 test('S-047/4 the missing browser tools outcome of S-044 logs a skip, and the preview still stops', async () => {
@@ -464,7 +492,7 @@ test('S-047/4 the missing browser tools outcome of S-044 logs a skip, and the pr
   for (const [name, reply] of missing) {
     const { result, calls } = await runWorkflow('brew', happy([story('S-001')], { package: withUi(), 'mad-eye': reply }))
     assert.deepEqual(steps(calls, 'S-001').slice(-4), WALK.concat('outcome'), name)
-    assert.match(result, /READY\s+mad-eye skipped: the browser tools are missing from this session/, name)
+    assert.match(result, /READY\s+(?:boggart skipped[^;\n]*; )?mad-eye skipped: the browser tools are missing from this session/, name)
   }
 })
 
@@ -483,7 +511,7 @@ test('S-047/6 mad-eye failing, erroring or throwing still stops the preview', as
   for (const reply of bad) {
     const { result, calls } = await runWorkflow('brew', happy([story('S-001')], { package: withUi(), 'mad-eye': reply }))
     assert.deepEqual(steps(calls, 'S-001').slice(-4), WALK.concat('outcome'))
-    assert.match(result, /READY\s+mad-eye skipped/)
+    assert.match(result, /READY\s+(?:boggart skipped[^;\n]*; )?mad-eye skipped/)
   }
 })
 

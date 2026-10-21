@@ -92,6 +92,7 @@ const PACKAGE_SCHEMA = {
     code: { type: 'boolean' }, breaker: { type: 'boolean' },  // the diff has code; config.json has a `breaker` command
     ui: { type: 'boolean' }, preview: { type: 'boolean' }, test_data: { type: 'boolean' },  // the diff touches `ui_globs`; config has a `preview`, with `test_data: true`
   },
+  required: ['code', 'breaker'],  // a reply without them is retried, never read as false (S-058)
 }
 const BREAK_SCHEMA = {
   type: 'object',
@@ -511,7 +512,8 @@ async function fixThenReview(story, worktree, model, round, ruling, findingsPath
 }
 
 async function boggartStage(story, worktree, model, ruling, fixes, whole, reviewedHead) {
-  if (!whole.code || !whole.breaker) return {}  // docs-only, or no `breaker` command: review.py logged the skip
+  const off = [!whole.code && 'code', !whole.breaker && 'breaker'].filter(Boolean)
+  if (off.length) return { note: `boggart skipped: the ${off.join(' and ')} ${off.length > 1 ? 'flags are' : 'flag is'} false` }  // docs-only, or no `breaker` command
   let pkg = whole
   let head = reviewedHead  // the commit the last review judged: a fix round's diff starts there
   if (fixes > 0) {  // a re-review package holds only a fix diff: boggart reads the whole story
