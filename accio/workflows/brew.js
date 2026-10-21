@@ -26,6 +26,8 @@ export const meta = {
 // a ruling gets one more try, a question blocks the story. house-elf's `maxTurns` is the 2× budget stop (S-001).
 // After review passes, a story whose diff has code (the package's `code` and `breaker` flags) goes to boggart, with
 // prefect running `accio-break <ID> verify` (S-043; see "boggart" below).
+// After boggart, a story whose diff touches `ui_globs` (and whose config has a `preview` with `test_data: true`) goes to
+// mad-eye between `accio-preview <ID> start` and `stop`; its findings go to a fix round (S-047; see "mad-eye" below).
 // Every label starts with the story id: accio-cost ties usage to stories by it.
 
 const DEFAULT_WIP = 3  // used only when the load reply carries no usable wip
@@ -38,6 +40,7 @@ const HOUSE_ELF = 'accio:house-elf'
 const PREFECT = 'accio:prefect'
 const HEADMASTER = 'accio:headmaster'
 const BOGGART = 'accio:boggart'
+const MAD_EYE = 'accio:mad-eye'
 const QUESTIONS = '.accio/run/questions'
 const IN_MAIN = 'in the main checkout (your working folder), never inside the worktree'  // curfew refuses the worktree copy
 const ROLES = { examiner: 'spec reviewer', professor: 'code reviewer', auror: 'security reviewer' }
@@ -87,6 +90,7 @@ const PACKAGE_SCHEMA = {
   properties: {
     package: { type: 'string' }, head: { type: 'string' }, risky: { type: 'boolean' }, error: { type: 'string' },
     code: { type: 'boolean' }, breaker: { type: 'boolean' },  // the diff has code; config.json has a `breaker` command
+    ui: { type: 'boolean' }, preview: { type: 'boolean' }, test_data: { type: 'boolean' },  // the diff touches `ui_globs`; config has a `preview`, with `test_data: true`
   },
 }
 const BREAK_SCHEMA = {
@@ -329,7 +333,11 @@ function panel(story, risky) {
 async function packageFor(story, round, since) {  // `round` only labels the step
   const reply = await callRetry(
     `Step 4, review package for story ${story.id}: run \`accio-brief ${story.id} --review` +
-      `${since ? ` --since ${since}` : ''}\`. Reply with its JSON {package, head, risky, code, breaker} (copy the code and breaker flags as given), or {error} if it fails.`,
+      `${since ? ` --since ${since}` : ''}\`. Reply with its JSON {package, head, risky, code, breaker} (copy the code and breaker flags as given), or {error} if it fails.` +
+      (since ? '' : ' Also add ui, preview and test_data (false when unset): read .accio/config.json for `ui_globs` (a list ' +
+        'of path globs; none means an empty list), and the diff file the reply names, whose changed paths are on its ' +
+        '`diff --git a/<path> b/<path>` lines. ui is true only when a changed path matches a ui_globs glob; preview is true ' +
+        'when config.json has a `preview`; test_data is true when that preview has `"test_data": true`.'),
     { agentType: PORTKEY, model: 'haiku', schema: PACKAGE_SCHEMA, label: label(story, 'package', round) })
   if (!reply || reply.error || !reply.package || !reply.head) {
     return accioStop(`Writing the review package failed (${(reply && reply.error) || 'no answer'}). Try again?`)
@@ -360,7 +368,16 @@ async function reviewAndFix(story, worktree, model, earlier, usedFixes) {
   if (whole.stop) return whole
   const reviewed = await reviewLoop(story, worktree, model, earlier, usedFixes, whole, panel(story, whole.risky), 0)
   if (reviewed.stop) return reviewed
-  return boggartStage(story, worktree, model, reviewed.ruling, reviewed.fixes, whole, reviewed.head)
+  const broken = await boggartStage(story, worktree, model, reviewed.ruling, reviewed.fixes, whole, reviewed.head)
+  if (broken.stop) return broken
+  const state = {
+    fixes: broken.fixes === undefined ? reviewed.fixes : broken.fixes,
+    ruling: broken.ruling === undefined ? reviewed.ruling : broken.ruling,
+    head: broken.head || reviewed.head,
+  }
+  const seen = await madEyeStage(story, worktree, model, state, whole)
+  if (seen.stop) return seen
+  return { note: [broken.note, seen.note].filter(Boolean).join('; ') }
 }
 
 // The review rounds for `first`, a package: review, and while a reviewer fails run a fix round and review the fix diff.
@@ -465,10 +482,14 @@ const verified = (reply) => !failed(reply) && Array.isArray(reply.repros)
 // One fix round for the kept in-DoD breaks: write boggart-findings.md, fix, re-check, then review the fix diff (since
 // `head`) as reviewAndFix does, with auror added when it is risky. Returns a stop or {fixes, ruling, head}.
 async function fixBreaks(story, worktree, model, used, ruling, broken, head) {
-  const round = used + 1
-  const wrote = await writeBrokenFindings(story, round, broken)
+  const wrote = await writeBrokenFindings(story, used + 1, broken)
   if (failed(wrote)) return accioStop(`Writing the boggart findings failed (${(wrote && wrote.error) || 'no answer'}). Try again?`)
-  const fixed = await fixRound(story, worktree, round, [brokenPath(story)], tierFor(model, round), ruling)
+  return fixThenReview(story, worktree, model, used + 1, ruling, brokenPath(story), head)
+}
+
+// The fix round for a findings file already written, its re-check, and the review of the fix diff since `head`.
+async function fixThenReview(story, worktree, model, round, ruling, findingsPath, head) {
+  const fixed = await fixRound(story, worktree, round, [findingsPath], tierFor(model, round), ruling)
   if (fixed.stop) return fixed
   const checked = await checkAndFix(story, worktree, model, round, fixed.ruling)
   if (checked.stop) return checked
@@ -493,7 +514,7 @@ async function boggartStage(story, worktree, model, ruling, fixes, whole, review
   let current = ruling
   let repairedAt = -1  // the fix count a repair turn was used at: one per fix round
   for (;;) {
-    if (!verified(reply)) return { fixes: used, ruling: current, note: "boggart's verify gave no answer" }
+    if (!verified(reply)) return { fixes: used, ruling: current, head, note: "boggart's verify gave no answer" }
     const kept = reply.repros.filter((item) => item.verdict === 'kept')
     const stuck = kept.filter(cantLoad)
     if (stuck.length && repairedAt !== used) {
@@ -503,7 +524,7 @@ async function boggartStage(story, worktree, model, ruling, fixes, whole, review
       continue
     }
     const broken = kept.filter((item) => item.in_dod && !cantLoad(item))
-    if (!broken.length) return { fixes: used, ruling: current, note: boggartNote(kept) }
+    if (!broken.length) return { fixes: used, ruling: current, head, note: boggartNote(kept) }
     if (used >= MAX_FIX_ROUNDS) return stop(brokenQuestion(story, broken))
     const fixed = await fixBreaks(story, worktree, model, used, current, broken, head)
     if (fixed.stop) return fixed
@@ -512,6 +533,96 @@ async function boggartStage(story, worktree, model, ruling, fixes, whole, review
     head = fixed.head
     reply = await verify(story, 'verify', used)
   }
+}
+
+// --- mad-eye: walks the preview of a story that touches the UI (S-047) ------------------------------------------
+// After boggart, a story whose diff touches a `ui_globs` file goes to mad-eye when config.json has a `preview` with
+// `"test_data": true` (the user's word that the preview holds test data and test keys; accio can't check it). prefect
+// starts the preview, mad-eye walks each visible DoD line and saves a screenshot per line, and prefect stops the
+// preview whatever happened. mad-eye never edits, so prefect writes its findings to mad-eye-findings.md, and they go
+// to a fix round. A skip, a failure or no answer never blocks the story: it leaves a note for owl.
+
+const SEEN_SCHEMA = {
+  type: 'object',
+  properties: { findings: { type: 'array', items: { type: 'object' } }, no_browser_tools: { type: 'boolean' }, error: { type: 'string' } },
+}
+const MISSING_TOOLS = /No such tool available/i  // S-044: what an agent gets for a browser tool the session lacks
+const NO_BROWSER = 'the browser tools are missing from this session'
+const madEyePath = (story) => `.accio/run/${story.id}/mad-eye-findings.md`
+const shotFolder = (story) => `.accio/run/${story.id}/mad-eye/`
+
+function previewStep(story, action) {
+  return callRetry(
+    `Step 4c, ${action} the preview of story ${story.id}: run \`accio-preview ${story.id} ${action}\`. Reply {"done": true}, ` +
+      'or {error} with what it printed if it fails.',
+    { agentType: PREFECT, model: 'haiku', schema: OUTCOME_SCHEMA, label: label(story, `preview-${action}`) })
+}
+
+function walkPreview(story, pkg) {
+  return call(
+    `Step 4c, look at the preview of story ${story.id}. Your review package: ${pkg.package}. Follow your instructions: ` +
+      'walk each DoD line a user can see, and save one screenshot per line at an absolute path inside the repo: ' +
+      `<your working folder>/${shotFolder(story)}<name>.png. You never edit; reply {findings, no_browser_tools}.`,
+    { agentType: MAD_EYE, model: REVIEW_MODEL, schema: SEEN_SCHEMA, label: label(story, 'mad-eye') })
+}
+
+function writeSeenFindings(story, round, findings) {
+  return callRetry(
+    `Step 4c, write the findings file for fix round ${round} of story ${story.id}: ${madEyePath(story)} ${IN_MAIN}. One ` +
+      'item per entry in this list, in the format of the findings template (references/findings-template.md): status ' +
+      "open, severity major, confidence 100, and the entry's id, where, claim, dod and failure (name its screenshot in " +
+      `failure): ${JSON.stringify(findings)}. Reply {"done": true} or {error}.`,
+    { agentType: PREFECT, model: 'haiku', schema: OUTCOME_SCHEMA, label: label(story, 'mad-eye-findings', round) })
+}
+
+// What mad-eye's reply means: {skip: why} when it could not look, {findings} when it saw problems, else {}.
+function seenOutcome(reply) {
+  if (!reply) return { skip: 'mad-eye gave no answer' }
+  if (reply.no_browser_tools) return { skip: NO_BROWSER }
+  if (reply.error) return { skip: MISSING_TOOLS.test(reply.error) ? NO_BROWSER : `mad-eye failed (${reply.error})` }
+  return Array.isArray(reply.findings) && reply.findings.length ? { findings: reply.findings } : {}
+}
+
+// Why a story that touches the UI can't be walked, from the whole story's package flags; '' when it can.
+function uiSkip(whole) {
+  if (!whole.preview) return 'config.json has no `preview`'
+  if (!whole.test_data) return 'config.json preview has no `"test_data": true`'
+  return ''
+}
+
+// Preview up, mad-eye, preview down (also when mad-eye fails or throws). Returns {skip}, {findings} or {}.
+async function walkAndStop(story, pkg) {
+  const started = await previewStep(story, 'start')
+  try {
+    if (failed(started)) return { skip: `the preview did not start (${(started && started.error) || 'no answer'})` }
+    return seenOutcome(await walkPreview(story, pkg))
+  } finally {
+    await previewStep(story, 'stop')
+  }
+}
+
+// `state` is {fixes, ruling, head}: where boggart left the story. Returns a stop, or {fixes, ruling, head, note}.
+async function madEyeStage(story, worktree, model, state, whole) {
+  if (!whole.ui) return state  // the diff touches no `ui_globs` file (or config has none)
+  const missing = uiSkip(whole)
+  if (missing) return { ...state, note: `mad-eye skipped: ${missing}` }
+  let pkg = whole
+  if (state.fixes > 0) {  // a re-review package holds only a fix diff: mad-eye reads the whole story
+    pkg = await packageFor(story, `${state.fixes}m`, null)
+    if (pkg.stop) return { ...state, note: 'mad-eye did not run: its package failed' }
+  }
+  const seen = await walkAndStop(story, pkg)
+  if (seen.skip) return { ...state, note: `mad-eye skipped: ${seen.skip}` }
+  if (!seen.findings) return state
+  if (state.fixes >= MAX_FIX_ROUNDS) {
+    return stop(`mad-eye found problems in the preview after ${MAX_FIX_ROUNDS} fix rounds: ${JSON.stringify(seen.findings)}. ` +
+      'Fix them by hand, or change the story?')
+  }
+  const round = state.fixes + 1
+  const wrote = await writeSeenFindings(story, round, seen.findings)
+  if (failed(wrote)) return accioStop(`Writing the mad-eye findings failed (${(wrote && wrote.error) || 'no answer'}). Try again?`)
+  const fixed = await fixThenReview(story, worktree, model, round, state.ruling, madEyePath(story), state.head)
+  return fixed.stop ? fixed : { fixes: fixed.fixes, ruling: fixed.ruling, head: fixed.head }
 }
 
 // --- one story -------------------------------------------------------------------------------------------------

@@ -21,6 +21,7 @@ DEFAULTS = freeze({
     "snapshot_skip": [],
     "preview": None,
     "breaker": None,
+    "ui_globs": [],
 })
 
 
@@ -134,6 +135,7 @@ CHECKERS = {
     "snapshot_skip": lambda v: None if _strings(v) else "must be a list of glob strings",
     "preview": _check_preview,
     "breaker": _check_breaker,
+    "ui_globs": lambda v: None if _strings(v) else "must be a list of glob strings",
 }
 
 

@@ -145,6 +145,15 @@ class ConfigTest(unittest.TestCase):
             with self.assertRaisesRegex(config.ConfigError, "snapshot_skip"):
                 config.load(self.accio)
 
+    def test_S_047_1_ui_globs_is_a_list_of_globs_and_empty_when_unset(self):
+        self.assertEqual(config.load(self.accio)["ui_globs"], ())
+        self.write_config({"ui_globs": ["src/ui/**", "**/*.css"]})
+        self.assertEqual(config.load(self.accio)["ui_globs"], ("src/ui/**", "**/*.css"))
+        for bad in ("src/**", [""], [3]):
+            self.write_config({"ui_globs": bad})
+            with self.assertRaisesRegex(config.ConfigError, "ui_globs"):
+                config.load(self.accio)
+
     def test_pr_push_mode_is_refused_until_v2(self):
         self.write_config({"push_mode": "pr"})
         with self.assertRaisesRegex(config.ConfigError, "push_mode"):
