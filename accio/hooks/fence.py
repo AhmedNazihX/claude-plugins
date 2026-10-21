@@ -116,7 +116,10 @@ def _act(payload):
         return None
     run_dir, agent_id = accio / "run", str(payload.get("agent_id", ""))
     if not urls and not has_page:  # no page in this response: hidden only while fenced
-        held = _read_map(run_dir / runlock.FENCE_NAME).get(agent_id)
+        try:
+            held = _read_map(run_dir / runlock.FENCE_NAME).get(agent_id)
+        except (OSError, ValueError):  # a fence file we can't read may be holding this agent: hide
+            return _hide(NO_URL, preview)
         return _hide(str(held.get("url", NO_URL)), preview) if isinstance(held, dict) else None
     off = [url for url in urls if policy._origin(url) != wanted]
     if urls and not off:

@@ -159,6 +159,11 @@ class FenceTest(unittest.TestCase):
         self.assertEqual(self.call(both).stdout, "")
         self.assertEqual(self.fence(), {})
 
+    def test_S_063_9_a_fence_file_that_cannot_be_read_hides_a_response_without_a_page(self):
+        write(self.run_dir / "mad-eye-fence.json", "{not json")
+        out = json.loads(self.call(self.closed()).stdout)["hookSpecificOutput"]["updatedMCPToolOutput"]
+        self.assertIn("fence", out[0]["text"])
+
     def test_S_063_9_an_unfenced_screenshot_passes(self):
         shot = self.payload(tool_response=[{"type": "image", "data": "iVBORw0K", "mimeType": "image/png"}])
         self.assertEqual(self.call(shot).stdout, "")
