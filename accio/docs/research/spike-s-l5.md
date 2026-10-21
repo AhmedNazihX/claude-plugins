@@ -71,3 +71,33 @@ The click's payload is the fixture `accio/tests/fixtures/browser-click-offorigin
   nothing; use this fixture (with the URL changed to `http://evil.com/` for the off-origin case, as planned, though
   it is already off-origin as captured).
 - **S-063 or S-064:** close finding 4, the `.playwright-mcp/` snapshot files, while fenced.
+
+## Does Claude Code apply `updatedMCPToolOutput` for mad-eye? Yes.
+Date: 2026-10-21, by hand, same setup as above, while iteration 20 built S-063. A test PostToolUse hook answered
+mad-eye's `browser_click` with `{"hookSpecificOutput": {"hookEventName": "PostToolUse", "updatedMCPToolOutput": …}}`
+holding a marker sentence, in two runs: once as a list with one `{"type": "text", "text": …}` block, once as a plain
+string. mad-eye was asked to quote the click's result word for word.
+
+| Shape | What mad-eye quoted | Off-origin text in mad-eye's transcript |
+|---|---|---|
+| list of one text block | the marker sentence only | none (`Page Title: Elsewhere` and `localhost:8766` absent) |
+| plain string | the marker sentence only | none |
+
+So the replacement reaches a subagent, and S-063's default shape (a list of one text block) works. Its unit tests
+check only the hook's output; this run is the live check that Claude Code applies it.
+
+## The real fence, live (after iteration 20 and its security fixes)
+Same setup, with accio's own `fence.py` and curfew from this repo (`--plugin-dir`). mad-eye navigated to the
+preview, snapshot, clicked "Details" (redirect to `localhost:8766`), then tried a snapshot, a screenshot and a
+`Glob` of `.playwright-mcp/*.yml`, navigated back, took a snapshot and closed.
+
+| Step | What mad-eye got |
+|---|---|
+| click | only the fence's reason naming `http://localhost:8766/` and the preview |
+| snapshot, screenshot, `Glob` while fenced | each denied by curfew (rule: fence) |
+| navigate back to the preview | allowed; the page as usual |
+| snapshot after that | the preview's page: the fence lifted |
+
+Afterwards `run/mad-eye-fence.json` was `{}` and `run/mad-eye-fence.log` held one line:
+`<time> <agent_id> mcp__plugin_playwright_playwright__browser_click http://localhost:8766/`. Saved pages stay
+readable once the fence lifts; S-065 closes that.

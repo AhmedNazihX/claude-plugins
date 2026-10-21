@@ -464,15 +464,16 @@ class MadEyeFenceTest(CurfewTestBase):
         self.assertEqual(verdict, "deny")
         self.assertIn("origin", reason)
 
-    def test_S_064_4_a_fenced_agent_may_screenshot_and_close(self):
+    def test_S_064_4_a_fenced_agent_may_close_but_not_screenshot(self):
+        # commit security review: a screenshot while fenced is a picture of the off-origin page
         self.fence("a1")
-        self.assertEqual(self.browse("take_screenshot", self.shot())[0], "allow")
+        self.assertEqual(self.browse("take_screenshot", self.shot())[0], "deny")
         self.assertEqual(self.browse("close", {})[0], "allow")
 
     def test_S_064_5_a_fenced_agent_may_not_read_grep_or_glob(self):
         self.fence("a1")
         for tool, tool_input in (("Read", {"file_path": str(self.repo / "x.md")}), ("Grep", {"pattern": "x"}),
-                                 ("Glob", {"pattern": "*"})):
+                                 ("Glob", {"pattern": "*"}), ("LS", {"path": str(self.repo)})):
             with self.subTest(tool):
                 verdict, reason = self.decision(tool, tool_input, agent=MAD_EYE)
                 self.assertEqual(verdict, "deny")

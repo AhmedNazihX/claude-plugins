@@ -2,10 +2,11 @@
 """fence: the PostToolUse hook that hides an off-origin page from mad-eye (DESIGN § 4.4; spike S-L5).
 
 Curfew checks only `browser_navigate`, but a click can leave the preview too. After a browser tool call by
-`accio:mad-eye`, this reads the `- Page URL:` line of the response (a list of content blocks; the first `text`
-block with such a line counts). Off the origin of `preview.url`, it returns `updatedMCPToolOutput` with the reason in
-place of the page, logs the call, and records the fence in `run/mad-eye-fence.json` (`{agent_id: {"url": ...}}`).
-A response on the origin lifts that agent's fence. No `Page URL` line, or any other agent: nothing changes.
+`accio:mad-eye`, this reads every `- Page URL:` line of the response (a list of content blocks). If any is off the
+origin of `preview.url`, or a `### Page` section has no readable one, it returns `updatedMCPToolOutput` with the reason
+in place of the page, logs the call, and records the fence in `run/mad-eye-fence.json` (`{agent_id: {"url": ...}}`).
+A response all on the origin lifts that agent's fence. A response with no page (a screenshot, a close) is hidden
+while the agent is fenced and passes otherwise. Any other agent: nothing changes.
 Fails open (decision 007): any crash adds no output.
 """
 import datetime
@@ -18,20 +19,20 @@ import sys
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1] / "bin"))
 
 AGENT = "accio:mad-eye"
-PAGE_URL = re.compile(r"^- Page URL: (\S+)\s*$", re.MULTILINE)
+PAGE_URL = re.compile(r"^- Page URL: (.*)$", re.MULTILINE)
+PAGE_SECTION = re.compile(r"^### Page\s*$", re.MULTILINE)
+NO_URL = "(a page with no readable Page URL line)"
 LOG_NAME = "mad-eye-fence.log"
+URL_SHOWN = 200
 
 
-def _page_url(response):
-    """The first `Page URL` in a tool response's text blocks, or None."""
-    if not isinstance(response, list):
-        return None
-    for block in response:
-        if isinstance(block, dict) and block.get("type") == "text" and isinstance(block.get("text"), str):
-            found = PAGE_URL.search(block["text"])
-            if found:
-                return found.group(1)
-    return None
+def _page_urls(response):
+    """Every `Page URL` in a tool response's text blocks, and whether any block has a `### Page` section."""
+    blocks = response if isinstance(response, list) else []
+    texts = [block["text"] for block in blocks
+             if isinstance(block, dict) and block.get("type") == "text" and isinstance(block.get("text"), str)]
+    urls = [url.strip() for text in texts for url in PAGE_URL.findall(text)]
+    return urls, any(PAGE_SECTION.search(text) for text in texts)
 
 
 def _read_map(path):
@@ -73,22 +74,39 @@ def _log(run_dir, agent_id, tool, url):
     path.parent.mkdir(parents=True, exist_ok=True)
     now = datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds")
     with open(path, "a", encoding="utf-8") as handle:
-        handle.write(f"{now} {agent_id} {tool} {url}\n")
+        handle.write(f"{now} {agent_id} {tool} {_shown(url)}\n")
+
+
+def _shown(url):
+    """The URL may come from the page: show one short word, never a sentence or a line break."""
+    return (url.split() or [NO_URL])[0][:URL_SHOWN]
+
+
+def _record(run_dir, agent_id, tool, url):
+    """Write the fence record and the log line. Best effort: the page is hidden even when this fails."""
+    try:
+        _update_fence(run_dir, agent_id, url)
+        _log(run_dir, agent_id, tool, url)
+    except (OSError, ValueError) as error:
+        print(f"fence: could not record the fence for {agent_id}: {error}", file=sys.stderr)
 
 
 def _reason(url, preview):
-    return (f"fence (accio's preview fence): this page, {url}, is off the preview's origin, so it is hidden. "
+    return (f"fence (accio's preview fence): this page, {_shown(url)}, is off the preview's origin, so it is hidden. "
             f"Call browser_navigate to go back to the preview, {preview}.")
+
+
+def _hide(url, preview):
+    return {"hookSpecificOutput": {"hookEventName": "PostToolUse", "updatedMCPToolOutput": [
+        {"type": "text", "text": _reason(url, preview)}]}}
 
 
 def _act(payload):
     """The hook's output for one payload, or None."""
-    from accio_lib import config, paths, policy
+    from accio_lib import config, paths, policy, runlock
     if payload.get("agent_type") != AGENT:
         return None
-    url = _page_url(payload.get("tool_response"))
-    if url is None:
-        return None
+    urls, has_page = _page_urls(payload.get("tool_response"))
     accio = paths.guarding_accio_dir(payload.get("cwd"))
     if accio is None:
         return None
@@ -97,13 +115,17 @@ def _act(payload):
     if wanted is None:
         return None
     run_dir, agent_id = accio / "run", str(payload.get("agent_id", ""))
-    if policy._origin(url) == wanted:
+    if not urls and not has_page:  # no page in this response: hidden only while fenced
+        held = _read_map(run_dir / runlock.FENCE_NAME).get(agent_id)
+        return _hide(str(held.get("url", NO_URL)), preview) if isinstance(held, dict) else None
+    off = [url for url in urls if policy._origin(url) != wanted]
+    if urls and not off:
         _update_fence(run_dir, agent_id, None)
         return None
-    _update_fence(run_dir, agent_id, url)
-    _log(run_dir, agent_id, str(payload.get("tool_name", "")), url)
-    return {"hookSpecificOutput": {"hookEventName": "PostToolUse", "updatedMCPToolOutput": [
-        {"type": "text", "text": _reason(url, preview)}]}}
+    url = off[0] if off else NO_URL  # a `### Page` section with no readable URL counts as off the origin
+    hidden = _hide(url, preview)
+    _record(run_dir, agent_id, str(payload.get("tool_name", "")), url)
+    return hidden
 
 
 def main():
