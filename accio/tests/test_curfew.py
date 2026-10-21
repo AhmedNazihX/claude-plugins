@@ -426,6 +426,78 @@ class MadEyeBrowserTest(CurfewTestBase):
         self.assertFalse(policy.decide("mad-eye", "a1", "mcp__pw__browser_evaluate", {}, ctx).allow)
 
 
+class MadEyeFenceTest(CurfewTestBase):
+    """S-064: while a fence record names the agent, only navigate (on the origin), screenshot and close are allowed."""
+
+    def setUp(self):
+        super().setUp()
+        config = {**CONFIG, "preview": {"command": "npm start", "url": PREVIEW_URL}}
+        write(self.repo / ".accio" / "config.json", json.dumps(config))
+        self.shots = self.run_dir / "S-001" / "mad-eye"
+
+    def browse(self, name, tool_input, **kwargs):
+        return self.decision(BROWSER + name, tool_input, agent=MAD_EYE, **kwargs)
+
+    def fence(self, *agent_ids):
+        write(self.run_dir / "mad-eye-fence.json",
+              json.dumps({agent_id: {"url": "http://evil.com/"} for agent_id in agent_ids}))
+
+    def shot(self):
+        return {"filename": str(self.shots / "a.png")}
+
+    def test_S_064_1_a_fenced_agent_is_denied_every_other_browser_tool(self):
+        self.fence("a1")
+        for name in ("click", "type", "snapshot", "fill_form", "select_option", "hover", "press_key", "wait_for",
+                     "resize", "console_messages"):
+            with self.subTest(name):
+                verdict, reason = self.browse(name, {})
+                self.assertEqual(verdict, "deny")
+                self.assertIn("fence", reason)
+
+    def test_S_064_2_a_fenced_agent_may_navigate_to_the_origin(self):
+        self.fence("a1")
+        self.assertEqual(self.browse("navigate", {"url": PREVIEW_URL})[0], "allow")
+
+    def test_S_064_3_a_fenced_agent_may_not_navigate_off_the_origin(self):
+        self.fence("a1")
+        verdict, reason = self.browse("navigate", {"url": "http://example.com/"})
+        self.assertEqual(verdict, "deny")
+        self.assertIn("origin", reason)
+
+    def test_S_064_4_a_fenced_agent_may_screenshot_and_close(self):
+        self.fence("a1")
+        self.assertEqual(self.browse("take_screenshot", self.shot())[0], "allow")
+        self.assertEqual(self.browse("close", {})[0], "allow")
+
+    def test_S_064_5_a_fenced_agent_may_not_read_grep_or_glob(self):
+        self.fence("a1")
+        for tool, tool_input in (("Read", {"file_path": str(self.repo / "x.md")}), ("Grep", {"pattern": "x"}),
+                                 ("Glob", {"pattern": "*"})):
+            with self.subTest(tool):
+                verdict, reason = self.decision(tool, tool_input, agent=MAD_EYE)
+                self.assertEqual(verdict, "deny")
+                self.assertIn("fence", reason)
+
+    def test_S_064_6_no_usable_fence_means_todays_rules(self):
+        for content in (None, json.dumps({"other": {"url": "x"}}), "{not json", "[]"):
+            with self.subTest(content):
+                (self.run_dir / "mad-eye-fence.json").unlink(missing_ok=True)
+                if content is not None:
+                    write(self.run_dir / "mad-eye-fence.json", content)
+                self.assertEqual(self.browse("click", {})[0], "allow")
+                self.assertEqual(self.decision("Read", {"file_path": str(self.repo / "x.md")}, agent=MAD_EYE)[0],
+                                 "allow")
+        (self.run_dir / "mad-eye-fence.json").unlink()
+        (self.run_dir / "mad-eye-fence.json").mkdir()  # unreadable
+        self.assertEqual(self.browse("click", {})[0], "allow")
+        self.assertEqual(self.browse("navigate", {"url": "http://example.com/"})[0], "deny")
+
+    def test_S_064_a_fence_on_another_agent_does_not_fence_other_agents(self):
+        self.fence("a1")
+        verdict, _ = self.decision("Read", {"file_path": str(self.repo / "x.md")}, agent="accio:librarian")
+        self.assertEqual(verdict, "allow")
+
+
 class OtherAgentsTest(CurfewTestBase):
     def test_S_024_seeker_and_wandmaker_write_only_their_notes(self):
         accio = self.repo / ".accio"
