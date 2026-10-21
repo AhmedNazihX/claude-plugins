@@ -189,6 +189,17 @@ class UnsortedTest(unittest.TestCase):
         write(self.unsorted, '{"a": 1}')
         self.assertEqual(self.step(), "done")
 
+    def test_S_060_a_symlink_at_the_file_is_replaced_not_written_through(self):  # commit security review
+        outside = pathlib.Path(self.tmp.name) / "outside.txt"
+        write(outside, "keep me\n")
+        self.unsorted.parent.mkdir(parents=True, exist_ok=True)
+        self.unsorted.symlink_to(outside)
+        write(self.accio / "design.md", DESIGN_TWO)
+        self.board("record-design")
+        self.assertEqual(outside.read_text(encoding="utf-8"), "keep me\n")
+        self.assertFalse(self.unsorted.is_symlink())
+        self.assertEqual(self.headings(), ["## Outcome", "## Group B"])
+
 
 if __name__ == "__main__":
     unittest.main()

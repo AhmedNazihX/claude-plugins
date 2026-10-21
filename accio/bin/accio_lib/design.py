@@ -14,6 +14,7 @@ build.
 import json
 import os
 import subprocess
+import tempfile
 
 from accio_lib import board, paths, runlock, storyfiles
 
@@ -116,9 +117,12 @@ def _new_headings(accio, text):
 def write_unsorted(accio, headings):
     """Write the headings sort hasn't turned into stories yet to run/unsorted.json (an empty list when none)."""
     path = board.run_dir(accio) / UNSORTED_NAME
-    try:
+    try:  # a temp file swapped in replaces a symlink at `path` instead of writing through it
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(json.dumps(list(headings)) + "\n", encoding="utf-8")
+        handle, temporary = tempfile.mkstemp(dir=path.parent, prefix=f".{path.name}.")
+        with os.fdopen(handle, "w", encoding="utf-8") as stream:
+            stream.write(json.dumps(list(headings)) + "\n")
+        os.replace(temporary, path)
     except OSError as error:
         raise DesignError(f"cannot write {path}: {error}") from error
 
