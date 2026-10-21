@@ -1,6 +1,6 @@
 {
   "name": "accio",
-  "version": "0.8.0",
+  "version": "0.9.0",
   "description": "Plans, builds, reviews and safely merges your project's work in small iterations, stopping only for your decisions.",
   "author": {
     "name": "Ahmed Nazih"
