@@ -62,6 +62,23 @@ class ReviewAgentsTest(unittest.TestCase):
                 self.assertNotIn("in your head", text)
 
 
+class TwoParsersTest(unittest.TestCase):
+    def test_S_062_1_security_checklist_has_the_two_parsers_bullet(self):
+        text = (REFERENCES / "checklists" / "auth-and-security.md").read_text(encoding="utf-8")
+        for words in ("\\", "@", "%2f", "%5c", "..", "http://evil.com\\@host:port/"):
+            self.assertIn(words, text)
+
+    def test_S_062_2_quill_lists_counted_files_in_files(self):
+        _, body = front_and_body("quill")
+        self.assertIn("a file a test counts", body)
+        self.assertIn("accio/README.md", body)
+        self.assertIn("accio/agents/*.md", body)
+
+    def test_S_062_3_sort_asks_examiner_for_a_missing_counted_file(self):
+        text = (ROOT / "skills" / "sort" / "SKILL.md").read_text(encoding="utf-8")
+        self.assertIn("counted file", text)
+
+
 class BrewRolesTest(unittest.TestCase):
     """S-020: what brew.js asks of each agent is in that agent's own file."""
 

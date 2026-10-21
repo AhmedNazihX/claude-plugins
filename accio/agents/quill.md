@@ -46,6 +46,8 @@ the design section it comes from.
   Commits type (feat, fix, refactor, perf, docs, test, build, ci, chore, style, revert); `track: story` for now (the
   score sets it); `status: backlog`. Leave out `budget_tokens`.
 - `files`: every file the story may change, its tests included; keep a story to a handful of files.
+  A story that adds a file a test counts lists that file too: each new `accio/agents/*.md` needs its row in
+  `accio/README.md`, so list `accio/README.md`.
 - `risk`: a word for what makes it risky (auth, payment, migration, performance, ui …), or leave the key out:
   any value, `none` included, counts as a risk.
 - Turn each part's "Checked by" (and the design's Evidence) into its DoD lines: they say what a test must show.
