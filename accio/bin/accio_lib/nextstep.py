@@ -3,6 +3,8 @@
 `next_step` says what to do from where the board stands: the step, whether accio carries it on without asking
 (`auto`), and today's plain sentence. session-start, map and /accio all read it through `accio-board next`.
 """
+import json
+
 from . import runlock, story
 
 # step -> auto: does accio carry on without asking the user?
@@ -16,6 +18,15 @@ def _stories(count, kind):
 
 def _reply(step, sentence, needs_user=False):
     return {"step": step, "auto": AUTO[step] and not needs_user, "sentence": sentence}
+
+
+def _has_unsorted(accio):
+    """Does run/unsorted.json list a design heading? A missing or unreadable file means nothing is waiting."""
+    try:
+        listed = json.loads((accio / "run" / "unsorted.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return False
+    return isinstance(listed, list) and bool(listed)
 
 
 def next_step(accio, status, workflows_off, dropped_deps=()):
@@ -34,6 +45,8 @@ def next_step(accio, status, workflows_off, dropped_deps=()):
         return _reply("owl", f"{' and '.join(work)} with /accio:owl.", needs_user=bool(counts["blocked"]))
     if counts["ready"]:
         return _reply("brew", f"build {_stories(counts['ready'], 'ready')} with {brew}.")
+    if _has_unsorted(accio):
+        return _reply("sort", "turn the new design into stories with /accio:sort.")
     if counts["backlog"]:
         return _reply("prophecy", "plan the next iteration with /accio:prophecy.", needs_user=bool(dropped_deps))
     if not (accio / "design.md").is_file():

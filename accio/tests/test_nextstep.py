@@ -111,5 +111,84 @@ class NextStepTest(unittest.TestCase):
             self.assertNotIn(command, text)
 
 
+DESIGN_ONE = "# Design\n## Outcome\nreal text\n"
+DESIGN_TWO = DESIGN_ONE + "## Group B\nmore\n"
+
+
+class UnsortedTest(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.repo = init_repo(pathlib.Path(self.tmp.name).resolve() / "app")
+        self.accio = self.repo / ".accio"
+        self.unsorted = self.accio / "run" / "unsorted.json"
+        write(self.repo / ".gitignore", ".accio/run/\n")
+        write(self.accio / "config.json", "{}\n")
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def board(self, *args):
+        result = subprocess.run([sys.executable, str(BOARD), *args], cwd=self.repo, capture_output=True,
+                                text=True, check=False)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        return result.stdout
+
+    def step(self):
+        return json.loads(self.board("next", "--json"))["step"]
+
+    def headings(self):
+        return json.loads(self.unsorted.read_text(encoding="utf-8"))
+
+    def test_S_060_2_no_committed_design_makes_every_heading_new(self):
+        write(self.accio / "design.md", DESIGN_TWO)
+        self.board("record-design")
+        self.assertEqual(self.headings(), ["## Outcome", "## Group B"])
+
+    def test_S_060_1_only_headings_the_committed_design_lacks_are_written(self):
+        write(self.accio / "design.md", DESIGN_ONE)
+        self.board("record-design")
+        write(self.unsorted, "[]\n")  # sort has run
+        write(self.accio / "design.md", DESIGN_TWO)
+        self.board("record-design")
+        self.assertEqual(self.headings(), ["## Group B"])
+
+    def test_S_060_3_a_second_record_keeps_headings_still_waiting(self):
+        write(self.accio / "design.md", DESIGN_ONE)
+        self.board("record-design")
+        write(self.unsorted, "[]\n")
+        write(self.accio / "design.md", DESIGN_TWO)
+        self.board("record-design")
+        self.board("record-design")
+        self.assertEqual(self.headings(), ["## Group B"])
+        write(self.accio / "design.md", DESIGN_TWO + "## Group C\nx\n")
+        self.board("record-design")
+        self.assertEqual(self.headings(), ["## Group B", "## Group C"])
+
+    def test_S_060_3_next_says_sort_before_prophecy_while_a_heading_waits(self):
+        write(self.accio / "design.md", DESIGN_ONE)
+        write(self.accio / "stories" / "S-001.md", story_text("S-001", "backlog"))
+        self.assertEqual(self.step(), "prophecy")
+        write(self.unsorted, '["## Group B"]')
+        self.assertEqual(self.step(), "sort")
+
+    def test_S_060_4_record_empties_the_file_so_next_moves_on(self):
+        write(self.accio / "design.md", DESIGN_ONE)
+        self.board("record-design")
+        write(self.accio / "stories" / "S-001.md", story_text("S-001", "backlog"))
+        self.assertEqual(self.step(), "sort")
+        self.board("record", str(self.accio / "stories" / "S-001.md"))
+        self.assertEqual(self.headings(), [])
+        self.assertEqual(self.step(), "prophecy")
+
+    def test_S_060_5_a_missing_or_unreadable_file_changes_nothing(self):
+        write(self.accio / "design.md", DESIGN_ONE)
+        write(self.accio / "stories" / "S-001.md", story_text("S-001", "done"))
+        self.assertEqual(self.step(), "done")
+        write(self.unsorted, "not json {")
+        self.assertEqual(self.step(), "done")
+        write(self.unsorted, '{"a": 1}')
+        self.assertEqual(self.step(), "done")
+
+
 if __name__ == "__main__":
     unittest.main()

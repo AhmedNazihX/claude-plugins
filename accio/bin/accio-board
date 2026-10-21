@@ -90,7 +90,10 @@ def cmd_record_design(_args, accio):
 
 
 def cmd_record(args, accio):
-    print(json.dumps(backlog.record(accio, args.files), indent=2))
+    result = backlog.record(accio, args.files)
+    if (board.run_dir(accio) / design.UNSORTED_NAME).exists():  # sort is done, with or without a new story
+        design.write_unsorted(accio, [])
+    print(json.dumps(result, indent=2))
 
 
 def cmd_board(args, accio):
