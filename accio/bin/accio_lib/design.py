@@ -123,6 +123,15 @@ def write_unsorted(accio, headings):
         raise DesignError(f"cannot write {path}: {error}") from error
 
 
+def _read_unsorted(accio):
+    """The headings already waiting for sort; none when the file is missing or unreadable."""
+    try:
+        listed = json.loads((board.run_dir(accio) / UNSORTED_NAME).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return []
+    return [item for item in listed if isinstance(item, str)] if isinstance(listed, list) else []
+
+
 def record_design(accio):
     """Commit the design (and the setup files the first time); returns {files, commit, commit_error}."""
     if runlock.is_held(board.run_dir(accio)):
@@ -136,7 +145,8 @@ def record_design(accio):
         raise DesignError(f"cannot read {design}: {error}") from error
     _check_outcome(design, text)
     files = [str(path) for path in (design, *_setup_files(accio))]
-    fresh = _new_headings(accio, text)
+    waiting = _read_unsorted(accio)
+    fresh = [heading for heading in _new_headings(accio, text) if heading not in waiting]
     commit, why = storyfiles.commit(accio.parent, files, COMMIT_MESSAGE)
-    write_unsorted(accio, fresh)
+    write_unsorted(accio, [*waiting, *fresh])
     return {"files": files, "commit": commit, "commit_error": why}

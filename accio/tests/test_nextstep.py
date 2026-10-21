@@ -147,9 +147,22 @@ class UnsortedTest(unittest.TestCase):
     def test_S_060_1_only_headings_the_committed_design_lacks_are_written(self):
         write(self.accio / "design.md", DESIGN_ONE)
         self.board("record-design")
+        write(self.unsorted, "[]\n")  # sort has run
         write(self.accio / "design.md", DESIGN_TWO)
         self.board("record-design")
         self.assertEqual(self.headings(), ["## Group B"])
+
+    def test_S_060_3_a_second_record_keeps_headings_still_waiting(self):
+        write(self.accio / "design.md", DESIGN_ONE)
+        self.board("record-design")
+        write(self.unsorted, "[]\n")
+        write(self.accio / "design.md", DESIGN_TWO)
+        self.board("record-design")
+        self.board("record-design")
+        self.assertEqual(self.headings(), ["## Group B"])
+        write(self.accio / "design.md", DESIGN_TWO + "## Group C\nx\n")
+        self.board("record-design")
+        self.assertEqual(self.headings(), ["## Group B", "## Group C"])
 
     def test_S_060_3_next_says_sort_before_prophecy_while_a_heading_waits(self):
         write(self.accio / "design.md", DESIGN_ONE)
