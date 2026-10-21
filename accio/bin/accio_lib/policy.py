@@ -238,7 +238,8 @@ def _saved_pages_rule(tool, tool_input):
     if tool != "Read":
         return f"mad-eye reads files with Read only, so {tool} is denied (rule: saved pages)."
     target = _target(tool_input)
-    if target is None or SAVED_PAGES in target.parts:
+    # Compare without letter case: the default macOS disk ignores case, so `.PLAYWRIGHT-MCP` opens the same folder.
+    if target is None or SAVED_PAGES in (part.casefold() for part in target.parts):
         return (f"mad-eye never reads the browser's saved pages ({SAVED_PAGES}/); browser_snapshot returns the page "
                 "(rule: saved pages).")
     return ""

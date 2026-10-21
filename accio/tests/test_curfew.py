@@ -521,6 +521,10 @@ class MadEyeSavedPagesTest(CurfewTestBase):
         self.assertEqual(self.read(self.repo / "link" / "page-1.yml")[0], "deny")
         self.assertEqual(self.read(self.repo / "src" / ".." / ".playwright-mcp" / "page-1.yml")[0], "deny")
 
+    def test_S_065_2_a_different_letter_case_is_denied(self):
+        self.assertEqual(self.read(self.repo / ".PLAYWRIGHT-MCP" / "page-1.yml")[0], "deny")
+        self.assertEqual(self.read(self.repo / ".Playwright-Mcp" / "page-1.yml")[0], "deny")
+
     def test_S_065_3_grep_glob_and_ls_are_denied(self):
         for tool, tool_input in (("Grep", {"pattern": "x"}), ("Glob", {"pattern": "*"}),
                                  ("LS", {"path": str(self.repo)})):
