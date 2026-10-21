@@ -62,7 +62,7 @@ class HooksFailClosedTest(unittest.TestCase):
         self.assertEqual({e for e, _ in self._find("curfew.py")}, {"PreToolUse", "PermissionRequest"})
 
     def test_S_028_2_doc_size_and_session_start_have_no_on_failure(self):
-        for script in ("doc_size.py", "session_start.py"):
+        for script in ("doc_size.py", "session_start.py", "fence.py"):  # fence.py: S-063/10
             found = self._find(script)
             self.assertTrue(found, script)
             for _, hook in found:
