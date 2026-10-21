@@ -103,10 +103,29 @@ Afterwards `run/mad-eye-fence.json` was `{}` and `run/mad-eye-fence.log` held on
 readable once the fence lifts; S-065 closes that.
 
 ## Which tools carry a `### Page` section (S-066)
-Measured above: `browser_navigate`, `browser_snapshot` and `browser_click` carry one; `browser_close` does not.
-NOT yet checked live (S-066's builder has no browser): `browser_take_screenshot`, `browser_console_messages`,
-`browser_type`, `browser_hover`, `browser_press_key`, `browser_wait_for`, `browser_resize`, `browser_fill_form`,
-`browser_select_option`. To do by hand after the merge (S-066/6): run the spike setup, call each, list which
-responses hold `### Page`, and confirm a mad-eye walk still saves one screenshot per DoD line.
-The hook does not depend on the answer: it treats only a screenshot and console response without an on-origin
-`Page URL` as unverified; any other response without `### Page` passes.
+Checked live on 2026-10-21 after S-066 merged (same setup; accio from this repo; a logging hook beside the fence).
+
+| Tool | `### Page` in the response |
+|---|---|
+| `browser_navigate`, `browser_snapshot`, `browser_click`, `browser_hover`, `browser_wait_for` | yes |
+| `browser_console_messages` | only when there are messages; with none, just `Total messages: 0` |
+| `browser_take_screenshot` (with `filename`) | no: a link to the saved file, and no image block |
+| `browser_press_key`, `browser_resize`, `browser_close` | no |
+
+`browser_type`, `browser_fill_form` and `browser_select_option` were not called (the page has no form).
+
+**A walk still saves its screenshots.** Both `browser_take_screenshot` calls wrote their PNG under
+`.accio/run/S-066/mad-eye/`; mad-eye got the fence's note naming the file in place of the link.
+
+**A timer redirect is hidden.** A preview page (`/timer`) that logs to the console and sets
+`location` to `http://localhost:8766/` after 0.8 s: the navigate reply showed the preview; the next
+`browser_console_messages` and `browser_snapshot` replies held `Page URL: http://localhost:8766/` and were replaced by
+the fence's reason (two log lines), and the screenshot after them was hidden too. The off-origin page's console line
+(`EVIL-CONSOLE-LINE`) never reached mad-eye. Navigating back lifted the fence (`mad-eye-fence.json` was `{}`).
+
+**Console text comes before `### Page`.** In a console reply the page's own messages sit above the `### Page`
+section, so a page can write a line that looks like `- Page URL: …` there. The fence reads every `Page URL` line and
+fences on any off-origin one, so a forged on-origin line can't hide the real one.
+
+**Console logs are saved too.** A navigate reply can end with `### Events` and a link to
+`.playwright-mcp/console-*.log`; S-065's rule keeps mad-eye out of that folder.
