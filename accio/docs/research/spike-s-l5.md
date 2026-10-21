@@ -101,3 +101,12 @@ preview, snapshot, clicked "Details" (redirect to `localhost:8766`), then tried 
 Afterwards `run/mad-eye-fence.json` was `{}` and `run/mad-eye-fence.log` held one line:
 `<time> <agent_id> mcp__plugin_playwright_playwright__browser_click http://localhost:8766/`. Saved pages stay
 readable once the fence lifts; S-065 closes that.
+
+## Which tools carry a `### Page` section (S-066)
+Measured above: `browser_navigate`, `browser_snapshot` and `browser_click` carry one; `browser_close` does not.
+NOT yet checked live (S-066's builder has no browser): `browser_take_screenshot`, `browser_console_messages`,
+`browser_type`, `browser_hover`, `browser_press_key`, `browser_wait_for`, `browser_resize`, `browser_fill_form`,
+`browser_select_option`. To do by hand after the merge (S-066/6): run the spike setup, call each, list which
+responses hold `### Page`, and confirm a mad-eye walk still saves one screenshot per DoD line.
+The hook does not depend on the answer: it treats only a screenshot and console response without an on-origin
+`Page URL` as unverified; any other response without `### Page` passes.

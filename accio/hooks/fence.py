@@ -5,8 +5,9 @@ Curfew checks only `browser_navigate`, but a click can leave the preview too. Af
 `accio:mad-eye`, this reads every `- Page URL:` line of the response (a list of content blocks). If any is off the
 origin of `preview.url`, or a `### Page` section has no readable one, it returns `updatedMCPToolOutput` with the reason
 in place of the page, logs the call, and records the fence in `run/mad-eye-fence.json` (`{agent_id: {"url": ...}}`).
-A response all on the origin lifts that agent's fence. A response with no page (a screenshot, a close) is hidden
-while the agent is fenced and passes otherwise. Any other agent: nothing changes.
+A response all on the origin lifts that agent's fence. A response with no page is hidden while the agent is fenced;
+unfenced, a screenshot or console response is replaced too (it doesn't show the page is on the preview, S-066) and
+any other (a close) passes. Any other agent: nothing changes.
 Fails open (decision 007): any crash adds no output.
 """
 import datetime
@@ -22,6 +23,8 @@ AGENT = "accio:mad-eye"
 PAGE_URL = re.compile(r"^- Page URL: (.*)$", re.MULTILINE)
 PAGE_SECTION = re.compile(r"^### Page\s*$", re.MULTILINE)
 NO_URL = "(a page with no readable Page URL line)"
+SHOT_TOOL = "browser_take_screenshot"
+CONSOLE_TOOL = "browser_console_messages"
 LOG_NAME = "mad-eye-fence.log"
 URL_SHOWN = 200
 
@@ -101,6 +104,27 @@ def _hide(url, preview):
         {"type": "text", "text": _reason(url, preview)}]}}
 
 
+def _replace(text):
+    return {"hookSpecificOutput": {"hookEventName": "PostToolUse", "updatedMCPToolOutput": [
+        {"type": "text", "text": text}]}}
+
+
+def _unverified(payload):
+    """S-066: a screenshot or console response with no `Page URL` does not show the page is on the preview."""
+    tool = str(payload.get("tool_name", ""))
+    if tool.endswith(SHOT_TOOL):
+        given = (payload.get("tool_input") or {}).get("filename")
+        name = " ".join(given.split())[:URL_SHOWN] if isinstance(given, str) and given.strip() else None
+        where = f"to {name}" if name else "to the file it was given"
+        return _replace(f"fence (accio's preview fence): the screenshot was saved {where}, but the picture is hidden "
+                        f"because the response doesn't show the page is on the preview. Check the page with "
+                        f"browser_snapshot.")
+    if tool.endswith(CONSOLE_TOOL):
+        return _replace("fence (accio's preview fence): this response can't be shown because it doesn't show the "
+                        "page is on the preview. Check the page with browser_snapshot.")
+    return None
+
+
 def _act(payload):
     """The hook's output for one payload, or None."""
     from accio_lib import config, paths, policy, runlock
@@ -120,7 +144,9 @@ def _act(payload):
             held = _read_map(run_dir / runlock.FENCE_NAME).get(agent_id)
         except (OSError, ValueError):  # a fence file we can't read may be holding this agent: hide
             return _hide(NO_URL, preview)
-        return _hide(str(held.get("url", NO_URL)), preview) if isinstance(held, dict) else None
+        if isinstance(held, dict):
+            return _hide(str(held.get("url", NO_URL)), preview)
+        return _unverified(payload)
     off = [url for url in urls if policy._origin(url) != wanted]
     if urls and not off:
         _update_fence(run_dir, agent_id, None)
