@@ -116,8 +116,15 @@ def _statuses(run_dir):
 
 
 def _is_fenced(run_dir, agent_id):
-    """True when the fence hook's record names this agent (S-064); a missing or unreadable record is no fence."""
-    return agent_id in _read_json(run_dir / runlock.FENCE_NAME, {})
+    """True when the fence hook's record names this agent (S-064). A missing record is no fence; one that exists but
+    can't be read counts as a fence, as in fence.py (push security review): fail closed, only navigate home and close."""
+    try:
+        fence = json.loads((run_dir / runlock.FENCE_NAME).read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        return False
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+        return True
+    return not isinstance(fence, dict) or agent_id in fence
 
 
 def _pre_tool_use(payload, root, accio):

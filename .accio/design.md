@@ -715,7 +715,8 @@ Option B (decision 012).
   in place of the page, appends a line to `run/<ID>/mad-eye-fence.log`, and writes a fence record for that
   `agent_id`. While fenced, curfew allows mad-eye only `browser_navigate` (still checked against the origin)
   and `browser_close`, and no read tool (the page is also saved under `.playwright-mcp/`); the fence lifts when a response shows the preview's origin again.
-  The hook fails open (decision 007): a crash adds no output, and curfew's navigate rule still holds. The lists stay
+  The hook fails open (decision 007): a crash adds no output, and curfew's navigate rule still holds. A fence file
+  that exists but can't be read fences mad-eye. The lists stay
   exact (decision 010).
 
 ### What we build

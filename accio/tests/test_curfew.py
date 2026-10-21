@@ -479,8 +479,8 @@ class MadEyeFenceTest(CurfewTestBase):
                 self.assertEqual(verdict, "deny")
                 self.assertIn("fence", reason)
 
-    def test_S_064_6_no_usable_fence_means_todays_rules(self):
-        for content in (None, json.dumps({"other": {"url": "x"}}), "{not json", "[]"):
+    def test_S_064_6_no_fence_for_this_agent_means_todays_rules(self):
+        for content in (None, json.dumps({"other": {"url": "x"}})):
             with self.subTest(content):
                 (self.run_dir / "mad-eye-fence.json").unlink(missing_ok=True)
                 if content is not None:
@@ -488,10 +488,24 @@ class MadEyeFenceTest(CurfewTestBase):
                 self.assertEqual(self.browse("click", {})[0], "allow")
                 self.assertEqual(self.decision("Read", {"file_path": str(self.repo / "x.md")}, agent=MAD_EYE)[0],
                                  "allow")
-        (self.run_dir / "mad-eye-fence.json").unlink()
-        (self.run_dir / "mad-eye-fence.json").mkdir()  # unreadable
-        self.assertEqual(self.browse("click", {})[0], "allow")
-        self.assertEqual(self.browse("navigate", {"url": "http://example.com/"})[0], "deny")
+
+    def test_S_064_6_a_fence_file_that_cannot_be_read_fences_mad_eye(self):
+        # push security review: fail closed, as fence.py does, not open
+        for content in ("{not json", "[]", None):
+            with self.subTest(content):
+                path = self.run_dir / "mad-eye-fence.json"
+                if path.is_dir():
+                    path.rmdir()
+                path.unlink(missing_ok=True)
+                if content is None:
+                    path.mkdir()  # unreadable as a file
+                else:
+                    write(path, content)
+                self.assertEqual(self.browse("click", {})[0], "deny")
+                self.assertEqual(self.browse("navigate", {"url": PREVIEW_URL})[0], "allow")
+                self.assertEqual(self.browse("navigate", {"url": "http://example.com/"})[0], "deny")
+                self.assertEqual(self.decision("Read", {"file_path": str(self.repo / "x.md")},
+                                               agent="accio:librarian")[0], "allow")
 
     def test_S_064_a_fence_on_another_agent_does_not_fence_other_agents(self):
         self.fence("a1")
