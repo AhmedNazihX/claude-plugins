@@ -130,6 +130,35 @@ class ReviewPackageTest(unittest.TestCase):
         self.assertIs(reply["breaker"], True)
         self.assertFalse((self.accio / "run" / "S-001" / "boggart" / "log.txt").exists())
 
+    def test_S_061_1_ui_is_true_only_when_a_changed_path_matches_ui_globs(self):
+        write(self.accio / "config.json", json.dumps({"ui_globs": ["web/**"]}))
+        self.story(files="src/a.py, web/page.html")
+        self.brief()
+        self.build()
+        self.assertIs(self.package()[0]["ui"], False)
+        self.build("web/page.html", "<p>hi</p>\n")
+        self.assertIs(self.package()[0]["ui"], True)
+
+    def test_S_061_2_preview_is_true_only_when_config_has_a_preview_mapping(self):
+        self.story()
+        self.brief()
+        self.build()
+        self.assertIs(self.package()[0]["preview"], False)
+        write(self.accio / "config.json", json.dumps({"preview": {"command": "npm start", "url": "http://localhost:3000"}}))
+        self.assertIs(self.package()[0]["preview"], True)
+
+    def test_S_061_3_test_data_is_true_only_when_the_preview_says_so(self):
+        self.story()
+        self.brief()
+        self.build()
+        for preview, expected in (({"command": "npm start", "url": "http://localhost:3000"}, False),
+                                  ({"command": "npm start", "url": "http://localhost:3000", "test_data": True}, True)):
+            write(self.accio / "config.json", json.dumps({"preview": preview}))
+            reply = self.package()[0]
+            self.assertIs(reply["test_data"], expected)
+        write(self.accio / "config.json", "{}")
+        self.assertIs(self.package()[0]["test_data"], False)
+
     def test_S_020_2_a_re_review_package_holds_only_the_fix_diff(self):
         self.story()
         self.brief()

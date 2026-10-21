@@ -70,7 +70,7 @@ def _fix_start(worktree, since, start):
 
 
 def package(accio, parsed, worktree, settings, since=None):
-    """Write the diff and the package; return {package, diff, head, risky, code, breaker}."""
+    """Write the diff and the package; return {package, diff, head, risky, code, breaker, ui, preview, test_data}."""
     story_id = parsed.meta["id"]
     run_dir = accio / "run" / story_id
     head = _git(worktree, "rev-parse", "HEAD").strip()
@@ -113,6 +113,8 @@ def _diff_facts(worktree, run_dir, origin, head, settings, risk):
                             _git(worktree, "diff", "--no-color", "--no-ext-diff", "--no-textconv", origin, head))
     return {"head": head, "origin": origin, "diff": diff, "risky_files": risky_files,
             "code": has_code(path for path in changed if path), "breaker": bool(settings.get("breaker")),
+            "ui": any(path and globs.matches_any(path, settings.get("ui_globs") or []) for path in changed),
+            "preview": bool(settings.get("preview")), "test_data": _has_test_data(settings.get("preview")),
             "checklists": checklists(risk, bool(risky_files)),
             "shortstat": _git(worktree, "diff", "--shortstat", origin, head).strip() or "no changes"}
 
@@ -121,7 +123,12 @@ def _write(run_dir, text, facts):
     target = brief.write_file(run_dir / PACKAGE_NAME, text)
     return {"package": str(target), "diff": str(facts["diff"]), "head": facts["head"],
             "risky": bool(facts["risky_files"]) or SECURITY in facts["checklists"],
-            "code": facts["code"], "breaker": facts["breaker"]}
+            **{flag: facts[flag] for flag in ("code", "breaker", "ui", "preview", "test_data")}}
+
+
+def _has_test_data(preview):
+    """True when config's `preview` mapping says `"test_data": true` (S-061/3)."""
+    return bool(preview) and preview.get("test_data") is True  # config.load gives a read-only mapping, not a dict
 
 
 def _read_acceptance(path):

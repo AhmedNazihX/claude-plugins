@@ -92,7 +92,7 @@ const PACKAGE_SCHEMA = {
     code: { type: 'boolean' }, breaker: { type: 'boolean' },  // the diff has code; config.json has a `breaker` command
     ui: { type: 'boolean' }, preview: { type: 'boolean' }, test_data: { type: 'boolean' },  // the diff touches `ui_globs`; config has a `preview`, with `test_data: true`
   },
-  required: ['code', 'breaker'],  // a reply without them is retried, never read as false (S-058)
+  required: ['code', 'breaker', 'ui', 'preview', 'test_data'],  // a reply without them is retried, never read as false (S-058, S-061)
 }
 const BREAK_SCHEMA = {
   type: 'object',
@@ -346,11 +346,7 @@ function panel(story, risky) {
 async function packageFor(story, round, since) {  // `round` only labels the step
   const reply = await callRetry(
     `Step 4, review package for story ${story.id}: run \`accio-brief ${story.id} --review` +
-      `${since ? ` --since ${since}` : ''}\`. Reply with its JSON {package, head, risky, code, breaker} (copy the code and breaker flags as given), or {error} if it fails.` +
-      (since ? '' : ' Also add ui, preview and test_data (false when unset): read .accio/config.json for `ui_globs` (a list ' +
-        'of path globs; none means an empty list), and the diff file the reply names, whose changed paths are on its ' +
-        '`diff --git a/<path> b/<path>` lines. ui is true only when a changed path matches a ui_globs glob; preview is true ' +
-        'when config.json has a `preview`; test_data is true when that preview has `"test_data": true`.'),
+      `${since ? ` --since ${since}` : ''}\`. Reply with its JSON {package, head, risky, code, breaker, ui, preview, test_data} (copy every flag as given), or {error} if it fails.`,
     { agentType: PORTKEY, model: 'haiku', schema: PACKAGE_SCHEMA, label: label(story, 'package', round) })
   if (!reply || reply.error || !reply.package || !reply.head) {
     return accioStop(`Writing the review package failed (${(reply && reply.error) || 'no answer'}). Try again?`)

@@ -58,7 +58,7 @@ export function happy(stories, overrides = {}) {
     if (step === 'prepare') return { worktree: `/wt/${id}`, brief: `/run/${id}/brief.md`, base: 'abc' }
     if (step === 'implement' || step === 'fix') return { status: 'DONE', head: 'def', report: `/run/${id}/build-report.md` }
     if (step === 'check') return { pass: true, skipped: false, failing: [] }
-    if (step === 'package') return { package: `/run/${id}/review-package.md`, head: 'h0', risky: false, code: false, breaker: false }
+    if (step === 'package') return { package: `/run/${id}/review-package.md`, head: 'h0', risky: false, code: false, breaker: false, ui: false, preview: false, test_data: false }
     if (REVIEWERS.includes(step)) return pass(id, step)
     if (step === 'fix-brief') return { worktree: `/wt/${id}`, brief: `/run/${id}/fix-brief.md`, base: 'abc' }
     if (step === 'judge') return { kind: 'ruling', text: 'The story is right; the finding goes.', path: null }
