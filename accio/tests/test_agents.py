@@ -38,6 +38,11 @@ class ReviewAgentsTest(unittest.TestCase):
                 for word in reply_words:
                     self.assertIn(word, body)
 
+    def test_S_065_6_mad_eye_lists_read_and_no_grep_or_glob(self):
+        listed = tools("mad-eye")
+        self.assertIn("Read", listed)
+        self.assertFalse({"Grep", "Glob", "LS"} & listed)
+
     def test_reviewers_keep_the_confidence_rule_their_findings_file_and_fix_rounds(self):
         for name in REVIEWERS:
             with self.subTest(name):
