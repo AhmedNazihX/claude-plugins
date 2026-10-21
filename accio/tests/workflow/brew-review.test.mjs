@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url'
 import { runWorkflow, happy, story, fail, pass } from './stub.mjs'
 
 const AGENTS = join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'agents')
+const NO_UI = { ui: false, preview: false, test_data: false }  // the package flags review.py gives a diff with no UI
 const labels = (calls) => calls.map((call) => call.label)
 const steps = (calls, id) => labels(calls).filter((label) => label.startsWith(`${id} `)).map((label) => label.slice(id.length + 1))
 const prompt = (calls, label) => calls.find((call) => call.label === label).prompt
@@ -36,7 +37,7 @@ test('S-020/1 a fix round that clears the findings makes the story READY', async
 test('S-020/2 a fix round re-runs only the reviewers that raised findings, on the fix diff only', async () => {
   const heads = { package: 'h0', 'package r1': 'h1' }
   const { calls } = await runWorkflow('brew', happy([story('S-001')], {
-    package: async (call) => ({ package: '/run/S-001/review-package.md', head: heads[call.label.slice(6)] || 'h2', risky: true, code: false, breaker: false }),
+    package: async (call) => ({ package: '/run/S-001/review-package.md', head: heads[call.label.slice(6)] || 'h2', risky: true, code: false, breaker: false, ...NO_UI }),
     'S-001 examiner': async (call, id) => fail(id, 'examiner'),
     'S-001 auror': async (call, id) => fail(id, 'auror'),
   }))
@@ -55,7 +56,7 @@ test('S-020/2 a fix round re-runs only the reviewers that raised findings, on th
 
 test('S-020/5 a fix diff that touches a risky path brings auror into the re-review', async () => {
   const { calls } = await runWorkflow('brew', happy([story('S-001'), story('S-002')], {
-    package: async (call, id) => ({ package: `/run/${id}/review-package.md`, head: 'h', risky: call.label === 'S-001 package r1', code: false, breaker: false }),
+    package: async (call, id) => ({ package: `/run/${id}/review-package.md`, head: 'h', risky: call.label === 'S-001 package r1', code: false, breaker: false, ...NO_UI }),
     examiner: async (call, id) => (call.label.endsWith(' r1') ? { verdict: 'pass', counts: { critical: 0, major: 0, minor: 0 }, path: 'p' } : fail(id, 'examiner')),
   }))
   assert.deepEqual(steps(calls, 'S-001').filter((step) => step.endsWith(' r1')),
@@ -184,7 +185,7 @@ test('S-020/5 the panel: Quick gets one combined reviewer, Story two, and a risk
   const stories = [story('S-001', { track: 'quick' }), story('S-002'), story('S-003', { track: 'feature' }),
     story('S-004', { track: 'quick' })]
   const { calls } = await runWorkflow('brew', happy(stories, {
-    package: async (call, id) => ({ package: `/run/${id}/review-package.md`, head: 'h0', risky: ['S-003', 'S-004'].includes(id), code: false, breaker: false }),
+    package: async (call, id) => ({ package: `/run/${id}/review-package.md`, head: 'h0', risky: ['S-003', 'S-004'].includes(id), code: false, breaker: false, ...NO_UI }),
   }))
   const reviewers = (id) => types(calls, id).filter((type) => /examiner|professor|auror/.test(type))
   assert.deepEqual(reviewers('S-001'), ['accio:examiner'])
@@ -256,7 +257,7 @@ test('S-020 a ledger skip is work that already passed review: no reviewer runs',
 
 // --- S-043: boggart after review -----------------------------------------------------------------------------------
 
-const withCode = async (call, id) => ({ package: `/run/${id}/review-package.md`, head: 'h0', risky: false, code: true, breaker: true })
+const withCode = async (call, id) => ({ package: `/run/${id}/review-package.md`, head: 'h0', risky: false, code: true, breaker: true, ...NO_UI })
 const entry = (extra = {}) => ({
   file: 'r1.py', verdict: 'kept', reason: 'failed an assertion on head in both runs', claim: 'it resets', source: 'S-001/1',
   in_dod: true, ...extra,
@@ -276,7 +277,7 @@ test('S-043/1 the package reply schema carries the code flag next to risky', asy
 
 test('S-043/2 the package prompt asks prefect to return the code and breaker flags', async () => {
   const { calls } = await runWorkflow('brew', happy([story('S-001')]))
-  assert.match(prompt(calls, 'S-001 package'), /\{package, head, risky, code, breaker\}/)
+  assert.match(prompt(calls, 'S-001 package'), /\{package, head, risky, code, breaker, ui, preview, test_data\}/)
 })
 
 test('S-043/2 a diff with code that passes review goes to boggart, then prefect runs accio-break verify', async () => {
@@ -321,7 +322,7 @@ test('S-043/4 a kept break outside the DoD starts no fix round; owl logs it from
 test('S-043/5 a docs-only diff, or a config with no breaker command, never calls boggart', async () => {
   for (const flags of [{ code: false, breaker: true }, { code: true, breaker: false }, { code: false, breaker: false }]) {
     const { calls } = await runWorkflow('brew', happy([story('S-001')], {
-      package: async (call, id) => ({ package: `/run/${id}/review-package.md`, head: 'h0', risky: false, ...flags }),
+      package: async (call, id) => ({ package: `/run/${id}/review-package.md`, head: 'h0', risky: false, ...NO_UI, ...flags }),
     }))
     assert.deepEqual(steps(calls, 'S-001').slice(-2), ['professor', 'outcome'], JSON.stringify(flags))
   }
@@ -348,7 +349,7 @@ test('S-058/2 a boggart skip names the false flag in the story note', async () =
   const cases = [[{ code: false, breaker: true }, /code/], [{ code: true, breaker: false }, /breaker/]]
   for (const [flags, word] of cases) {
     const { result } = await runWorkflow('brew', happy([story('S-001')], {
-      package: async (call, id) => ({ package: `/run/${id}/review-package.md`, head: 'h0', risky: false, ...flags }),
+      package: async (call, id) => ({ package: `/run/${id}/review-package.md`, head: 'h0', risky: false, ...NO_UI, ...flags }),
     }))
     assert.match(result, /boggart skipped: [^;\n]*`?\w*`? flag is false/i, JSON.stringify(flags))
     assert.match(result, new RegExp(`boggart skipped:[^\\n]*${word.source}`), JSON.stringify(flags))
@@ -429,7 +430,7 @@ test('S-043/3 after a fix round for a boggart break passes its checks, its diff 
 test('S-043/3 the review of a boggart fix adds auror when the fix diff is risky', async () => {
   const { calls } = await runWorkflow('brew', happy([story('S-001')], {
     'S-001 package': withCode,
-    'S-001 package r1c': async (call, id) => ({ package: `/run/${id}/p.md`, head: 'h1', risky: true, code: true, breaker: true }),
+    'S-001 package r1c': async (call, id) => ({ package: `/run/${id}/p.md`, head: 'h1', risky: true, code: true, breaker: true, ...NO_UI }),
     boggart: found,
     'S-001 verify': verdicts(entry()),
     'S-001 verify r1': verdicts(entry({ verdict: 'fixed', reason: FIXED })),
@@ -459,11 +460,33 @@ const frontMatter = (name) => readFileSync(join(AGENTS, `${name}.md`), 'utf8').s
 const README = join(AGENTS, '..', 'README.md')
 const madEyeSection = () => readFileSync(README, 'utf8').split('## mad-eye')[1].split('\n## ')[0].replace(/\s+/g, ' ')
 
-test('S-047/1 the package reply schema carries the ui, preview and test_data flags, and the prompt names ui_globs', async () => {
+test('S-047/1 the package reply schema carries the ui, preview and test_data flags', async () => {
   const { calls } = await runWorkflow('brew', happy([story('S-001')]))
   const props = calls.find((call) => call.label === 'S-001 package').opts.schema.properties
   for (const key of ['ui', 'preview', 'test_data']) assert.equal(props[key].type, 'boolean', key)
-  assert.match(prompt(calls, 'S-001 package'), /ui_globs[\s\S]*empty list/)
+})
+
+test('S-061/4 a package reply without ui, preview or test_data is retried as a failed reply', async () => {
+  const schema = (await runWorkflow('brew', happy([story('S-001')]))).calls.find((call) => call.label === 'S-001 package').opts.schema
+  for (const key of ['ui', 'preview', 'test_data']) assert.ok(schema.required.includes(key), key)
+  for (const missing of ['ui', 'preview', 'test_data']) {
+    let tries = 0
+    const { calls } = await runWorkflow('brew', happy([story('S-001')], {
+      package: async (call, id) => {
+        const reply = withUi()
+        if (++tries === 1) delete reply[missing]
+        return { ...reply, package: `/run/${id}/review-package.md` }
+      },
+    }))
+    assert.ok(labels(calls).includes('S-001 package retry'), missing)
+  }
+})
+
+test('S-061/5 brew.js tells portkey to match no glob and compute no flag', () => {
+  const source = readFileSync(join(AGENTS, '..', 'workflows', 'brew.js'), 'utf8')
+  const start = source.indexOf('async function packageFor')
+  const body = source.slice(start, source.indexOf('\n}\n', start))
+  assert.doesNotMatch(body, /ui_globs|config\.json|match/i)
 })
 
 test('S-047/2 a diff that touches no ui_globs file never calls mad-eye, or starts a preview', async () => {
