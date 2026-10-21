@@ -69,7 +69,7 @@ test('S-020/3 an implementer that returns NEEDS_CONTEXT goes to headmaster, and 
   const { result, calls } = await runWorkflow('brew', happy([story('S-001')], {
     implement: async () => ({ status: (builds += 1) === 1 ? 'NEEDS_CONTEXT' : 'DONE', report: '/run/S-001/build-report.md' }),
   }))
-  assert.deepEqual(steps(calls, 'S-001').slice(0, 4), ['prepare', 'implement', 'judge', 'implement'])
+  assert.deepEqual(steps(calls, 'S-001').slice(0, 5), ['prepare', 'implement', 'judge', 'release', 'implement'])
   assert.equal(calls.find((call) => call.label === 'S-001 judge').opts.agentType, 'accio:headmaster')
   assert.match(prompt(calls, 'S-001 judge'), /NEEDS_CONTEXT[\s\S]*\/run\/S-001\/build-report\.md/)
   assert.match(calls.filter((call) => call.label === 'S-001 implement')[1].prompt, /The story is right; the finding goes\./)
@@ -82,8 +82,8 @@ test('S-020/3 a finding that conflicts with the story goes to headmaster, and th
     'S-001 examiner': async (call, id) => fail(id, 'examiner'),
     fix: async () => ({ status: (fixes += 1) === 1 ? 'NEEDS_CONTEXT' : 'DONE', report: '/run/S-001/build-report.md' }),
   }))
-  assert.deepEqual(steps(calls, 'S-001').slice(6, 12),
-    ['fix-brief r1', 'fix r1', 'judge r1', 'fix r1', 'check r1', 'package r1'])
+  assert.deepEqual(steps(calls, 'S-001').slice(6, 13),
+    ['fix-brief r1', 'fix r1', 'judge r1', 'release r1', 'fix r1', 'check r1', 'package r1'])
   assert.match(prompt(calls, 'S-001 judge r1'), /examiner-findings\.md/)
   assert.match(calls.find((call) => call.label === 'S-001 fix r1').prompt, /conflicts with the story[\s\S]*NEEDS_CONTEXT/)
   for (const call of calls.filter((each) => each.label === 'S-001 fix r1').slice(1).concat(
@@ -97,7 +97,7 @@ test('S-020/3 a second NEEDS_CONTEXT after a ruling blocks the story instead of 
   const { result, calls } = await runWorkflow('brew', happy([story('S-001')], {
     implement: async () => ({ status: 'NEEDS_CONTEXT', report: '/run/S-001/build-report.md' }),
   }))
-  assert.deepEqual(steps(calls, 'S-001'), ['prepare', 'implement', 'judge', 'implement', 'outcome'])
+  assert.deepEqual(steps(calls, 'S-001'), ['prepare', 'implement', 'judge', 'release', 'implement', 'outcome'])
   assert.match(prompt(calls, 'S-001 outcome'), /BLOCKED[\s\S]*still needs context/)
   assert.match(result, /BLOCKED/)
 })

@@ -138,7 +138,7 @@ test('S-019/2 an implementer that returns BLOCKED or NEEDS_CONTEXT stops its sto
     'S-002 implement': async () => ({ status: 'NEEDS_CONTEXT', report: '/run/S-002/build-report.md' }),
   }))
   assert.deepEqual(steps(calls, 'S-001'), ['prepare', 'implement', 'outcome'])
-  assert.deepEqual(steps(calls, 'S-002'), ['prepare', 'implement', 'judge', 'implement', 'outcome'])  // S-020/3
+  assert.deepEqual(steps(calls, 'S-002'), ['prepare', 'implement', 'judge', 'release', 'implement', 'outcome'])  // S-020/3, S-057/1
   assert.match(calls.find((call) => call.label === 'S-001 outcome').prompt, /report says why: \/run\/S-001\/build-report.md/)
   assert.equal((result.match(/BLOCKED/g) || []).length, 2)
 })
@@ -324,4 +324,35 @@ test('S-035/3 a reviewer silent twice blocks with cause accio; a builder silence
   const builder = await runWorkflow('brew', happy([story('S-001')], { implement: async () => null }))
   assert.deepEqual(labels(builder.calls).filter((label) => label.includes('implement')), ['S-001 implement'])
   assert.doesNotMatch(builder.calls.find((call) => call.label === 'S-001 outcome').prompt, /The cause is accio/)
+})
+
+test('S-057/1 after a ruling the claim is released before the second builder starts, in a build and in a fix round', async () => {
+  let builds = 0
+  let fixes = 0
+  const { calls } = await runWorkflow('brew', happy([story('S-001')], {
+    implement: async () => ({ status: (builds += 1) === 1 ? 'NEEDS_CONTEXT' : 'DONE', report: 'r' }),
+    'S-001 examiner': async (call, id) => fail(id, 'examiner'),
+    fix: async () => ({ status: (fixes += 1) === 1 ? 'NEEDS_CONTEXT' : 'DONE', report: 'r' }),
+  }))
+  const order = labels(calls)
+  for (const label of ['S-001 release', 'S-001 release r1']) {
+    const call = calls.find((each) => each.label === label)
+    assert.match(call.prompt, /accio-brief S-001 --release/, label)
+    assert.equal(call.opts.agentType, 'accio:portkey', label)
+  }
+  assert.deepEqual(order.filter((label) => /^S-001 (implement|judge|release)$/.test(label)),
+    ['S-001 implement', 'S-001 judge', 'S-001 release', 'S-001 implement'])
+  assert.deepEqual(order.filter((label) => /^S-001 (fix|judge|release) r1$/.test(label)),
+    ['S-001 fix r1', 'S-001 judge r1', 'S-001 release r1', 'S-001 fix r1'])
+})
+
+test('S-057/1 a release that fails stops the story with an accio cause instead of a builder that cannot claim', async () => {
+  let builds = 0
+  const { result, calls } = await runWorkflow('brew', happy([story('S-001')], {
+    implement: async () => ({ status: (builds += 1) === 1 ? 'NEEDS_CONTEXT' : 'DONE', report: 'r' }),
+    release: async () => ({ error: 'cannot write claims.json' }),
+  }))
+  assert.equal(calls.filter((call) => call.label === 'S-001 implement').length, 1)
+  assert.match(result, /S-001 Story S-001\s+BLOCKED/)
+  assert.match(calls.find((call) => call.label === 'S-001 outcome').prompt, /The cause is accio/)
 })

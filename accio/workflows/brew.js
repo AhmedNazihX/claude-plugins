@@ -243,6 +243,14 @@ function rulingText(judged) {
   return `${judged.text}${dismissed}`
 }
 
+// A builder after a ruling gets no new brief, so its story's earlier claim is released first (S-057/1); else its
+// `accio-claim` is refused as held by the builder before it.
+function releaseClaim(story, round) {
+  return callRetry(
+    `Release the claim of story ${story.id}: run \`accio-brief ${story.id} --release\`. Reply {"done": true} or {error}.`,
+    { agentType: PORTKEY, model: 'haiku', schema: OUTCOME_SCHEMA, label: label(story, 'release', round) })
+}
+
 // `attempt(ruling)` runs a fresh house-elf, given the story's rulings so far. NEEDS_CONTEXT goes to headmaster once
 // (S-020/3): a ruling gets one more try and holds for the rest of the story; a question stops the story, with
 // headmaster's question file when it wrote one (S-020/4).
@@ -255,6 +263,10 @@ async function build(story, worktree, round, attempt, findings = [], earlier = '
   }
   if (judged.kind === 'question') return stop(judged.text, Boolean(judged.path), DECISION)
   const ruling = addRuling(earlier, rulingText(judged))
+  const released = await releaseClaim(story, round)
+  if (failed(released)) {
+    return accioStop(`Releasing the story's claim before the second builder failed (${(released && released.error) || 'no answer'}). Try again?`)
+  }
   const again = await attempt(ruling)
   if (again && again.status === 'NEEDS_CONTEXT') {
     return stop(`The builder (house-elf) still needs context after the judge's (headmaster's) ruling; its report says what: ${again.report || 'none'}.`)
