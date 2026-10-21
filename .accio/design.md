@@ -656,3 +656,103 @@ Option C: staged, with a live browser for mad-eye (decision 008).
   boggart wrote, with the user's rights. Not a new hole (house-elf already runs anything in its worktree, and
   prefect runs the same files), but a sandbox (macOS `sandbox-exec` or a container: only the throwaway worktree
   writable, no network, no `.accio/` or main checkout) would close it. Needs a wand round before it becomes a story.
+
+## Group B leftovers: scripts set the flags, mad-eye stays on the preview
+
+### Outcome
+After this ships, `/accio` goes from a new design note straight to sort, every flag that decides whether a review
+step runs comes from a script, and mad-eye can't quietly wander off the preview. We'd know because after the next
+wand note `accio-board next` says `sort`; `brew.js` asks portkey to compute no flag itself; a test shows an
+off-origin page after a click is hidden from mad-eye and fenced; auror's checklist has the two-parsers line; and the
+next story that adds an agent lists `accio/README.md` in its `files`.
+
+### Who and why
+The user, building accio with accio. Iteration 14's note and this one both left `accio-board next` saying `done`,
+so sort was run by hand. S-047's builder warned that the `ui`, `preview` and `test_data` flags come from portkey
+(Haiku) matching globs by hand, the weak spot S-058 fixed for `code` and `breaker`. auror missed a URL parser bypass
+in S-046. Builds hit an out-of-bounds `accio/README.md` when a story adds an agent. The 0.7.1 push security review
+found that a mad-eye click can leave the preview, since curfew checks only `browser_navigate`.
+
+### Requirements
+- L1 `accio-board next` says `sort` while a design note recorded by `record-design` has no stories yet. Owner: the
+  user (`nextstep.py:41` says sort only with zero stories).
+- L2 `accio-brief --review` computes `ui`, `preview` and `test_data` in Python, and `PACKAGE_SCHEMA` requires them.
+  Owner: the user (S-047's risk note; `ui_globs` has no reader in `accio/bin` today).
+- L3 auror's checklist has a line on two parsers reading one URL or path differently. Owner: the user (the S-046
+  miss).
+- L4 quill lists a file a test counts (in accio, `accio/README.md` for each new `accio/agents/*.md`) in the story's
+  `files`, and the backlog check looks for it. Owner: the user (`test_readme.py:35-43`).
+- L5 When mad-eye's page leaves the preview's origin, the page's text is hidden from mad-eye and its browser tools are
+  fenced until it navigates back, with a reason logged. Owner: the user (0.7.1 push security review).
+
+### Out of scope
+- A sandbox for repros and checks: `sandbox-exec` and bubblewrap are unverified here and on CI (seeker); it stays
+  under Open questions.
+- Spike S-R1 (retry a stalled builder), as before.
+- Requiring Playwright's `--allowed-origins`: Playwright says it is not a security boundary, and a plugin can't set
+  it (decision 012, option C).
+- Stopping mad-eye with a hook's `continue: false`: whether it ends only the subagent is undocumented.
+
+### Design
+Option B (decision 012).
+- **Unsorted notes (L1).** `record-design` compares the `## ` headings of the new `design.md` with the committed one
+  (`git show HEAD:.accio/design.md`; none committed means every heading is new) and writes the new ones to
+  `run/unsorted.json`. `accio-board record`, which sort's step 5 runs, empties it, also when no story was added.
+  `next_step` says `sort` while the file lists a heading, checked before the `backlog → prophecy` rule, so a note
+  is turned into stories before prophecy plans. A missing or unreadable file means nothing is waiting.
+- **Flags from a script (L2).** `review._diff_facts` also returns `ui` (a changed path matches `ui_globs`, with
+  `globs.matches_any`, as `risky_files` does), `preview` (config has a `preview` mapping) and `test_data` (that
+  mapping has `"test_data": true`). `PACKAGE_SCHEMA.required` becomes `code, breaker, ui, preview, test_data`, and
+  `packageFor` only asks portkey to copy the flags as given (the glob-matching sentence at `brew.js:350-353` goes).
+- **Two parsers (L3).** One bullet in `accio/references/checklists/auth-and-security.md`: when one part checks a URL
+  or path and another reads it again (browser, server, file system), try inputs the two may read differently (`\`,
+  `@`, `%2f`, `%5c`, `..`), for example `http://evil.com\@host:port/`.
+- **Counted files (L4).** quill.md's `files` rule: a story that adds a file a test counts lists that file too (each
+  `accio/agents/*.md` needs its row in `accio/README.md`). Sort's backlog check asks examiner to look for it.
+- **Hide and fence (L5).** A PostToolUse hook on browser tools (matcher `mcp__.*__browser_.*`) acts only for
+  `accio:mad-eye`. It finds the `- Page URL:` line in the tool's response and compares its origin with
+  `preview.url`, using curfew's `policy._origin`. Off the origin, it returns `updatedMCPToolOutput` with the reason
+  in place of the page, appends a line to `run/<ID>/mad-eye-fence.log`, and writes a fence record for that
+  `agent_id`. While fenced, curfew allows mad-eye only `browser_navigate` (still checked against the origin),
+  `browser_take_screenshot` and `browser_close`; the fence lifts when a response shows the preview's origin again.
+  The hook fails open (decision 007): a crash adds no output, and curfew's navigate rule still holds. The lists stay
+  exact (decision 010).
+
+### What we build
+1. **Spike S-L5: a real click payload.** By hand, 20–30 min. A logging PostToolUse hook on `mcp__.*__browser_.*`;
+   mad-eye clicks a link to another origin; save the payload as a test fixture. Files:
+   `accio/docs/research/spike-s-l5.md`, `accio/tests/fixtures/browser-click-offorigin.json`. Needs: none. Risk: none.
+   Checked by: the fixture holds the `tool_response` and shows whether `Page URL` appears with default settings.
+2. **Unsorted notes.** Files: `accio/bin/accio_lib/design.py`, `accio/bin/accio_lib/nextstep.py`, `accio/bin/accio-board`,
+   `accio/tests/test_nextstep.py`, `accio/tests/test_board.py`. Needs: none. Risk: none. Checked by: a test runs
+   `record-design` adding a note and `next` gives `sort`; after `record` (with and without new stories) `next` gives
+   `prophecy` or `done`; a missing `unsorted.json` gives today's answers.
+3. **Flags from a script.** Files: `accio/bin/accio_lib/review.py`, `accio/workflows/brew.js`,
+   `accio/tests/test_review.py`, `accio/tests/workflow/brew-review.test.mjs`. Needs: none. Risk: none. Checked by: a
+   unittest where a diff touching a `ui_globs` path gives `ui: true` and one that doesn't gives false, with `preview`
+   and `test_data` from config; a stub test where a package reply missing `ui` is retried; `brew.js` no longer
+   mentions matching globs.
+4. **Checklist and quill rule.** Files: `accio/references/checklists/auth-and-security.md`, `accio/agents/quill.md`,
+   `accio/skills/sort/SKILL.md`, `accio/tests/test_agents.py`. Needs: none. Risk: none. Checked by: tests that the
+   checklist names two parsers with the `\@` example, and quill.md and sort's check name the counted-file rule.
+5. **Hide and fence.** Files: `accio/hooks/fence.py`, `accio/hooks/hooks.json`, `accio/bin/accio_lib/policy.py`,
+   `accio/hooks/curfew.py`, `accio/tests/test_fence.py`, `accio/tests/test_curfew.py`, `accio/tests/test_scaffold.py`.
+   Needs: 1. Risk: security (curfew). Checked by: with the spike's fixture changed to `Page URL: http://evil.com/`, the
+   hook returns `updatedMCPToolOutput` with the reason and writes a fence record and a log line; with the preview's
+   URL, no output; another agent's call, no output; while fenced, curfew denies `browser_click` and allows
+   `browser_navigate` to the preview; a response back on the preview lifts the fence; a hook crash gives no output.
+
+### Evidence
+- Unittests: `record-design` then `next` gives `sort`, and `record` clears it; `_diff_facts` gives `ui`, `preview`,
+  `test_data` from a fixture diff and config; the fence hook's outputs on the recorded click payload; curfew's
+  fenced list.
+- Stub workflow test: a package reply without `ui` is retried.
+- By grep: `brew.js` has no glob-matching instruction for portkey; the checklist has the `\@` example.
+- After the next wand note, `accio-board next` says `sort` (seen live, as this note was not).
+
+### Open questions
+- What the PostToolUse `tool_response` looks like for a Playwright click, and whether `Page URL` appears with default
+  settings: spike S-L5 (part 1). If it doesn't appear, part 5 comes back to wand.
+- A sandbox for repros and checks (`sandbox-exec` on macOS, bubblewrap on Linux): both unverified; needs its own
+  spike and wand round.
+- Spike S-R1, as before.
