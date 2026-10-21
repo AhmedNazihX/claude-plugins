@@ -451,7 +451,7 @@ test('S-043 a boggart or verify step that gives no answer does not block the sto
 // --- S-047: mad-eye after boggart ----------------------------------------------------------------------------------
 
 const withUi = (extra = {}) => async (call, id) => ({
-  package: `/run/${id}/review-package.md`, head: 'h0', risky: false, ui: true, preview: true, test_data: true, ...extra,
+  package: `/run/${id}/review-package.md`, head: 'h0', risky: false, code: false, breaker: false, ui: true, preview: true, test_data: true, ...extra,
 })
 const SEEN = { findings: [{ id: 'mad-eye-1', where: '/login', claim: 'shows a Sign in button', dod: 'S-001/1', failure: 'no button', screenshot: '/r/.accio/run/S-001/mad-eye/S-001-1.png' }] }
 const WALK = ['preview-start', 'mad-eye', 'preview-stop']
@@ -475,13 +475,13 @@ test('S-047/2 a diff that touches no ui_globs file never calls mad-eye, or start
 test('S-047/3 a UI diff with no preview in config logs a skip that names the preview', async () => {
   const { result, calls } = await runWorkflow('brew', happy([story('S-001')], { package: withUi({ preview: false, test_data: false }) }))
   assert.deepEqual(steps(calls, 'S-001').slice(-2), ['professor', 'outcome'])
-  assert.match(result, /S-001 Story S-001\s+READY\s+mad-eye skipped: config\.json has no `preview`/)
+  assert.match(result, /S-001 Story S-001\s+READY\s+(?:boggart skipped[^;\n]*; )?mad-eye skipped: config\.json has no `preview`/)
 })
 
 test('S-047/3 a UI diff whose preview lacks test_data true logs a skip that names test_data', async () => {
   const { result, calls } = await runWorkflow('brew', happy([story('S-001')], { package: withUi({ test_data: false }) }))
   assert.deepEqual(steps(calls, 'S-001').slice(-2), ['professor', 'outcome'])
-  assert.match(result, /READY\s+mad-eye skipped: config\.json preview has no `"test_data": true`/)
+  assert.match(result, /READY\s+(?:boggart skipped[^;\n]*; )?mad-eye skipped: config\.json preview has no `"test_data": true`/)
 })
 
 test('S-047/4 the missing browser tools outcome of S-044 logs a skip, and the preview still stops', async () => {
@@ -492,7 +492,7 @@ test('S-047/4 the missing browser tools outcome of S-044 logs a skip, and the pr
   for (const [name, reply] of missing) {
     const { result, calls } = await runWorkflow('brew', happy([story('S-001')], { package: withUi(), 'mad-eye': reply }))
     assert.deepEqual(steps(calls, 'S-001').slice(-4), WALK.concat('outcome'), name)
-    assert.match(result, /READY\s+mad-eye skipped: the browser tools are missing from this session/, name)
+    assert.match(result, /READY\s+(?:boggart skipped[^;\n]*; )?mad-eye skipped: the browser tools are missing from this session/, name)
   }
 })
 
@@ -511,7 +511,7 @@ test('S-047/6 mad-eye failing, erroring or throwing still stops the preview', as
   for (const reply of bad) {
     const { result, calls } = await runWorkflow('brew', happy([story('S-001')], { package: withUi(), 'mad-eye': reply }))
     assert.deepEqual(steps(calls, 'S-001').slice(-4), WALK.concat('outcome'))
-    assert.match(result, /READY\s+mad-eye skipped/)
+    assert.match(result, /READY\s+(?:boggart skipped[^;\n]*; )?mad-eye skipped/)
   }
 })
 
