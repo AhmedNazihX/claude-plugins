@@ -32,7 +32,7 @@ flagged in the summary.
 
 ## 4. Ask, then check the backlog
 If quill's replies named questions, ask each now, one at a time, with your recommendation; pass each answer to
-quill ("Fix: <ID>: the user says …") and score what it changed as in step 3. Then call the `accio:examiner` agent: "Backlog check (sort): the stories <IDs> in .accio/stories/, from .accio/design.md;
+quill ("Fix: <ID>: the user says …") and score what it changed as in step 3. Then call the `accio:examiner` agent: "Backlog check (sort): the stories <IDs> in .accio/stories/, from .accio/design.md; look for a counted file missing from a story's `files` (a file a test counts, such as `accio/README.md` for a new agent);
 findings template ${CLAUDE_PLUGIN_ROOT}/references/findings-template.md; write your findings to
 .accio/run/sort/examiner-findings.md." If its verdict is fail, run `accio-board new` and call quill once: "Fix:
 answer each finding in .accio/run/sort/examiner-findings.md; new stories, if a finding needs a split, from <ID>."
