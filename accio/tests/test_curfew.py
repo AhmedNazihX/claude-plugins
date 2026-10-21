@@ -499,6 +499,45 @@ class MadEyeFenceTest(CurfewTestBase):
         self.assertEqual(verdict, "allow")
 
 
+class MadEyeSavedPagesTest(CurfewTestBase):
+    """S-065: mad-eye never reads the browser's saved pages, fenced or not."""
+
+    def setUp(self):
+        super().setUp()
+        self.saved = self.repo / ".playwright-mcp"
+        write(self.saved / "page-1.yml", "- page")
+        write(self.repo / "x.md", "x")
+
+    def read(self, path, agent=MAD_EYE):
+        return self.decision("Read", {"file_path": str(path)}, agent=agent)
+
+    def test_S_065_1_read_under_the_saved_pages_is_denied(self):
+        verdict, reason = self.read(self.saved / "page-1.yml")
+        self.assertEqual(verdict, "deny")
+        self.assertIn("saved pages", reason)
+
+    def test_S_065_2_a_symlink_or_dotdot_to_the_saved_pages_is_denied(self):
+        (self.repo / "link").symlink_to(self.saved)
+        self.assertEqual(self.read(self.repo / "link" / "page-1.yml")[0], "deny")
+        self.assertEqual(self.read(self.repo / "src" / ".." / ".playwright-mcp" / "page-1.yml")[0], "deny")
+
+    def test_S_065_3_grep_glob_and_ls_are_denied(self):
+        for tool, tool_input in (("Grep", {"pattern": "x"}), ("Glob", {"pattern": "*"}),
+                                 ("LS", {"path": str(self.repo)})):
+            with self.subTest(tool):
+                self.assertEqual(self.decision(tool, tool_input, agent=MAD_EYE)[0], "deny")
+
+    def test_S_065_4_read_of_other_files_is_allowed(self):
+        self.assertEqual(self.read(self.repo / "x.md")[0], "allow")
+
+    def test_S_065_5_other_agents_keep_todays_rules(self):
+        for agent in ("accio:librarian", "accio:examiner"):
+            with self.subTest(agent):
+                self.assertEqual(self.read(self.saved / "page-1.yml", agent)[0], "allow")
+                for tool in ("Grep", "Glob"):
+                    self.assertEqual(self.decision(tool, {"pattern": "x"}, agent=agent)[0], "allow")
+
+
 class OtherAgentsTest(CurfewTestBase):
     def test_S_024_seeker_and_wandmaker_write_only_their_notes(self):
         accio = self.repo / ".accio"

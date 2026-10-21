@@ -78,6 +78,7 @@ FENCED_BROWSER_TOOLS = frozenset({"browser_navigate", "browser_close"})  # a scr
 FENCE_REASON = "the page is off the preview's origin, so mad-eye is fenced until it is back on the preview."
 DEFAULT_PORTS = {"http": 80, "https": 443}
 SHOT_FOLDER = "mad-eye"
+SAVED_PAGES = ".playwright-mcp"  # where the Playwright server saves every page it visits
 UNSAFE_URL = re.compile(r"[\\\s\x00-\x1f\x7f]")  # a browser reads these differently from urlsplit
 
 HEX_SHA = r"[0-9a-f]{40}"
@@ -133,6 +134,10 @@ def decide(agent, agent_id, tool, tool_input, ctx):
     if agent == BROWSER_AGENT and ctx.fenced and tool in READ_TOOLS:
         return deny(FENCE_REASON + f" {tool} is denied, since the off-origin page is also saved under "
                     ".playwright-mcp/ (rule: fence).")
+    if agent == BROWSER_AGENT and tool in READ_TOOLS:
+        saved = _saved_pages_rule(tool, tool_input)
+        if saved:
+            return deny(saved)
     browser = _browser(agent, tool, tool_input, ctx)
     if browser is not None:
         return browser
@@ -225,6 +230,18 @@ def _screenshot(tool_input, ctx, required=True):
     if len(parts) >= 3 and story.STORY_ID.match(parts[0]) and parts[1] == SHOT_FOLDER:
         return allow()
     return deny(f"a screenshot may be saved only inside {folder} (rule: screenshot folder), not {filename}.")
+
+
+def _saved_pages_rule(tool, tool_input):
+    """The reason to deny mad-eye a read tool (S-065), or "": it reads files with `Read` only, never one of the
+    browser's saved pages (`.playwright-mcp/`), which keep a page after the fence lifts."""
+    if tool != "Read":
+        return f"mad-eye reads files with Read only, so {tool} is denied (rule: saved pages)."
+    target = _target(tool_input)
+    if target is None or SAVED_PAGES in target.parts:
+        return (f"mad-eye never reads the browser's saved pages ({SAVED_PAGES}/); browser_snapshot returns the page "
+                "(rule: saved pages).")
+    return ""
 
 
 def _verdict(reason):

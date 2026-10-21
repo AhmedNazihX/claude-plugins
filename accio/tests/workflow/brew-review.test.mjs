@@ -571,7 +571,7 @@ test('S-047/8 mad-eye.md names Sonnet, lists the fixed browser tools and reads, 
   assert.match(front, /^model: sonnet$/m)
   const tools = front.match(/^tools: (.*)$/m)[1].split(',').map((tool) => tool.trim())
   const prefix = 'mcp__plugin_playwright_playwright__browser_'
-  assert.deepEqual(tools.filter((tool) => !tool.startsWith(prefix)), ['Read', 'Grep', 'Glob'])
+  assert.deepEqual(tools.filter((tool) => !tool.startsWith(prefix)), ['Read'])  // S-065: no Grep or Glob
   assert.deepEqual(tools.filter((tool) => tool.startsWith(prefix)).map((tool) => tool.slice(prefix.length)).sort(),
     ['click', 'close', 'console_messages', 'fill_form', 'hover', 'navigate', 'press_key', 'resize', 'select_option',
       'snapshot', 'take_screenshot', 'type', 'wait_for'])
