@@ -11,6 +11,7 @@ one), so a second run is harmless and nothing outside the repo is ever written.
 staged. The design needs an `## Outcome` with real text, outside any code block (decision 011). It refuses during a
 build.
 """
+import json
 import os
 import subprocess
 
@@ -19,6 +20,7 @@ from accio_lib import board, paths, runlock, storyfiles
 RUN_IGNORE = ".accio/run/"
 RUN_PROBE = ".accio/run/x"  # git checks a path inside the folder
 DESIGN_NAME = "design.md"
+UNSORTED_NAME = "unsorted.json"  # in run/: the new design headings sort hasn't turned into stories yet
 OUTCOME = "## Outcome"
 PLACEHOLDER = "<what should be true>"
 COMMIT_MESSAGE = "docs(accio): design"
@@ -104,6 +106,23 @@ def _setup_files(accio):
     return files
 
 
+def _new_headings(accio, text):
+    """The `## ` headings of `text` that the committed design.md lacks; all of them when none is committed."""
+    committed = _git(accio.parent, "show", f"HEAD:.accio/{DESIGN_NAME}")
+    old = storyfiles.sections(committed.stdout.decode("utf-8", "replace")) if committed.returncode == 0 else {}
+    return [heading for heading in storyfiles.sections(text) if heading not in old]
+
+
+def write_unsorted(accio, headings):
+    """Write the headings sort hasn't turned into stories yet to run/unsorted.json (an empty list when none)."""
+    path = board.run_dir(accio) / UNSORTED_NAME
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(list(headings)) + "\n", encoding="utf-8")
+    except OSError as error:
+        raise DesignError(f"cannot write {path}: {error}") from error
+
+
 def record_design(accio):
     """Commit the design (and the setup files the first time); returns {files, commit, commit_error}."""
     if runlock.is_held(board.run_dir(accio)):
@@ -117,5 +136,7 @@ def record_design(accio):
         raise DesignError(f"cannot read {design}: {error}") from error
     _check_outcome(design, text)
     files = [str(path) for path in (design, *_setup_files(accio))]
+    fresh = _new_headings(accio, text)
     commit, why = storyfiles.commit(accio.parent, files, COMMIT_MESSAGE)
+    write_unsorted(accio, fresh)
     return {"files": files, "commit": commit, "commit_error": why}
