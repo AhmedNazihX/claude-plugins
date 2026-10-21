@@ -493,7 +493,8 @@ class OtherAgentsTest(CurfewTestBase):
         self.assert_denied("Bash", self.bash("/tmp/accio-board ready"), "portkey", agent="accio:portkey")
         script = lambda name: shlex.quote(str(ROOT / "bin" / name))
         cases = (("portkey", "accio-hooks verify", True), ("portkey", "accio-board unlock", True),
-                 ("portkey", "accio-brief S-001", True), ("portkey", "accio-hooks uninstall", False),
+                 ("portkey", "accio-brief S-001", True), ("portkey", "accio-brief S-001 --release", True),
+                 ("portkey", "accio-hooks uninstall", False),
                  ("portkey", "accio-ledger clear S-001", False), ("prefect", "accio-ledger record S-001", True),
                  ("prefect", "accio-board move S-001 review", True), ("prefect", "accio-board unlock", False),
                  ("prefect", "accio-board refresh", True), ("portkey", "accio-board refresh", True),
