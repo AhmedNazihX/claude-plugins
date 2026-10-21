@@ -173,6 +173,39 @@ class FenceTest(unittest.TestCase):
         self.assertIn("updatedMCPToolOutput", json.loads(result.stdout)["hookSpecificOutput"])
         self.assertIn(AGENT, self.fence())
 
+    def tool(self, name, response, **extra):
+        return self.payload(tool_name=f"mcp__plugin_playwright_playwright__{name}", tool_response=response, **extra)
+
+    def test_S_066_1_a_screenshot_without_a_page_url_is_replaced_by_a_note(self):
+        shot = self.tool("browser_take_screenshot", [{"type": "image", "data": "iVBORw0K", "mimeType": "image/png"}],
+                         tool_input={"filename": "/r/.accio/run/S-1/mad-eye/S-1-1.png"})
+        out = json.loads(self.call(shot).stdout)["hookSpecificOutput"]["updatedMCPToolOutput"]
+        self.assertEqual([block["type"] for block in out], ["text"])
+        self.assertIn("/r/.accio/run/S-1/mad-eye/S-1-1.png", out[0]["text"])
+        self.assertIn("browser_snapshot", out[0]["text"])
+        self.assertNotIn("off the preview", out[0]["text"])
+
+    def test_S_066_2_console_messages_without_a_page_url_return_the_reason(self):
+        console = self.tool("browser_console_messages", [{"type": "text", "text": "### Result\nTotal messages: 0"}])
+        out = json.loads(self.call(console).stdout)["hookSpecificOutput"]["updatedMCPToolOutput"]
+        self.assertEqual(len(out), 1)
+        self.assertIn("browser_snapshot", out[0]["text"])
+        self.assertIn("fence", out[0]["text"])
+
+    def test_S_066_3_an_on_origin_page_url_returns_no_output(self):
+        for name in ("browser_take_screenshot", "browser_console_messages"):
+            text = self.payload(url="http://localhost:3000/a")["tool_response"]
+            self.assertEqual(self.call(self.tool(name, text)).stdout, "", name)
+
+    def test_S_066_4_browser_close_returns_no_output_when_not_fenced(self):
+        close = self.tool("browser_close", [{"type": "text", "text": "### Result\nNo open tabs."}])
+        self.assertEqual(self.call(close).stdout, "")
+
+    def test_S_066_5_the_prompt_says_snapshot_checks_and_screenshot_is_evidence(self):
+        text = (ROOT / "agents" / "mad-eye.md").read_text(encoding="utf-8")
+        self.assertIn("Check a DoD line with `browser_snapshot`", text)
+        self.assertIn("evidence for the user only", text)
+
     def test_S_063_10_hooks_json_lists_the_post_tool_use_hook(self):
         data = json.loads((ROOT / "hooks" / "hooks.json").read_text(encoding="utf-8"))
         groups = data["hooks"]["PostToolUse"]

@@ -28,7 +28,9 @@ copy the login into your reply, a finding or a screenshot name.
 1. For each DoD line a user can see on a page, open the page it names and do what the line says.
 2. Take a full page snapshot before each click. A click after a scoped snapshot (one with a `target`) fails with a
    stale ref, so take a fresh full snapshot first, then click.
-3. Save one screenshot per DoD line with `browser_take_screenshot`, with `filename` an absolute path inside the repo:
+3. Check a DoD line with `browser_snapshot`. The screenshot is evidence for the user only: you won't see the
+   picture, and a screenshot or console response that doesn't show the page is on the preview is replaced by a note.
+   Save one screenshot per DoD line with `browser_take_screenshot`, with `filename` an absolute path inside the repo:
    `<your working folder>/.accio/run/<ID>/mad-eye/<line>.png` (for example `.../mad-eye/S-012-2.png`). The browser
    server refuses a path outside the repo, and a relative name lands in the repo root. Never use a relative name.
 4. A finding is a visible DoD line that does not hold: the text, control or state the line names is missing or wrong.
