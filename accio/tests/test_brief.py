@@ -133,6 +133,61 @@ class BriefTest(unittest.TestCase):
         self.assertTrue(self.rebasing(worktree))
         self.assertIn("src/a.py", git(worktree, "diff", "--name-only", "--diff-filter=U"))
 
+    def finish_rebase(self, worktree):
+        write(worktree / "src" / "a.py", "value = 4\n")
+        git(worktree, "add", "src/a.py")
+        subprocess.run(["git", "-c", "core.editor=true", "rebase", "--continue"], cwd=worktree, check=True,
+                       capture_output=True, text=True)
+
+    def recorded(self):
+        return (self.accio / "run" / "S-001" / "base").read_text(encoding="utf-8").strip()
+
+    def diff_start(self, worktree):
+        from accio_lib import checks
+        return checks.diff_start(self.accio / "run" / "S-001", worktree, "main")
+
+    def test_S_067_1_a_conflicted_rebase_records_the_new_base_and_logs_it(self):
+        worktree = self.conflict()
+        self.brief("S-001")
+        self.assertTrue(self.rebasing(worktree))
+        self.assertEqual(self.recorded(), self.head("main"))
+        log = (self.accio / "run" / "base-writes.log").read_text(encoding="utf-8").splitlines()
+        self.assertEqual(log[-1], f"S-001 {self.head('main')}")
+
+    def test_S_067_2_after_the_conflict_is_resolved_the_diff_starts_at_the_new_base(self):
+        worktree = self.conflict()
+        self.brief("S-001")
+        self.finish_rebase(worktree)
+        self.assertEqual(self.diff_start(worktree), self.head("main"))
+        changed = git(worktree, "diff", "--name-only", self.diff_start(worktree), "HEAD").splitlines()
+        self.assertEqual(changed, ["src/a.py"])
+
+    def test_S_067_3_an_aborted_conflicted_rebase_falls_back_to_the_merge_base(self):
+        worktree = self.conflict()
+        old_base = self.head("main~1")
+        self.brief("S-001")
+        git(worktree, "rebase", "--abort")
+        self.assertEqual(self.diff_start(worktree), old_base)
+
+    def test_S_067_4_a_rebase_already_in_progress_still_records_the_base_asked_for(self):
+        worktree = self.conflict()
+        self.brief("S-001")
+        write(self.accio / "run" / "S-001" / "base", self.head("main~1") + "\n")
+        self.brief("S-001")
+        self.assertEqual(self.recorded(), self.head("main"))
+        self.finish_rebase(worktree)
+        self.assertEqual(self.diff_start(worktree), self.head("main"))
+
+    def test_S_067_5_a_clean_rebase_records_the_new_base(self):
+        self.brief("S-001")
+        worktree = self.wt_root / "S-001"
+        write(worktree / "src" / "new.py", "y = 2\n")
+        commit_all(worktree, "story change")
+        write(self.repo / "docs.md", "main moved\n")
+        commit_all(self.repo, "main moves on")
+        self.brief("S-001")
+        self.assertEqual(self.recorded(), self.head("main"))
+
     # S-022/2
     def test_S_022_2_the_brief_names_the_conflicted_files_and_rebase_continue(self):
         self.conflict()

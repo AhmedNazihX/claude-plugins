@@ -98,8 +98,9 @@ def prepare_worktree(main, run_dir, story_id, onto):
             raise BriefError(f"{worktree} exists but is not a git worktree; move it away and run again")
         _git(main, "worktree", "add", "-q", str(worktree), branch)
     notes = rebase(worktree, onto, recorded_base(run_dir))
-    if not notes:
-        _record_base(run_dir, onto)
+    # Even when the rebase stops on a conflict: `checks.trusted_base` only trusts a base that is an ancestor of HEAD,
+    # so an aborted rebase falls back to the merge-base, and a finished one diffs from `onto`.
+    _record_base(run_dir, onto)
     _share_hooks(main, worktree)
     return worktree, notes
 
