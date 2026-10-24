@@ -11,7 +11,8 @@ worktree; the story's next `accio-brief` (a fix round) releases the claim. Until
 After the claim it writes only inside its worktree (never its `.git`) and its `.accio/run/<ID>/build-report.md`,
 symlinks and `..` resolved, and its Bash commands follow `bashpolicy`: they start in the worktree, and run the
 checks, `agent_allow`, read-only tools, file tools in the worktree and a short list of git subcommands. The other
-agents run only the accio scripts and subcommands their step needs (SCRIPTS).
+agents run only the accio scripts and subcommands their step needs (SCRIPTS). prefect runs `accio-preview` only in
+the exact forms brew.js gives it (PREFECT_PREVIEW), each on its own, and writes the steps file it hands it (S-070).
 """
 import collections.abc
 import dataclasses
@@ -32,13 +33,18 @@ CLAIM_SCRIPT = "accio-claim"
 REPORT_NAME = summary.REPORT_NAME
 BOARD_RUN = frozenset({"ready", "status", "lock", "unlock", "move", "refresh"})
 LEDGER_USE = frozenset({"key", "check", "record"})
+PREVIEW_SCRIPT = "accio-preview"
 SCRIPTS = {  # each Bash policy's accio scripts and the subcommands it may run (None: any)
     "scripts": {"accio-board": BOARD_RUN, "accio-brief": None, "accio-hooks": frozenset({"verify"}),
-                "accio-check": None, "accio-preview": frozenset({"start", "stop"})},
-    "checks": {"accio-ledger": LEDGER_USE, "accio-board": frozenset({"move", "refresh"}), "accio-check": None},
+                "accio-check": None},
+    "checks": {"accio-ledger": LEDGER_USE, "accio-board": frozenset({"move", "refresh"}), "accio-check": None,
+               PREVIEW_SCRIPT: None},  # accio-preview: only PREFECT_PREVIEW's forms, run on their own (S-070)
     "ledger": {"accio-ledger": frozenset({"key", "check"})},  # headmaster reads; prefect records the outcome (S-020)
 }
 PREFECT_CHECK = re.compile(r"S-\d{3,}")  # prefect runs exactly `accio-check <ID>`; only portkey takes snapshots
+STEPS_SUM = r"[0-9a-f]{8}"  # preview.steps_sum: the steps text mad-eye sent, so a changed ui-steps.txt is refused
+PREFECT_PREVIEW = re.compile(  # the exact forms brew.js gives prefect (S-047, S-068, S-070)
+    rf"S-[0-9]{{3,}} (?:start|stop|evidence-plan|evidence --head [0-9a-f]{{7,40}} --steps-sum {STEPS_SUM})")
 IN_PROGRESS = "doing"
 
 
@@ -52,7 +58,7 @@ class Lists:
 
 AGENTS = {
     "portkey": Lists(bash="scripts"),
-    "prefect": Lists(writes=("run/questions/*.md",), bash="checks"),
+    "prefect": Lists(writes=("run/questions/*.md", "run/S-[0-9]*/ui-steps.txt"), bash="checks"),
     "examiner": Lists(writes=("run/*/*-findings.md",)),
     "professor": Lists(writes=("run/*/*-findings.md",)),
     "auror": Lists(writes=("run/*/*-findings.md",)),
@@ -324,7 +330,8 @@ def _other_judge(agent, kind, ctx):
         return bashpolicy.Judge(agent=agent, scripts=SCRIPTS[kind], bin_dir=ctx.bin_dir)
     return bashpolicy.Judge(agent=agent, prefixes=_check_prefixes(ctx), read_only=True, git=bashpolicy.READ_ONLY_GIT,
                             scripts=SCRIPTS[kind], bin_dir=ctx.bin_dir, may_cd=True,
-                            script_args={"accio-check": PREFECT_CHECK})
+                            script_args={"accio-check": PREFECT_CHECK, PREVIEW_SCRIPT: PREFECT_PREVIEW},
+                            alone=frozenset({PREVIEW_SCRIPT}))
 
 
 def _break_try(ctx):

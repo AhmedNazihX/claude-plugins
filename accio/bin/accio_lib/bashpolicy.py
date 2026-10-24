@@ -12,7 +12,7 @@ other agents.
 
 Programs are judged by `Judge`: a listed check matches as a word prefix (it allows that command with any further
 arguments); an `agent_allow` entry (and an allow-once one) matches the whole command: no word added, and nothing
-chained to it with `&&`, `||`, `;` or `|`; read-only tools lose the flags that write or run code, in any
+chained to it with `&&`, `||`, `;` or `|` (as must a script in `Judge.alone`); read-only tools lose the flags that write or run code, in any
 abbreviation getopt accepts (`--out` for `--output`); file tools take plain flags only and stay in the worktree;
 git takes an explicit list of subcommands. Nothing may touch a `.git` path in the worktree: its `.git` file names
 the git folder, and pointing it at a config the agent wrote would run any command.
@@ -69,6 +69,7 @@ class Judge:
     may_cd: bool = False
     script_args: dict = dataclasses.field(default_factory=dict)  # script -> pattern its arguments must match whole
     forms: tuple = ()  # exact command shapes (`Form`) the agent may run, and nothing else
+    alone: frozenset = frozenset()  # accio scripts that must be the whole command: nothing chained, no `cd` first
 
 
 @dataclasses.dataclass(frozen=True)
@@ -135,7 +136,7 @@ def check(command, judge, start_in=None):
         segments, redirect_base, reason = _start_in(segments, start_in)
         if reason:
             return reason
-    reason = _chained_exact(segments, judge)
+    reason = _chained_exact(segments, judge) or _chained_alone(segments, judge)
     if reason:
         return reason
     for segment in segments:
@@ -196,6 +197,19 @@ def _chained_exact(segments, judge):
         if _is_exact(words, judge) and not _is_prefixed(words, judge):
             return (f"`{' '.join(words)}` is allowed only as the whole command; run it on its own, "
                     "without anything chained to it.")
+    return None
+
+
+def _chained_alone(segments, judge):
+    """Why a command that runs one of `judge.alone` is denied: it is not the only command (S-070)."""
+    commands = [segment.words for segment in segments if segment.words]
+    if len(commands) < 2:
+        return None
+    for words in commands:
+        program = program_part(words)
+        name = os.path.basename(program[0]) if program else ""
+        if name in judge.alone:
+            return f"`{name}` runs only on its own: no `cd` first, and nothing chained to it with &&, ||, ; or |."
     return None
 
 
