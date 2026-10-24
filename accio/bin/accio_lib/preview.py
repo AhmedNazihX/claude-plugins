@@ -286,6 +286,8 @@ TAKES_OVER = ("ui_evidence.takes_over_screen is true: its command takes over the
 FNV_OFFSET = 0x811C9DC5
 FNV_PRIME = 0x01000193
 WORD_MASK = 0xFFFFFFFF
+STATUS_WIDTH = 3  # `git status --porcelain` puts "XY " before each path
+MAX_NAMED_FILES = 20  # a skip note names this many files not committed, then counts the rest
 
 
 def steps_sum(text):
@@ -329,11 +331,34 @@ def evidence_files(run_dir, worktree, story_id, settings, base_branch):
                                 capture_output=True, check=True).stdout.decode("utf-8", "replace")
     except (checks.CheckError, subprocess.CalledProcessError, OSError) as error:
         return [], f"can't tell which files {story_id} changes ({error}), so its evidence can't be trusted"
-    return sorted(path for path in listed.split("\0") if path and globs.matches_any(path, patterns)), ""
+    # Without letter case (S-071): the default macOS disk ignores it, so `app/walk.swift` is `App/Walk.swift`.
+    return sorted(path for path in listed.split("\0")
+                  if path and globs.matches_any(path, patterns, ignore_case=True)), ""
 
 
 def evidence_not_trusted(files):
     return ("the story changes how its evidence is made (" + ", ".join(files) + "); a person should look")
+
+
+def worktree_changes(worktree):
+    """(files, problem): the worktree's changed, staged and untracked files (not ignored ones), S-071. The evidence
+    command runs on the worktree as it is, so a file not committed would be in the evidence but not in the diff that
+    evidence_files checks. If git can't say, problem says why."""
+    try:
+        listed = subprocess.run(["git", "status", "--porcelain=v1", "-z", "--untracked-files=all", "--no-renames"],
+                                cwd=worktree, capture_output=True, check=True).stdout.decode("utf-8", "replace")
+    except (subprocess.CalledProcessError, OSError) as error:
+        return [], (f"can't tell whether the worktree at {worktree} has files that are not committed ({error}), so "
+                    "the evidence command did not run")
+    return sorted({entry[STATUS_WIDTH:] for entry in listed.split("\0") if len(entry) > STATUS_WIDTH}), ""
+
+
+def not_committed(story_id, files):
+    """The skip reason for a worktree with files not committed, naming the first MAX_NAMED_FILES of them."""
+    named = ", ".join(files[:MAX_NAMED_FILES])
+    more = f", and {len(files) - MAX_NAMED_FILES} more" if len(files) > MAX_NAMED_FILES else ""
+    return (f"the worktree of {story_id} has files that are not committed ({named}{more}), so the evidence command "
+            "did not run: it would show more than the story's commits")
 
 
 def evidence_plan(settings):
@@ -419,26 +444,35 @@ def stamp_problem(run_dir, story_id, head):
     return ""
 
 
+def _untrusted(run_dir, worktree, story_id, settings):
+    """Why the worktree's evidence can't be trusted, or '': files not committed (S-071), or a diff that touches an
+    `evidence_globs` file (S-069), with the base branch read from config.json."""
+    pending, problem = worktree_changes(worktree)
+    if problem or pending:
+        return problem or not_committed(story_id, pending)
+    if not settings.get("evidence_globs"):
+        return ""
+    try:
+        base_branch = config.load(run_dir.parent)["base_branch"]
+    except config.ConfigError as error:
+        return f"can't read config.json ({error}), so the evidence of {story_id} can't be trusted"
+    touched, problem = evidence_files(run_dir, worktree, story_id, settings, base_branch)
+    return problem or (evidence_not_trusted(touched) if touched else "")
+
+
 def evidence(run_dir, worktree, story_id, settings, head, steps_checksum=None):
     """Run `ui_evidence.command` on the steps file; {ok, folder, head, screenshots} or {skipped, reason}. With
-    `steps_checksum` (brew.js passes it), a steps file whose steps_sum differs never runs (S-070). A story whose diff
-    touches an `evidence_globs` file never runs it either (S-069); the base branch is read from config.json."""
+    `steps_checksum` (brew.js passes it), a steps file whose steps_sum differs never runs (S-070). A worktree with files
+    not committed (S-071), or a story whose diff touches an `evidence_globs` file (S-069), never runs it either."""
     if settings is None:
         return _skip("config.json has no `ui_evidence`")
     if settings["takes_over_screen"]:
         return _skip(TAKES_OVER)
     if not worktree.is_dir():
         return _skip(f"no worktree for {story_id} at {worktree}")
-    if settings.get("evidence_globs"):
-        try:
-            base_branch = config.load(run_dir.parent)["base_branch"]
-        except config.ConfigError as error:
-            return _skip(f"can't read config.json ({error}), so the evidence of {story_id} can't be trusted")
-        touched, problem = evidence_files(run_dir, worktree, story_id, settings, base_branch)
-        if problem:
-            return _skip(problem)
-        if touched:
-            return _skip(evidence_not_trusted(touched))
+    problem = _untrusted(run_dir, worktree, story_id, settings)
+    if problem:
+        return _skip(problem)
     story_dir = run_dir / story_id
     steps = story_dir / STEPS_NAME
     if not steps.is_file():
