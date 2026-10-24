@@ -35,17 +35,20 @@ REPORT_NAME = summary.REPORT_NAME
 BOARD_RUN = frozenset({"ready", "status", "lock", "unlock", "move", "refresh"})
 LEDGER_USE = frozenset({"key", "check", "record"})
 PREVIEW_SCRIPT = "accio-preview"
+BREAK_SCRIPT = "accio-break"
 SCRIPTS = {  # each Bash policy's accio scripts and the subcommands it may run (None: any)
     "scripts": {"accio-board": BOARD_RUN, "accio-brief": None, "accio-hooks": frozenset({"verify"}),
                 "accio-check": None},
     "checks": {"accio-ledger": LEDGER_USE, "accio-board": frozenset({"move", "refresh"}), "accio-check": None,
-               PREVIEW_SCRIPT: None},  # accio-preview: only PREFECT_PREVIEW's forms, run on their own (S-070)
+               PREVIEW_SCRIPT: None,  # accio-preview: only PREFECT_PREVIEW's forms, run on their own (S-070)
+               BREAK_SCRIPT: None},  # accio-break: only `<ID> verify`, run on its own (boggart's breaks, S-043)
     "ledger": {"accio-ledger": frozenset({"key", "check"})},  # headmaster reads; prefect records the outcome (S-020)
 }
 PREFECT_CHECK = re.compile(r"S-\d{3,}")  # prefect runs exactly `accio-check <ID>`; only portkey takes snapshots
 STEPS_SUM = r"[0-9a-f]{8}"  # preview.steps_sum: the steps text mad-eye sent, so a changed ui-steps.txt is refused
 PREFECT_PREVIEW = re.compile(  # the exact forms brew.js gives prefect (S-047, S-068, S-070)
     rf"S-[0-9]{{3,}} (?:start|stop|evidence-plan|evidence --head [0-9a-f]{{7,40}} --steps-sum {STEPS_SUM})")
+PREFECT_VERIFY = re.compile(r"S-[0-9]{3,} verify")  # prefect grades boggart's breaks; boggart never grades itself
 IN_PROGRESS = "doing"
 # mad-eye and boggart never edit, so prefect writes their findings for the fix round (brew.js, S-071).
 PREFECT_FINDINGS = ("run/S-[0-9]*/mad-eye-findings.md", "run/S-[0-9]*/boggart-findings.md")
@@ -74,7 +77,6 @@ AGENTS = {
     "mad-eye": Lists(),  # reads, and the browser tools below; nothing else
     "boggart": Lists(writes=("run/S-[0-9]*/boggart/repros/*",), bash="boggart"),  # S-052: repros, and `accio-break try`
 }
-BREAK_SCRIPT = "accio-break"
 REPRO_NAME = r"[A-Za-z0-9_][A-Za-z0-9._-]*"  # one file name: no `..`, no slash
 
 BROWSER_AGENT = "mad-eye"
@@ -333,8 +335,9 @@ def _other_judge(agent, kind, ctx):
         return bashpolicy.Judge(agent=agent, scripts=SCRIPTS[kind], bin_dir=ctx.bin_dir)
     return bashpolicy.Judge(agent=agent, prefixes=_check_prefixes(ctx), read_only=True, git=bashpolicy.READ_ONLY_GIT,
                             scripts=SCRIPTS[kind], bin_dir=ctx.bin_dir, may_cd=True,
-                            script_args={"accio-check": PREFECT_CHECK, PREVIEW_SCRIPT: PREFECT_PREVIEW},
-                            alone=frozenset({PREVIEW_SCRIPT}))
+                            script_args={"accio-check": PREFECT_CHECK, PREVIEW_SCRIPT: PREFECT_PREVIEW,
+                                         BREAK_SCRIPT: PREFECT_VERIFY},
+                            alone=frozenset({PREVIEW_SCRIPT, BREAK_SCRIPT}))
 
 
 def _break_try(ctx):
