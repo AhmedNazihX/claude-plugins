@@ -25,6 +25,15 @@ def story_text(story_id, files, deps=(), track="story"):
             f"- [ ] {story_id}/1 WHEN x THE SYSTEM SHALL y\n")
 
 
+class SortSkillNoStoryTest(unittest.TestCase):
+    def test_S_077_2_step_5_tells_sort_to_record_with_no_files_when_no_story_came(self):
+        text = (ROOT / "skills" / "sort" / "SKILL.md").read_text(encoding="utf-8")
+        step = text.split("## 5. Record", 1)[1].split("## 6.", 1)[0]
+        self.assertIn("no new story", step)
+        self.assertIn("`accio-board record` with no files", step)
+        self.assertIn("accio-board record)", text.split("---", 2)[1])  # the bare form is allowed
+
+
 class SortScriptsTest(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()

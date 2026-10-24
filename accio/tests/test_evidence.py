@@ -317,6 +317,16 @@ class EvidenceRunTest(unittest.TestCase):
                              cwd=self.root, capture_output=True, text=True, timeout=60)
         self.assertIn("scripts/capture.sh", json.loads(ran.stdout)["reason"], ran.stderr)
 
+    def test_S_077_3_only_a_full_lowercase_commit_id_is_taken_as_head(self):
+        head = self.story_changes("app/View.swift")
+        write(self.accio / "config.json", json.dumps({"ui_evidence": self.settings()}))
+        for bad in (head[:7], head[:12], head[:39], head.upper(), head + "0", "zz" * 20):
+            ran = subprocess.run([sys.executable, str(PREVIEW), "S-001", "evidence", "--head", bad],
+                                 cwd=self.root, capture_output=True, text=True, timeout=60)
+            self.assertEqual(ran.returncode, 1, bad)
+            self.assertIn("40", ran.stderr)
+            self.assertEqual(ran.stdout, "")
+
     def marked(self, **extra):
         """Settings whose command leaves a marker file, and the marker's path."""
         marker = pathlib.Path(self.tmp.name) / "ran"

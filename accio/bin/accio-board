@@ -14,7 +14,8 @@
   go <ID>... [--track <ID>=<track>] [--also <story file>]   make them exactly the next iteration: status
                         ready in the story files, iterations/<N>.md and board.md, committed with any --also
                         story files (prophecy, on "go")
-  record <story file>...  after sort: check every story, regenerate board.md and commit those stories with it
+  record [story file]...  after sort: check every story, regenerate board.md and commit those stories with it;
+                        with no file (the design note made no story) it only empties run/unsorted.json
   lock / unlock         take or release the build's run lock
   next [--json]         the one next step (wand, sort, prophecy, brew, owl, wait or done), whether it runs
                         on its own (auto), and the plain sentence
@@ -90,7 +91,7 @@ def cmd_record_design(_args, accio):
 
 
 def cmd_record(args, accio):
-    result = backlog.record(accio, args.files)
+    result = backlog.record(accio, args.files) if args.files else {"files": [], "commit": None, "commit_error": ""}
     if (board.run_dir(accio) / design.UNSORTED_NAME).exists():  # sort is done, with or without a new story
         design.write_unsorted(accio, [])
     print(json.dumps(result, indent=2))
@@ -160,7 +161,7 @@ def parser():
     commands.add_parser("init")
     commands.add_parser("record-design").set_defaults(run=cmd_record_design)
     record = commands.add_parser("record")
-    record.add_argument("files", nargs="+")
+    record.add_argument("files", nargs="*")
     record.set_defaults(run=cmd_record)
     board_parser = commands.add_parser("board")
     board_parser.add_argument("--print", action="store_true", help="print the board instead of writing board.md")
