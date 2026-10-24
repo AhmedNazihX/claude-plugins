@@ -317,6 +317,71 @@ class EvidenceRunTest(unittest.TestCase):
                              cwd=self.root, capture_output=True, text=True, timeout=60)
         self.assertIn("scripts/capture.sh", json.loads(ran.stdout)["reason"], ran.stderr)
 
+    def marked(self, **extra):
+        """Settings whose command leaves a marker file, and the marker's path."""
+        marker = pathlib.Path(self.tmp.name) / "ran"
+        return self.settings(command=f"touch {marker} {{steps}} {{folder}}", **extra), marker
+
+    def assert_skipped_naming(self, result, marker, *names):
+        self.assertTrue(result.get("skipped"), result)
+        self.assertIn("not committed", result["reason"])
+        for name in names:
+            self.assertIn(name, result["reason"])
+        self.assertFalse(marker.exists(), "the evidence command must not run")
+
+    def test_S_071_2_a_changed_tracked_file_never_runs_the_command_and_names_it(self):
+        write(self.worktree / "README.md", "changed, not committed\n")
+        settings, marker = self.marked()
+        self.assert_skipped_naming(self.run_evidence(settings), marker, "README.md")
+
+    def test_S_071_2_a_staged_file_never_runs_the_command_and_names_it(self):
+        write(self.worktree / "app" / "Staged.swift", "staged\n")
+        git(self.worktree, "add", "app/Staged.swift")
+        settings, marker = self.marked()
+        self.assert_skipped_naming(self.run_evidence(settings), marker, "app/Staged.swift")
+
+    def test_S_071_2_an_untracked_file_never_runs_the_command_and_names_it_even_inside_a_new_folder(self):
+        write(self.worktree / "app" / "walk" / "Hidden.swift", "untracked\n")
+        write(self.worktree / "notes.txt", "untracked\n")
+        settings, marker = self.marked(evidence_globs=["app/Walk*.swift"])
+        self.assert_skipped_naming(self.run_evidence(settings), marker, "app/walk/Hidden.swift", "notes.txt")
+
+    def test_S_071_2_a_long_list_of_files_is_cut_short_with_a_count(self):
+        for index in range(preview.MAX_NAMED_FILES + 5):
+            write(self.worktree / f"extra-{index:03}.txt", "x\n")
+        settings, marker = self.marked()
+        result = self.run_evidence(settings)
+        self.assert_skipped_naming(result, marker, "extra-000.txt", "and 5 more")
+        self.assertNotIn(f"extra-{preview.MAX_NAMED_FILES:03}.txt", result["reason"])
+
+    def test_S_071_2_ignored_files_do_not_count_and_a_clean_worktree_runs_as_before(self):
+        write(self.worktree / ".gitignore", "build/\n")
+        commit_all(self.worktree, "ignore build")
+        write(self.worktree / "build" / "App.o", "built\n")
+        head = git(self.worktree, "rev-parse", "HEAD")
+        self.assertEqual(preview.worktree_changes(self.worktree), ([], ""))
+        result = self.run_evidence(self.settings(), head=head)
+        self.assertEqual(result, {"ok": True, "folder": str(self.folder), "head": head, "screenshots": 1})
+
+    def test_S_071_2_when_git_cannot_say_the_command_never_runs(self):
+        plain = pathlib.Path(self.tmp.name) / "not-a-repo"
+        plain.mkdir()
+        files, problem = preview.worktree_changes(plain)
+        self.assertEqual(files, [])
+        self.assertIn("can't tell", problem)
+        settings, marker = self.marked()
+        result = preview.evidence(self.run_dir, plain, "S-001", settings, self.head)
+        self.assertTrue(result["skipped"])
+        self.assertIn("can't tell", result["reason"])
+        self.assertFalse(marker.exists())
+
+    def test_S_071_2_the_cli_run_names_the_uncommitted_files(self):
+        write(self.worktree / "scripts" / "capture.sh", "untracked\n")
+        write(self.accio / "config.json", json.dumps({"ui_evidence": self.settings()}))
+        ran = subprocess.run([sys.executable, str(PREVIEW), "S-001", "evidence", "--head", self.head],
+                             cwd=self.root, capture_output=True, text=True, timeout=60)
+        self.assertIn("scripts/capture.sh", json.loads(ran.stdout)["reason"], ran.stderr)
+
     def test_S_068_7_a_command_that_takes_over_the_screen_never_runs(self):
         marker = pathlib.Path(self.tmp.name) / "ran"
         result = self.run_evidence(self.settings(command=f"touch {marker} {{steps}} {{folder}}", takes_over_screen=True))

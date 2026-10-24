@@ -213,6 +213,15 @@ test('S-069/2 an evidence run that refuses because the diff touches an evidence 
   assert.ok(result.includes(`mad-eye skipped: ${reason}`), result)
 })
 
+test('S-071/2 a worktree with files not committed skips mad-eye with a note naming the files, and the story is still READY', async () => {
+  const reason = python('from accio_lib import preview; print(preview.not_committed("S-001", sys.argv[1:]))', 'app/Walk.swift', 'notes.txt')
+  const { result, calls } = await run({ evidence: async () => ({ skipped: true, reason }) })
+  assert.ok(!labels(calls).includes('S-001 mad-eye'))
+  assert.match(result, /S-001 Story S-001\s+READY/)
+  assert.ok(result.includes(`mad-eye skipped: ${reason}`), result)
+  assert.match(reason, /app\/Walk\.swift, notes\.txt/)
+})
+
 test('S-069/3 a story that touches no evidence file runs the evidence step as in S-068', async () => {
   const { calls } = await run()
   assert.deepEqual(steps(calls, 'S-001').slice(-5), EVIDENCE_WALK.concat('outcome'))
