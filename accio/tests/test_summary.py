@@ -35,7 +35,7 @@ def agent(run_dir, agent_id, label, output_tokens):
     write(run_dir / f"agent-{agent_id}.jsonl", json.dumps(line) + "\n")
 
 
-class SummaryTest(unittest.TestCase):
+class SummaryBase(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.repo = init_repo(pathlib.Path(self.tmp.name).resolve() / "app")
@@ -75,6 +75,8 @@ class SummaryTest(unittest.TestCase):
     def write_report(self, story_id, text):
         write(self.accio / "run" / story_id / "build-report.md", text)
 
+
+class SummaryTest(SummaryBase):
     def test_S_010_1_each_ready_story_gets_change_try_risk_and_cost(self):
         part = self.block(self.run_summary(), "S-001")
         for expected in ("Added a reset link email", "Forgot password", "SMTP is down", "212k tokens"):
@@ -188,6 +190,51 @@ class SummaryTest(unittest.TestCase):
 
     def test_the_summary_ends_with_the_one_batch_answer(self):
         self.assertIn("accept, reject or drop", self.run_summary())
+
+
+class BuildNotesTest(SummaryBase):
+    """S-076/3: a note brew left for a READY story (boggart's or mad-eye's) shows first under its Risks."""
+    def write_note(self, story_id, text):
+        write(self.accio / "run" / story_id / summary.NOTES_NAME, text)
+
+    def risks(self, story_id):
+        part = self.block(self.run_summary(), story_id)
+        return next(line for line in part.splitlines() if line.startswith("- Risks:"))
+
+    def test_S_076_3_a_boggart_note_shows_first_under_risks(self):
+        self.write_note("S-001", "boggart: 1 break outside the DoD, logged for owl\n")
+        line = self.risks("S-001")
+        self.assertTrue(line.startswith("- Risks: Build note: boggart: 1 break outside the DoD, logged for owl."), line)
+        self.assertIn("SMTP is down", line)
+
+    def test_S_076_3_a_mad_eye_skip_note_shows_under_risks(self):
+        self.write_note("S-001", "mad-eye skipped: the preview did not start (port in use)")
+        self.assertIn("Build note: mad-eye skipped: the preview did not start (port in use).", self.risks("S-001"))
+
+    def test_S_076_3_a_story_without_a_report_still_shows_its_note(self):
+        self.write_note("S-003", "boggart gave no answer")
+        part = self.block(self.run_summary(), "S-003")
+        self.assertIn("no report written", part)
+        self.assertIn("- Risks: Build note: boggart gave no answer.", part)
+
+    def test_S_076_3_no_note_leaves_risks_as_the_report_says(self):
+        self.assertEqual(self.risks("S-001"), "- Risks: Mail sending fails silently if SMTP is down.")
+        self.write_note("S-001", "  \n")
+        self.assertEqual(self.risks("S-001"), "- Risks: Mail sending fails silently if SMTP is down.")
+
+    def test_S_076_3_a_long_note_keeps_the_story_within_its_token_target(self):
+        self.write_note("S-001", "mad-eye skipped: " + "word " * 400)
+        part = self.block(self.run_summary(), "S-001")
+        self.assertLessEqual(summary.estimate_tokens(part), summary.STORY_TOKEN_TARGET)
+        self.assertIn("- Risks: Build note: mad-eye skipped: word", part)
+
+    def test_S_076_3_an_unreadable_note_says_so_rather_than_vanishing(self):
+        (self.accio / "run" / "S-001" / summary.NOTES_NAME).write_bytes(b"\xff\xfe bad bytes\n")
+        self.assertIn(f"Build note: ({summary.NOTES_NAME} unreadable).", self.risks("S-001"))
+
+    def test_S_076_3_a_blocked_story_shows_no_note(self):
+        self.write_note("S-002", "boggart gave no answer")
+        self.assertNotIn("Build note", self.block(self.run_summary(), "S-002"))
 
 
 if __name__ == "__main__":

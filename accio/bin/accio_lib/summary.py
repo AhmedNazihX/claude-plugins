@@ -1,13 +1,16 @@
 """run/owl.md, the one file `owl` reads (DESIGN § 3.5, § 7.2): at most 150 tokens per story.
 
 For each story the build finished (status `review`): what changed, how to try it, its risks and its token cost,
-taken from the sections of `run/<ID>/build-report.md` that the brief and the fix brief ask house-elf to write. A stacked
+taken from the sections of `run/<ID>/build-report.md` that the brief and the fix brief ask house-elf to write; brew's
+note for the story (`run/<ID>/brew-notes.md`: a boggart or mad-eye skip, say) comes first under Risks. A stacked
 child names the parents to accept with it, and the ones that keep it from being accepted yet. For each blocked
 story: its one question from `run/questions/<ID>.md`.
 """
 import re
 
 REPORT_NAME = "build-report.md"  # house-elf writes it; a name Claude Code lets a subagent write (S-023)
+NOTES_NAME = "brew-notes.md"  # prefect writes brew's note for a READY story (boggart's, mad-eye's), S-076/3
+NOTE_PREFIX = "Build note: "
 STORY_TOKEN_TARGET = 150
 CHARS_PER_TOKEN = 4
 STORY_CHARS = STORY_TOKEN_TARGET * CHARS_PER_TOKEN - 1  # the most characters estimate_tokens keeps within target
@@ -99,26 +102,43 @@ def _parent_lines(parsed, status):
     return accept + blocked
 
 
-def _section_lines(report_text, room):
-    """One line per report section, each clipped so that together they fit in `room` characters."""
+def _note_text(note):
+    """brew's note as the start of the Risks line ("" when there is none), from the (text, problem) pair."""
+    text, problem = note
+    if problem == "unreadable":
+        return f"{NOTE_PREFIX}({NOTES_NAME} unreadable). "
+    flat = _clip(text or "", STORY_CHARS)
+    return f"{NOTE_PREFIX}{flat.rstrip('.')}. " if flat else ""
+
+
+def _section_lines(report_text, room, note):
+    """One line per report section, each clipped so that together they fit in `room` characters. brew's `note`
+    comes first on the Risks line."""
     found = _sections(report_text)
     per_line = room // len(REPORT_SECTIONS)
     lines = []
     for heading, label in REPORT_SECTIONS:
         prefix = f"- {label}: "
         text = found.get(heading.lower()) or MISSING_SECTION
+        if label == "Risks":
+            text = note + text
         lines.append(prefix + _clip(text, per_line - len(prefix) - 1))  # 1 for the newline before it
     return tuple(lines)
 
 
-def ready_block(parsed, status, report, cost_entry):
-    """`report` is the (text, problem) pair from _read."""
+def ready_block(parsed, status, report, cost_entry, note=(None, "missing")):
+    """`report` and `note` are (text, problem) pairs from _read; `note` is brew's, from run/<ID>/brew-notes.md."""
     heading, (report_text, problem) = _heading(parsed, "READY", cost_entry), report
     parents = _parent_lines(parsed, status)
+    room = STORY_CHARS - len(heading) - sum(len(line) + 1 for line in parents)
+    noted = _note_text(note)
     if problem:
-        body = ("- (no report written)" if problem == "missing" else "- (report unreadable)",)
+        missing = "- (no report written)" if problem == "missing" else "- (report unreadable)"
+        prefix = "- Risks: "
+        risks = (prefix + _clip(noted, room - len(missing) - len(prefix) - 2),) if noted else ()  # 2 newlines
+        body = (missing, *risks)
     else:
-        body = _section_lines(report_text, STORY_CHARS - len(heading) - sum(len(line) + 1 for line in parents))
+        body = _section_lines(report_text, room, noted)
     return "\n".join((heading, *body, *parents))
 
 
@@ -139,7 +159,8 @@ def render(stories, status, run_dir, costs):
     for story_id in sorted(stories):
         parsed, entry = stories[story_id], costs.get(story_id)
         if status[story_id] == "review":
-            blocks.append(ready_block(parsed, status, _read(run_dir / story_id / REPORT_NAME), entry))
+            blocks.append(ready_block(parsed, status, _read(run_dir / story_id / REPORT_NAME), entry,
+                                      _read(run_dir / story_id / NOTES_NAME)))
         elif status[story_id] == "blocked":
             blocks.append(blocked_block(parsed, _read(run_dir / "questions" / f"{story_id}.md"), entry))
     body = "\n\n".join(blocks) or "Nothing is ready or blocked."

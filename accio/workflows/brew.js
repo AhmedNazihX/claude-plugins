@@ -210,6 +210,15 @@ function judge(story, worktree, round, report, findings) {
   )
 }
 
+// brew's note for a READY story (a boggart or mad-eye skip, say) reaches owl.md's Risks through this file, which
+// accio-summary reads; `accio-board move <ID> doing` drops it when the story is built again (S-076/3).
+const notesPath = (story) => `.accio/run/${story.id}/brew-notes.md`
+
+function noteWrite(story, note) {
+  return ` Then, with the Write tool, write the value of this JSON string, unchanged and nothing else, to ` +
+    `${notesPath(story)} ${IN_MAIN}: ${JSON.stringify(note)}.`
+}
+
 async function record(story, worktree, outcome, question, asked, cause = CODE, extra = '') {
   const first = `Make the first line of the question file exactly \`${cause}\` (the cause).`
   const blocked = asked
@@ -218,10 +227,11 @@ async function record(story, worktree, outcome, question, asked, cause = CODE, e
     : `It is BLOCKED: move it to blocked, record fail, and write this question to ` +
       `${QUESTIONS}/${story.id}.md ${IN_MAIN}: ${question}. ${first}`
   const why = cause === ACCIO ? ` The cause is ${cause}: it is accio's own failure, not the story's.` : ''
+  const ready = `It is READY: move it to review and record pass.${outcome === 'READY' && extra ? noteWrite(story, extra) : ''}`
   const reply = await callRetry(
     `Step 7, outcome of story ${story.id}. Worktree: ${worktree}. Panel: ${story.track}. ` +
       'First compute the ledger key as in step 3 (the same worktree and panel). ' +
-      `${outcome === 'READY' ? 'It is READY: move it to review and record pass.' : blocked}${why} ` +
+      `${outcome === 'READY' ? ready : blocked}${why} ` +
       'Reply {"done": true} or {error}.',
     { agentType: PREFECT, model: 'haiku', schema: OUTCOME_SCHEMA, label: label(story, 'outcome') })
   const recorded = Boolean(reply && reply.done && !reply.error)

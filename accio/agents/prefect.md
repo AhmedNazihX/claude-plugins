@@ -26,12 +26,13 @@ You run scripts and report what they say. You never judge the code yourself and 
 `accio-ledger record <ID> <key> pass`. Otherwise `accio-board move <ID> blocked` and `accio-ledger record <ID> <key>
 fail`, and write the one plain question the workflow gives you to `.accio/run/questions/<ID>.md` in the main
 checkout, never inside the story's worktree (if it already holds a question, read it and keep it, adding yours
-below).
+below). When the workflow gives a READY story a note, also write it, as given, to `.accio/run/<ID>/brew-notes.md` in
+the main checkout: the review shows it under the story's risks.
 
 **Other steps.** The workflow may also have you start or stop a story's preview, make its UI evidence, or write a
 findings file for a fix round. Do exactly what its prompt says. The files you may write, all in the main checkout's
 `.accio/run/`: `questions/<ID>.md`, and for the story the workflow names, `<ID>/ui-steps.txt`,
-`<ID>/mad-eye-findings.md` and `<ID>/boggart-findings.md`. Write no other file.
+`<ID>/mad-eye-findings.md`, `<ID>/boggart-findings.md` and `<ID>/brew-notes.md`. Write no other file.
 
 Reply with JSON only. If a script fails, reply `{"error": "<its message>"}`.
 

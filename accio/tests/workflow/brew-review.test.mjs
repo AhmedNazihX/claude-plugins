@@ -497,6 +497,28 @@ test('S-076/1 a verify that fails after the repair turn blocks the story, never 
   assert.match(prompt(calls, 'S-001 outcome'), /S-001\/1[\s\S]*it crashed/)
 })
 
+test('S-076/3 a READY story with a boggart note has prefect write the note to brew-notes.md in its outcome step', async () => {
+  const { calls } = await runWorkflow('brew', happy([story('S-001')], {
+    package: withCode, boggart: found, verify: verdicts(entry({ in_dod: false, source: 'src/a.py:9' })),
+  }))
+  const outcome = prompt(calls, 'S-001 outcome')
+  assert.match(outcome, /READY/)
+  assert.match(outcome, /Write tool[^.]*\.accio\/run\/S-001\/brew-notes\.md in the main checkout/)
+  assert.ok(outcome.includes(JSON.stringify('boggart: 1 break outside the DoD, logged for owl')), outcome)
+})
+
+test('S-076/3 a mad-eye skip note goes to brew-notes.md too; a READY story with no note writes none', async () => {
+  const { calls } = await runWorkflow('brew', happy([story('S-001'), story('S-002')], {
+    'S-001 package': async (call, id) => ({ package: `/run/${id}/p.md`, head: 'h0', risky: false, code: false, breaker: false, ui: true, preview: true, test_data: false }),
+  }))
+  assert.match(prompt(calls, 'S-001 outcome'), /brew-notes\.md[\s\S]*mad-eye skipped: config\.json preview has no/)
+  const plain = await runWorkflow('brew', happy([story('S-002')], {
+    package: async (call, id) => ({ package: `/run/${id}/p.md`, head: 'h0', risky: false, code: true, breaker: true, ...NO_UI }),
+    boggart: async () => ({ breaks: [] }),
+  }))
+  assert.doesNotMatch(prompt(plain.calls, 'S-002 outcome'), /brew-notes/)
+})
+
 test('S-076/1 a verify that fails after a fix round blocks the story', async () => {
   const { result } = await runWorkflow('brew', happy([story('S-001')], {
     package: withCode, boggart: found,

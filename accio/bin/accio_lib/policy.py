@@ -12,8 +12,8 @@ After the claim it writes only inside its worktree (never its `.git`) and its `.
 symlinks and `..` resolved, and its Bash commands follow `bashpolicy`: they start in the worktree, and run the
 checks, `agent_allow`, read-only tools, file tools in the worktree and a short list of git subcommands. The other
 agents run only the accio scripts and subcommands their step needs (SCRIPTS). prefect runs `accio-preview` only in
-the exact forms brew.js gives it (PREFECT_PREVIEW), each on its own, and writes the steps file it hands it (S-070)
-and the mad-eye and boggart findings files (S-071).
+the exact forms brew.js gives it (PREFECT_PREVIEW), each on its own, and writes the steps file it hands it (S-070),
+the mad-eye and boggart findings files (S-071) and a READY story's brew-notes.md (S-076).
 """
 import collections.abc
 import dataclasses
@@ -52,6 +52,7 @@ PREFECT_VERIFY = re.compile(r"S-[0-9]{3,} verify")  # prefect grades boggart's b
 IN_PROGRESS = "doing"
 # mad-eye and boggart never edit, so prefect writes their findings for the fix round (brew.js, S-071).
 PREFECT_FINDINGS = ("run/S-[0-9]*/mad-eye-findings.md", "run/S-[0-9]*/boggart-findings.md")
+PREFECT_NOTES = f"run/S-[0-9]*/{summary.NOTES_NAME}"  # brew's note for a READY story, for owl.md (S-076/3)
 
 
 @dataclasses.dataclass(frozen=True)
@@ -64,7 +65,8 @@ class Lists:
 
 AGENTS = {
     "portkey": Lists(bash="scripts"),
-    "prefect": Lists(writes=("run/questions/*.md", "run/S-[0-9]*/ui-steps.txt", *PREFECT_FINDINGS), bash="checks"),
+    "prefect": Lists(writes=("run/questions/*.md", "run/S-[0-9]*/ui-steps.txt", *PREFECT_FINDINGS, PREFECT_NOTES),
+                     bash="checks"),
     "examiner": Lists(writes=("run/*/*-findings.md",)),
     "professor": Lists(writes=("run/*/*-findings.md",)),
     "auror": Lists(writes=("run/*/*-findings.md",)),
