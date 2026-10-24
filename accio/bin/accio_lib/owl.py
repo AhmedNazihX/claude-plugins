@@ -108,26 +108,28 @@ def _check_text(answers):
 SOURCE_EXTENSIONS = frozenset("py js mjs cjs ts tsx jsx swift kt java go rs rb sh md json yml yaml toml html css c h cpp "
                                "m mm sql txt plist".split())
 WORD = re.compile(r"[^\s`'\"()\[\]<>{},;]+")
+BACKTICKED = re.compile(r"`([^`\s]+)`")
 LOCATION = re.compile(r"(:\d+.*|::.*)$")
 TRAILING = ".:!?*"
 
 
-def _candidate(root, word):
-    """The repo-relative path a word names, or None: it has a `/` or a source extension, stays inside the repo, and
-    exists or has its folder."""
+def _candidate(root, word, quoted):
+    """The repo-relative path a word names, or None: it stays inside the repo and exists or has its folder. A bare
+    name (no `/`) needs a source extension, and in plain prose it must exist, so "Node.js" there is not a path but
+    `conftest.py` in backticks is, even before it exists."""
     word = LOCATION.sub("", word.rstrip(TRAILING)).removeprefix("./").rstrip("/")
-    name = word.rsplit("/", 1)[-1]
     if not word or "://" in word or word.startswith(("/", "~", "-")) or ".." in word.split("/"):
         return None
-    if "/" not in word and name.rpartition(".")[2].lower() not in SOURCE_EXTENSIONS:
-        return None
     target = pathlib.Path(root) / word
+    if "/" not in word and (word.rpartition(".")[2].lower() not in SOURCE_EXTENSIONS or not (quoted or target.exists())):
+        return None
     return word if target.exists() or target.parent.is_dir() else None
 
 
 def answer_paths(root, text):
     """The repo paths a reject reason or answer names, in order, once each."""
-    return list(dict.fromkeys(path for word in WORD.findall(text) if (path := _candidate(root, word))))
+    quoted = set(BACKTICKED.findall(text))
+    return list(dict.fromkeys(path for word in WORD.findall(text) if (path := _candidate(root, word, word in quoted))))
 
 
 def _check_widen(stories, status, answers, verdicts):

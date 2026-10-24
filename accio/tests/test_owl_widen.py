@@ -52,6 +52,27 @@ class WidenTest(unittest.TestCase):
         self.give_files("S-004", "[docs/]")
         self.owl("check", *self.base("use and/or, e.g. the link, v1.2 or Email/SMS"))
 
+    def test_S_075_2_a_product_name_with_a_source_extension_is_not_a_path(self):
+        self.give_files("S-004", "[docs/]")
+        self.owl("check", *self.base("Use Node.js and Next.js, not Deno"))  # boggart's break: no such root files
+
+    def test_S_075_1_a_new_root_file_counts_when_backticked(self):
+        self.give_files("S-004", "[docs/]")
+        result = self.owl("check", *self.base("create `tools.py`"), check=False)
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("tools.py", result.stderr)
+
+    def test_S_075_2_a_new_root_name_in_plain_prose_is_not_a_path(self):
+        self.give_files("S-004", "[docs/]")
+        self.owl("check", *self.base("create new.py"))  # chosen: prose like Node.js must not be refused
+
+    def test_S_075_1_a_bare_name_counts_when_that_root_file_exists(self):
+        self.give_files("S-004", "[docs/]")
+        write(self.repo / "setup.py", "x = 1\n")
+        result = self.owl("check", *self.base("change setup.py"), check=False)
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("setup.py", result.stderr)
+
     def test_S_075_2_a_test_file_is_not_outside(self):
         self.give_files("S-004", "[docs/]")
         self.owl("check", *self.base("fix tests/keep.txt"))
