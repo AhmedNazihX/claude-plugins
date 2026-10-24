@@ -19,7 +19,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
-from accio_lib import config, runlock
+from accio_lib import checks, config, globs, runlock
 
 LOCK_NAME = "preview.lock"
 STATE_NAME = "preview.json"
@@ -315,6 +315,27 @@ def _steps_problem(steps, wanted):
             "wrote, so the evidence command did not run")
 
 
+def evidence_files(run_dir, worktree, story_id, settings, base_branch):
+    """(files, problem): the files the story's diff touches that match `evidence_globs` (S-069), the files that make
+    the evidence. No globs, no git work. If git can't say, problem says why and the evidence is not trusted."""
+    patterns = list(settings.get("evidence_globs", []))
+    if not patterns:
+        return [], ""
+    if not base_branch:
+        return [], f"no base branch to compare {story_id} with, so its evidence can't be trusted"
+    try:
+        origin = checks.diff_start(run_dir / story_id, worktree, base_branch)
+        listed = subprocess.run(["git", "diff", "--name-only", "-z", "--no-renames", origin, "HEAD"], cwd=worktree,
+                                capture_output=True, check=True).stdout.decode("utf-8", "replace")
+    except (checks.CheckError, subprocess.CalledProcessError, OSError) as error:
+        return [], f"can't tell which files {story_id} changes ({error}), so its evidence can't be trusted"
+    return sorted(path for path in listed.split("\0") if path and globs.matches_any(path, patterns)), ""
+
+
+def evidence_not_trusted(files):
+    return ("the story changes how its evidence is made (" + ", ".join(files) + "); a person should look")
+
+
 def evidence_plan(settings):
     """What the workflow needs to know before it asks mad-eye for steps."""
     if settings is None:
@@ -400,13 +421,24 @@ def stamp_problem(run_dir, story_id, head):
 
 def evidence(run_dir, worktree, story_id, settings, head, steps_checksum=None):
     """Run `ui_evidence.command` on the steps file; {ok, folder, head, screenshots} or {skipped, reason}. With
-    `steps_checksum` (brew.js passes it), a steps file whose steps_sum differs never runs (S-070)."""
+    `steps_checksum` (brew.js passes it), a steps file whose steps_sum differs never runs (S-070). A story whose diff
+    touches an `evidence_globs` file never runs it either (S-069); the base branch is read from config.json."""
     if settings is None:
         return _skip("config.json has no `ui_evidence`")
     if settings["takes_over_screen"]:
         return _skip(TAKES_OVER)
     if not worktree.is_dir():
         return _skip(f"no worktree for {story_id} at {worktree}")
+    if settings.get("evidence_globs"):
+        try:
+            base_branch = config.load(run_dir.parent)["base_branch"]
+        except config.ConfigError as error:
+            return _skip(f"can't read config.json ({error}), so the evidence of {story_id} can't be trusted")
+        touched, problem = evidence_files(run_dir, worktree, story_id, settings, base_branch)
+        if problem:
+            return _skip(problem)
+        if touched:
+            return _skip(evidence_not_trusted(touched))
     story_dir = run_dir / story_id
     steps = story_dir / STEPS_NAME
     if not steps.is_file():

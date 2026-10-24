@@ -205,6 +205,19 @@ test('S-070/1 every accio-preview command brew gives prefect is one curfew lets 
   for (const args of commands) assert.ok(prefectMayRun(args), args)
 })
 
+test('S-069/2 an evidence run that refuses because the diff touches an evidence file skips mad-eye with the note, and the story is still READY', async () => {
+  const reason = 'the story changes how its evidence is made (app/WalkMode.swift, scripts/capture.sh); a person should look'
+  const { result, calls } = await run({ evidence: async () => ({ skipped: true, reason }) })
+  assert.deepEqual(steps(calls, 'S-001').slice(-5), ['professor', 'evidence-plan', 'mad-eye-steps', 'evidence', 'outcome'])
+  assert.match(result, /S-001 Story S-001\s+READY/)
+  assert.ok(result.includes(`mad-eye skipped: ${reason}`), result)
+})
+
+test('S-069/3 a story that touches no evidence file runs the evidence step as in S-068', async () => {
+  const { calls } = await run()
+  assert.deepEqual(steps(calls, 'S-001').slice(-5), EVIDENCE_WALK.concat('outcome'))
+})
+
 test('S-068/7 a command that takes over the screen never runs: mad-eye is skipped with a note saying why', async () => {
   const { result, calls } = await run({ 'evidence-plan': async () => ({ ...PLAN, takes_over_screen: true }) })
   assert.deepEqual(steps(calls, 'S-001').slice(-3), ['professor', 'evidence-plan', 'outcome'])
