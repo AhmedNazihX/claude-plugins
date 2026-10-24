@@ -108,6 +108,20 @@ class BoardTest(unittest.TestCase):
         status = json.loads((self.accio / "run" / "status.json").read_text(encoding="utf-8"))
         self.assertEqual(status, {"S-001": "doing"})
 
+    def test_S_076_3_moving_a_story_to_doing_drops_the_note_of_its_earlier_build(self):
+        self.add("S-001")
+        self.add("S-002")
+        notes = {sid: self.accio / "run" / sid / "brew-notes.md" for sid in ("S-001", "S-002")}
+        for note in notes.values():
+            write(note, "boggart gave no answer\n")
+        self.board("lock")
+        self.board("move", "S-001", "review")
+        self.assertTrue(notes["S-001"].exists())
+        self.board("move", "S-001", "doing")
+        self.assertFalse(notes["S-001"].exists())
+        self.assertTrue(notes["S-002"].exists())
+        self.board("move", "S-001", "doing")  # no note left: still fine
+
     def test_move_rejects_an_unknown_story_or_status(self):
         self.add("S-001")
         self.board("lock")

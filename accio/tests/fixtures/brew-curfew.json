@@ -1,0 +1,107 @@
+{
+  "about": "S-076/4: every command and write brew.js gives an accio agent, by agent. tests/workflow/brew-curfew.test.mjs checks it against brew.js's prompts; tests/test_curfew_brew_contract.py sends each through the real curfew hook. `run`: a command the prompt asks the agent to run; `mentions`: a command it names but never asks to run; `write`: a file it asks the agent to write (a folder ends in /); `read`: a file it names only to read. `steps` holds the commands of the agent-file steps brew.js points to (\"follow your step 3\"). Placeholders: <ID>, <commit>, <sum>, <file>, <name>, <worktree>, <panel>, <key>, <findings file>.",
+  "brew": {
+    "accio:portkey": {
+      "run": [
+        "accio-board ready --json --resume",
+        "accio-board move <ID> doing",
+        "accio-brief <ID>",
+        "accio-brief <ID> --parent story/<ID>",
+        "accio-check <ID> snapshot",
+        "accio-brief <ID> --release",
+        "accio-brief <ID> --review",
+        "accio-brief <ID> --review --since <commit>",
+        "accio-brief <ID> --fix .accio/run/<ID>/examiner-findings.md",
+        "accio-brief <ID> --fix .accio/run/<ID>/check-findings.md",
+        "accio-brief <ID> --fix .accio/run/<ID>/boggart-findings.md",
+        "accio-brief <ID> --fix .accio/run/<ID>/mad-eye-findings.md",
+        "accio-board unlock"
+      ]
+    },
+    "accio:prefect": {
+      "run": [
+        "accio-break <ID> verify",
+        "accio-preview <ID> start",
+        "accio-preview <ID> stop",
+        "accio-preview <ID> evidence-plan",
+        "accio-preview <ID> evidence --head <commit> --steps-sum <sum>"
+      ],
+      "write": [
+        ".accio/run/questions/<ID>.md",
+        ".accio/run/<ID>/brew-notes.md",
+        ".accio/run/<ID>/boggart-findings.md",
+        ".accio/run/<ID>/mad-eye-findings.md",
+        ".accio/run/<ID>/ui-steps.txt"
+      ],
+      "read": [
+        ".accio/run/<ID>/boggart/repros/r1.py"
+      ]
+    },
+    "accio:headmaster": {
+      "write": [
+        ".accio/run/questions/<ID>.md",
+        ".accio/run/<ID>/ruling-r0.md"
+      ]
+    },
+    "accio:boggart": {
+      "run": [
+        "accio-break <ID> try <file>"
+      ],
+      "mentions": [
+        "accio-break"
+      ],
+      "write": [
+        ".accio/run/<ID>/boggart/repros/",
+        ".accio/run/<ID>/boggart/repros/r1.py"
+      ]
+    },
+    "accio:mad-eye": {
+      "write": [
+        ".accio/run/<ID>/mad-eye/<name>.png"
+      ],
+      "read": [
+        ".accio/run/<ID>/ui-evidence/"
+      ]
+    }
+  },
+  "steps": {
+    "accio:portkey": {
+      "run": [
+        "accio-board lock",
+        "accio-hooks verify",
+        "accio-board ready --json --resume",
+        "accio-check <ID> snapshot --fresh",
+        "accio-board move <ID> doing",
+        "accio-brief <ID>",
+        "accio-check <ID> snapshot",
+        "accio-brief <ID> --review",
+        "accio-brief <ID> --fix <findings file> …",
+        "accio-board unlock"
+      ],
+      "mentions": [
+        "accio-brief --review",
+        "accio-brief --fix"
+      ]
+    },
+    "accio:prefect": {
+      "run": [
+        "accio-board refresh",
+        "accio-ledger key .accio/stories/<ID>.md --worktree <worktree> --panel <panel>",
+        "accio-ledger check <ID> <key>",
+        "accio-check <ID>",
+        "accio-board move <ID> review",
+        "accio-ledger record <ID> <key> pass",
+        "accio-board move <ID> blocked",
+        "accio-ledger record <ID> <key> fail"
+      ],
+      "mentions": [
+        "accio-check <ID> snapshot"
+      ]
+    },
+    "accio:boggart": {
+      "run": [
+        "accio-break <ID> try <file>"
+      ]
+    }
+  }
+}

@@ -210,6 +210,15 @@ function judge(story, worktree, round, report, findings) {
   )
 }
 
+// brew's note for a READY story (a boggart or mad-eye skip, say) reaches owl.md's Risks through this file, which
+// accio-summary reads; `accio-board move <ID> doing` drops it when the story is built again (S-076/3).
+const notesPath = (story) => `.accio/run/${story.id}/brew-notes.md`
+
+function noteWrite(story, note) {
+  return ` Then, with the Write tool, write the value of this JSON string, unchanged and nothing else, to ` +
+    `${notesPath(story)} ${IN_MAIN}: ${JSON.stringify(note)}.`
+}
+
 async function record(story, worktree, outcome, question, asked, cause = CODE, extra = '') {
   const first = `Make the first line of the question file exactly \`${cause}\` (the cause).`
   const blocked = asked
@@ -218,10 +227,11 @@ async function record(story, worktree, outcome, question, asked, cause = CODE, e
     : `It is BLOCKED: move it to blocked, record fail, and write this question to ` +
       `${QUESTIONS}/${story.id}.md ${IN_MAIN}: ${question}. ${first}`
   const why = cause === ACCIO ? ` The cause is ${cause}: it is accio's own failure, not the story's.` : ''
+  const ready = `It is READY: move it to review and record pass.${outcome === 'READY' && extra ? noteWrite(story, extra) : ''}`
   const reply = await callRetry(
     `Step 7, outcome of story ${story.id}. Worktree: ${worktree}. Panel: ${story.track}. ` +
       'First compute the ledger key as in step 3 (the same worktree and panel). ' +
-      `${outcome === 'READY' ? 'It is READY: move it to review and record pass.' : blocked}${why} ` +
+      `${outcome === 'READY' ? ready : blocked}${why} ` +
       'Reply {"done": true} or {error}.',
     { agentType: PREFECT, model: 'haiku', schema: OUTCOME_SCHEMA, label: label(story, 'outcome') })
   const recorded = Boolean(reply && reply.done && !reply.error)
@@ -427,8 +437,9 @@ async function reviewLoop(story, worktree, model, earlier, usedFixes, first, fir
 // and prefect runs `accio-break <ID> verify`, so boggart never grades itself. A kept break that touches a DoD line gets
 // a fix round with boggart-findings.md; one outside the DoD starts none (owl reads it from verdicts.json and logs it).
 // After a fix round, a kept repro that only fails to load (a setup error) gets one boggart turn for its imports or
-// setup, then verify again; if it still can't load it is logged, not fixed. A boggart or verify step that gives no
-// answer never blocks the story: it leaves a note.
+// setup, then verify again; if it still can't load it is logged, not fixed. A boggart try that gives no answer found
+// nothing to drop, so it leaves a note. A verify that fails or gives no answer while boggart has breaks (also after a
+// repair turn or a fix round) blocks the story with one question: a break nobody checked never passes (S-076/1).
 
 const brokenPath = (story) => `.accio/run/${story.id}/boggart-findings.md`
 const reproPath = (story, file) => `.accio/run/${story.id}/boggart/repros/${file}`
@@ -489,6 +500,15 @@ function boggartNote(kept) {
 
 const verified = (reply) => !failed(reply) && Array.isArray(reply.repros)
 
+// The question for breaks whose verify failed (S-076/1): their DoD lines, the error and the two ways on.
+function unverifiedQuestion(breaks, reply) {
+  const lines = [...new Set(breaks.map((item) => item.source || item.file).filter(Boolean))]
+  const error = !reply ? 'no answer' : reply.error || 'its reply had no repros list'
+  return `boggart found ${plural(breaks.length, 'break')} (${lines.join(', ') || 'no DoD line named'}) but ` +
+    `their verify step failed (${error}), so nobody checked them. Fix the error and build the story again, ` +
+    'or answer to accept it without fixing them?'
+}
+
 // One fix round for the kept in-DoD breaks: write boggart-findings.md, fix, re-check, then review the fix diff (since
 // `head`) as reviewAndFix does, with auror added when it is risky. Returns a stop or {fixes, ruling, head}.
 async function fixBreaks(story, worktree, model, used, ruling, broken, head) {
@@ -525,7 +545,7 @@ async function boggartStage(story, worktree, model, ruling, fixes, whole, review
   let current = ruling
   let repairedAt = -1  // the fix count a repair turn was used at: one per fix round
   for (;;) {
-    if (!verified(reply)) return { fixes: used, ruling: current, head, note: "boggart's verify gave no answer" }
+    if (!verified(reply)) return accioStop(unverifiedQuestion(tried.breaks, reply))
     const kept = reply.repros.filter((item) => item.verdict === 'kept')
     const stuck = kept.filter(cantLoad)
     if (stuck.length && repairedAt !== used) {

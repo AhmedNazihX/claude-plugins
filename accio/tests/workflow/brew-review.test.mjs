@@ -438,15 +438,94 @@ test('S-043/3 the review of a boggart fix adds auror when the fix diff is risky'
   assert.deepEqual(steps(calls, 'S-001').slice(-6), ['package r1c', 'examiner r1', 'professor r1', 'auror r1', 'verify r1', 'outcome'])
 })
 
-test('S-043 a boggart or verify step that gives no answer does not block the story', async () => {
-  const { result, calls } = await runWorkflow('brew', happy([story('S-001'), story('S-002')], {
-    package: withCode,
-    'S-001 boggart': async () => null, 'S-001 boggart retry': async () => null,
-    'S-002 boggart': found, 'S-002 verify': async () => null, 'S-002 verify retry': async () => null,
+test('S-076/2 a boggart try that gives no answer keeps its note and does not block the story', async () => {
+  const { result, calls } = await runWorkflow('brew', happy([story('S-001')], {
+    package: withCode, 'S-001 boggart': async () => null, 'S-001 boggart retry': async () => null,
   }))
   assert.match(result, /S-001 Story S-001\s+READY\s+boggart gave no answer/)
-  assert.match(result, /S-002 Story S-002\s+READY\s+boggart's verify gave no answer/)
   assert.ok(labels(calls).includes('S-001 boggart retry'))
+  assert.ok(!labels(calls).some((label) => label.includes('verify')))
+})
+
+const twoBreaks = async () => ({ breaks: [
+  { file: 'r1.py', claim: 'it resets', source: 'S-001/1', verdict: 'kept' },
+  { file: 'r2.py', claim: 'it counts', source: 'S-001/3', verdict: 'kept' },
+], questions: [] })
+
+test('S-076/1 breaks whose verify gives no answer block the story with one question naming their DoD lines', async () => {
+  const { result, calls } = await runWorkflow('brew', happy([story('S-001')], {
+    package: withCode, boggart: twoBreaks, 'S-001 verify': async () => null, 'S-001 verify retry': async () => null,
+  }))
+  assert.deepEqual(steps(calls, 'S-001').slice(-4), ['boggart', 'verify', 'verify retry', 'outcome'])
+  assert.match(result, /S-001 Story S-001\s+BLOCKED\s+1 question for you/)
+  assert.doesNotMatch(result, /READY/)
+  const outcome = prompt(calls, 'S-001 outcome')
+  assert.match(outcome, /BLOCKED/)
+  assert.match(outcome, /S-001\/1, S-001\/3/)
+  assert.match(outcome, /no answer/)
+  assert.match(outcome, /fix the error[^.]*build[^.]*again/i)
+  assert.match(outcome, /accept[^.]*without/i)
+  assert.match(outcome, /first line of the question file exactly `accio`/)
+})
+
+test('S-076/1 a verify that fails with an error blocks the story and names the error', async () => {
+  const { result, calls } = await runWorkflow('brew', happy([story('S-001')], {
+    package: withCode, boggart: found, verify: async () => ({ error: 'accio-break: curfew denied it' }),
+  }))
+  assert.match(result, /S-001 Story S-001\s+BLOCKED/)
+  assert.match(prompt(calls, 'S-001 outcome'), /S-001\/1[\s\S]*accio-break: curfew denied it/)
+})
+
+test('S-076/1 a verify reply with no repros list blocks the story too', async () => {
+  const { result } = await runWorkflow('brew', happy([story('S-001')], {
+    package: withCode, boggart: found, verify: async () => ({ skipped: false }),
+  }))
+  assert.match(result, /S-001 Story S-001\s+BLOCKED/)
+})
+
+test('S-076/1 a verify that fails after the repair turn blocks the story, never READY', async () => {
+  const { result, calls } = await runWorkflow('brew', happy([story('S-001')], {
+    package: withCode, boggart: found,
+    'S-001 verify': verdicts(entry()),
+    'S-001 verify r1': verdicts(entry(LOADS_NOT)),
+    'S-001 verify-repair r1': async () => ({ error: 'it crashed' }),
+    'S-001 verify-repair r1 retry': async () => ({ error: 'it crashed' }),
+  }))
+  assert.deepEqual(steps(calls, 'S-001').slice(-6), ['professor r1', 'verify r1', 'boggart-repair r1', 'verify-repair r1',
+    'verify-repair r1 retry', 'outcome'])
+  assert.match(result, /S-001 Story S-001\s+BLOCKED/)
+  assert.match(prompt(calls, 'S-001 outcome'), /S-001\/1[\s\S]*it crashed/)
+})
+
+test('S-076/3 a READY story with a boggart note has prefect write the note to brew-notes.md in its outcome step', async () => {
+  const { calls } = await runWorkflow('brew', happy([story('S-001')], {
+    package: withCode, boggart: found, verify: verdicts(entry({ in_dod: false, source: 'src/a.py:9' })),
+  }))
+  const outcome = prompt(calls, 'S-001 outcome')
+  assert.match(outcome, /READY/)
+  assert.match(outcome, /Write tool[^.]*\.accio\/run\/S-001\/brew-notes\.md in the main checkout/)
+  assert.ok(outcome.includes(JSON.stringify('boggart: 1 break outside the DoD, logged for owl')), outcome)
+})
+
+test('S-076/3 a mad-eye skip note goes to brew-notes.md too; a READY story with no note writes none', async () => {
+  const { calls } = await runWorkflow('brew', happy([story('S-001'), story('S-002')], {
+    'S-001 package': async (call, id) => ({ package: `/run/${id}/p.md`, head: 'h0', risky: false, code: false, breaker: false, ui: true, preview: true, test_data: false }),
+  }))
+  assert.match(prompt(calls, 'S-001 outcome'), /brew-notes\.md[\s\S]*mad-eye skipped: config\.json preview has no/)
+  const plain = await runWorkflow('brew', happy([story('S-002')], {
+    package: async (call, id) => ({ package: `/run/${id}/p.md`, head: 'h0', risky: false, code: true, breaker: true, ...NO_UI }),
+    boggart: async () => ({ breaks: [] }),
+  }))
+  assert.doesNotMatch(prompt(plain.calls, 'S-002 outcome'), /brew-notes/)
+})
+
+test('S-076/1 a verify that fails after a fix round blocks the story', async () => {
+  const { result } = await runWorkflow('brew', happy([story('S-001')], {
+    package: withCode, boggart: found,
+    'S-001 verify': verdicts(entry()),
+    'S-001 verify r1': async () => null, 'S-001 verify r1 retry': async () => null,
+  }))
+  assert.match(result, /S-001 Story S-001\s+BLOCKED/)
 })
 
 // --- S-047: mad-eye after boggart ----------------------------------------------------------------------------------
