@@ -382,6 +382,22 @@ class EvidenceRunTest(unittest.TestCase):
                              cwd=self.root, capture_output=True, text=True, timeout=60)
         self.assertIn("scripts/capture.sh", json.loads(ran.stdout)["reason"], ran.stderr)
 
+    def test_S_071_3_a_path_matching_an_evidence_glob_apart_from_letter_case_counts_as_touching_it(self):
+        head = self.story_changes("APP/walkmode.SWIFT", "Scripts/Capture.sh", "app/View.swift")
+        settings, marker = self.marked(evidence_globs=["app/Walk*.swift", "scripts/capture.*"])
+        files, problem = preview.evidence_files(self.run_dir, self.worktree, "S-001", settings, "main")
+        self.assertEqual((files, problem), (["APP/walkmode.SWIFT", "Scripts/Capture.sh"], ""))
+        result = self.run_evidence(settings, head=head)
+        self.assertTrue(result["skipped"])
+        self.assertIn("APP/walkmode.SWIFT, Scripts/Capture.sh", result["reason"])
+        self.assertFalse(marker.exists())
+
+    def test_S_071_3_an_upper_case_glob_matches_a_lower_case_path_too(self):
+        self.story_changes("sources/uiwalk/x.swift")
+        files, _ = preview.evidence_files(self.run_dir, self.worktree, "S-001",
+                                          self.settings(evidence_globs=["Sources/UIWalk/**"]), "main")
+        self.assertEqual(files, ["sources/uiwalk/x.swift"])
+
     def test_S_068_7_a_command_that_takes_over_the_screen_never_runs(self):
         marker = pathlib.Path(self.tmp.name) / "ran"
         result = self.run_evidence(self.settings(command=f"touch {marker} {{steps}} {{folder}}", takes_over_screen=True))

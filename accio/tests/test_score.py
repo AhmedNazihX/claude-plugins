@@ -56,6 +56,20 @@ class GlobTest(unittest.TestCase):
         with self.assertRaises(globs.GlobError):
             globs.match("/Users/me/repo/.github/workflows/ci.yml", ".github/workflows/**")
 
+    def test_S_071_3_letter_case_counts_unless_the_caller_asks_to_ignore_it(self):
+        self.assertFalse(globs.match("Infra/main.tf", "infra"))
+        self.assertFalse(globs.matches_any("SRC/Auth/x.ts", ["src/auth/**"]))
+        self.assertTrue(globs.match("Infra/main.tf", "infra", ignore_case=True))
+        self.assertTrue(globs.matches_any("SRC/Auth/x.ts", ["src/auth/**"], ignore_case=True))
+        self.assertTrue(globs.matches_any("sources/uiwalk/x.swift", ["Sources/UIWalk/**"], ignore_case=True))
+        self.assertFalse(globs.matches_any("sources/uiwalker/x.swift", ["Sources/UIWalk/*.swift"], ignore_case=True))
+        self.assertTrue(globs.match("src/a1.TS", "src/A?.ts", ignore_case=True))
+
+    def test_S_071_3_risky_paths_keep_matching_with_letter_case(self):
+        self.assertFalse(globs.matches_any("SRC/AUTH/x.ts", RISKY))
+        self.assertEqual(score.assess(["SRC/AUTH/x.ts"], None, RISKY), score.assess(["src/x.ts"], None, RISKY))
+        self.assertNotEqual(score.assess(["src/auth/x.ts"], None, RISKY), score.assess(["src/x.ts"], None, RISKY))
+
     def test_a_newline_in_a_folder_name_cannot_dodge_a_pattern(self):
         self.assertTrue(globs.match("src/a\nb/auth/x.ts", "**/auth/**"))
 

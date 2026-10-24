@@ -4,6 +4,8 @@
 - Like gitignore, a pattern that matches a folder covers everything inside it (`infra` and `infra/` both cover
   `infra/main.tf`; `**/*secret*` covers `config/secrets/prod.env`).
 - Paths must be repo-relative: `./a` and `a//b` are normalised, absolute paths raise GlobError.
+- Letter case counts, unless the caller passes `ignore_case=True` (only `evidence_globs` does, S-071: the default
+  macOS disk ignores case, so `sources/uiwalk/x.swift` is the same file as `Sources/UIWalk/x.swift`).
 Works on Python 3.12 (CI) as well as later versions.
 """
 import functools
@@ -16,7 +18,7 @@ class GlobError(ValueError):
 
 
 @functools.lru_cache(maxsize=256)
-def _compile(pattern):
+def _compile(pattern, ignore_case=False):
     parts, index = [], 0
     while index < len(pattern):
         if pattern.startswith("**/", index):
@@ -34,7 +36,7 @@ def _compile(pattern):
         else:
             parts.append(re.escape(pattern[index]))
             index += 1
-    return re.compile("".join(parts), re.DOTALL)
+    return re.compile("".join(parts), re.DOTALL | (re.IGNORECASE if ignore_case else 0))
 
 
 def normalise(path):
@@ -47,12 +49,12 @@ def normalise(path):
     return clean
 
 
-def match(path, pattern):
+def match(path, pattern, ignore_case=False):
     """True when the path, or any folder above it, matches the glob."""
-    compiled = _compile(pattern.rstrip("/"))
+    compiled = _compile(pattern.rstrip("/"), ignore_case)
     segments = normalise(path).split("/")
     return any(compiled.fullmatch("/".join(segments[:end])) for end in range(len(segments), 0, -1))
 
 
-def matches_any(path, patterns):
-    return any(match(path, pattern) for pattern in patterns)
+def matches_any(path, patterns, ignore_case=False):
+    return any(match(path, pattern, ignore_case) for pattern in patterns)

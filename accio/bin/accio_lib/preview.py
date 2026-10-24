@@ -331,7 +331,9 @@ def evidence_files(run_dir, worktree, story_id, settings, base_branch):
                                 capture_output=True, check=True).stdout.decode("utf-8", "replace")
     except (checks.CheckError, subprocess.CalledProcessError, OSError) as error:
         return [], f"can't tell which files {story_id} changes ({error}), so its evidence can't be trusted"
-    return sorted(path for path in listed.split("\0") if path and globs.matches_any(path, patterns)), ""
+    # Without letter case (S-071): the default macOS disk ignores it, so `app/walk.swift` is `App/Walk.swift`.
+    return sorted(path for path in listed.split("\0")
+                  if path and globs.matches_any(path, patterns, ignore_case=True)), ""
 
 
 def evidence_not_trusted(files):
