@@ -167,7 +167,8 @@ next one.
 about 150 tokens per story. For each READY story, the plugin shows:
 - what changed
 - how to try it
-- its risks
+- its risks, starting with any note the build left (`run/<ID>/brew-notes.md`: boggart or mad-eye skipped, did not
+  run or gave no answer, S-076)
 - its token cost
 
 The user answers everything in one batch:
@@ -268,7 +269,7 @@ The build itself is the workflow `/accio:brew` (§ 4.3), not a skill.
 | `wandmaker` | architect, 2–3 options | Opus | read-only; Write to `run/wand/wandmaker-options.md` | `options: <path>` |
 | `portkey` | worktree and brief | Haiku | Bash (scripts only) | `{worktree, brief, base}` |
 | `house-elf` | implementer | Sonnet / Opus | Read, Grep, Glob, Write, Edit, Bash, kept short because `curfew` must answer every tool (§ 4.4) | `{status, head, report}` |
-| `prefect` | checks, ledger, DoD tags, main snapshot (`accio-check`); starts and stops the preview and makes the UI evidence (`accio-preview`) | Haiku | Bash, Write (only `run/questions/`, `run/<ID>/ui-steps.txt`, and the `run/<ID>/mad-eye-findings.md` and `run/<ID>/boggart-findings.md` it writes for those two, which never edit, S-071) | `{pass, failing[], skipped}` |
+| `prefect` | checks, ledger, DoD tags, main snapshot (`accio-check`); starts and stops the preview and makes the UI evidence (`accio-preview`) | Haiku | Bash, Write (only `run/questions/`, `run/<ID>/ui-steps.txt`, and the `run/<ID>/mad-eye-findings.md` and `run/<ID>/boggart-findings.md` it writes for those two, which never edit, S-071; and a READY story's `run/<ID>/brew-notes.md`, S-076) | `{pass, failing[], skipped}` |
 | `examiner` | spec reviewer and backlog checker | Sonnet | read-only plus Write to its findings path | `{verdict, counts, path}` |
 | `professor` | quality reviewer | Sonnet | same as examiner | same |
 | `auror` | security reviewer (risky paths) | Sonnet | same as examiner | same |
