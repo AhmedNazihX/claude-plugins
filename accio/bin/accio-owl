@@ -10,6 +10,7 @@
 answers: --accept <ID>, --reject <ID> <reason>, --drop <ID> <reason>, --answer <ID> <text>,
          --allow <ID> <command> (from now on), --allow-once <ID> <command> (the next build only); an allowed
          command answers the blocked story that asked for it
+         --widen <ID> <path> (repeatable): add a path an answer or reject reason names to that story's files
 """
 import argparse
 import json
@@ -24,12 +25,13 @@ from accio_lib import board, config, ledger, merge, owl, paths, runlock, story, 
 def _answers(args):
     pairs = lambda items: tuple((sid, text) for sid, text in items)  # noqa: E731
     return owl.Answers(accept=tuple(args.accept), reject=pairs(args.reject), drop=pairs(args.drop),
-                       answer=pairs(args.answer), allow=pairs(args.allow), allow_once=pairs(args.allow_once))
+                       answer=pairs(args.answer), allow=pairs(args.allow), allow_once=pairs(args.allow_once),
+                       widen=pairs(args.widen))
 
 
 def _add_answers(parser):
     parser.add_argument("--accept", action="append", default=[])
-    for name in ("reject", "drop", "answer", "allow", "allow-once"):
+    for name in ("reject", "drop", "answer", "allow", "allow-once", "widen"):
         parser.add_argument(f"--{name}", action="append", nargs=2, default=[], metavar=("ID", "TEXT"))
 
 
@@ -39,7 +41,7 @@ def run(args, accio):
     if args.command == "check":
         stories = board.load_stories(accio)
         return {"accept": list(owl.check(stories, board.statuses(stories, board.read_overrides(accio)),
-                                          _answers(args)))}
+                                          _answers(args), accio.parent))}
     culprit = tuple(args.culprit) if args.culprit else None
     return owl.close(accio, _answers(args), config.load(accio)["base_branch"], tuple(args.merged), culprit)
 

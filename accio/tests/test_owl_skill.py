@@ -49,5 +49,16 @@ class OwlHowlerTest(unittest.TestCase):
         self.assertLessEqual(len(skill_text().splitlines()), MAX_LINES)
 
 
+class OwlWidenSkillTest(unittest.TestCase):
+    def test_S_075_5_step_3_answers_a_path_refusal_with_widen_and_the_report_names_the_widening(self):
+        text = " ".join(skill_text().split())
+        step_3 = text.split("## 3.", 1)[1].split("## 4.", 1)[0]
+        self.assertIn("--widen <ID> <path>", step_3)
+        self.assertIn("reword the answer", step_3)
+        report = text.split("End in the report format", 1)[1]
+        self.assertIn("any widening", report)
+        self.assertIn("S-088 widened by src/a.py", report)
+
+
 if __name__ == "__main__":
     unittest.main()
