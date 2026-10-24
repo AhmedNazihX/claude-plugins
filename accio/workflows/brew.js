@@ -427,8 +427,9 @@ async function reviewLoop(story, worktree, model, earlier, usedFixes, first, fir
 // and prefect runs `accio-break <ID> verify`, so boggart never grades itself. A kept break that touches a DoD line gets
 // a fix round with boggart-findings.md; one outside the DoD starts none (owl reads it from verdicts.json and logs it).
 // After a fix round, a kept repro that only fails to load (a setup error) gets one boggart turn for its imports or
-// setup, then verify again; if it still can't load it is logged, not fixed. A boggart or verify step that gives no
-// answer never blocks the story: it leaves a note.
+// setup, then verify again; if it still can't load it is logged, not fixed. A boggart try that gives no answer found
+// nothing to drop, so it leaves a note. A verify that fails or gives no answer while boggart has breaks (also after a
+// repair turn or a fix round) blocks the story with one question: a break nobody checked never passes (S-076/1).
 
 const brokenPath = (story) => `.accio/run/${story.id}/boggart-findings.md`
 const reproPath = (story, file) => `.accio/run/${story.id}/boggart/repros/${file}`
@@ -489,6 +490,15 @@ function boggartNote(kept) {
 
 const verified = (reply) => !failed(reply) && Array.isArray(reply.repros)
 
+// The question for breaks whose verify failed (S-076/1): their DoD lines, the error and the two ways on.
+function unverifiedQuestion(breaks, reply) {
+  const lines = [...new Set(breaks.map((item) => item.source || item.file).filter(Boolean))]
+  const error = !reply ? 'no answer' : reply.error || 'its reply had no repros list'
+  return `boggart found ${plural(breaks.length, 'break')} (${lines.join(', ') || 'no DoD line named'}) but ` +
+    `their verify step failed (${error}), so nobody checked them. Fix the error and build the story again, ` +
+    'or answer to accept it without fixing them?'
+}
+
 // One fix round for the kept in-DoD breaks: write boggart-findings.md, fix, re-check, then review the fix diff (since
 // `head`) as reviewAndFix does, with auror added when it is risky. Returns a stop or {fixes, ruling, head}.
 async function fixBreaks(story, worktree, model, used, ruling, broken, head) {
@@ -525,7 +535,7 @@ async function boggartStage(story, worktree, model, ruling, fixes, whole, review
   let current = ruling
   let repairedAt = -1  // the fix count a repair turn was used at: one per fix round
   for (;;) {
-    if (!verified(reply)) return { fixes: used, ruling: current, head, note: "boggart's verify gave no answer" }
+    if (!verified(reply)) return accioStop(unverifiedQuestion(tried.breaks, reply))
     const kept = reply.repros.filter((item) => item.verdict === 'kept')
     const stuck = kept.filter(cantLoad)
     if (stuck.length && repairedAt !== used) {
