@@ -336,15 +336,12 @@ def evidence_not_trusted(files):
     return ("the story changes how its evidence is made (" + ", ".join(files) + "); a person should look")
 
 
-def evidence_plan(settings, touched=(), problem=""):
-    """What the workflow needs to know before it asks mad-eye for steps. `touched` are the `evidence_files`: when
-    there are any, mad-eye is skipped (S-069)."""
+def evidence_plan(settings):
+    """What the workflow needs to know before it asks mad-eye for steps."""
     if settings is None:
         return {"ui_evidence": False}
-    plan = {"ui_evidence": True, "takes_over_screen": settings["takes_over_screen"],
-            "steps_doc": settings["steps_doc"], "themes": list(settings.get("themes", [])),
-            "evidence_files": list(touched)}
-    return {**plan, "error": problem} if problem else plan
+    return {"ui_evidence": True, "takes_over_screen": settings["takes_over_screen"],
+            "steps_doc": settings["steps_doc"], "themes": list(settings.get("themes", []))}
 
 
 def _skip(reason):
@@ -422,10 +419,10 @@ def stamp_problem(run_dir, story_id, head):
     return ""
 
 
-def evidence(run_dir, worktree, story_id, settings, head, steps_checksum=None, base_branch=None):
+def evidence(run_dir, worktree, story_id, settings, head, steps_checksum=None):
     """Run `ui_evidence.command` on the steps file; {ok, folder, head, screenshots} or {skipped, reason}. With
     `steps_checksum` (brew.js passes it), a steps file whose steps_sum differs never runs (S-070). A story whose diff
-    touches an `evidence_globs` file never runs it either (S-069), checked here too, not only in the plan."""
+    touches an `evidence_globs` file never runs it either (S-069); the base branch is read from config.json."""
     if settings is None:
         return _skip("config.json has no `ui_evidence`")
     if settings["takes_over_screen"]:
@@ -433,6 +430,10 @@ def evidence(run_dir, worktree, story_id, settings, head, steps_checksum=None, b
     if not worktree.is_dir():
         return _skip(f"no worktree for {story_id} at {worktree}")
     if settings.get("evidence_globs"):
+        try:
+            base_branch = config.load(run_dir.parent)["base_branch"]
+        except config.ConfigError as error:
+            return _skip(f"can't read config.json ({error}), so the evidence of {story_id} can't be trusted")
         touched, problem = evidence_files(run_dir, worktree, story_id, settings, base_branch)
         if problem:
             return _skip(problem)

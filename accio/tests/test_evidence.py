@@ -132,9 +132,8 @@ class EvidenceRunTest(unittest.TestCase):
         return {"command": command, "steps_doc": "docs/ui-walk.md", "takes_over_screen": False,
                 "evidence_globs": [], **extra}
 
-    def run_evidence(self, settings, head=None, steps_sum=None, base_branch=None):
-        return preview.evidence(self.run_dir, self.worktree, "S-001", settings, head or self.head, steps_sum,
-                                base_branch)
+    def run_evidence(self, settings, head=None, steps_sum=None):
+        return preview.evidence(self.run_dir, self.worktree, "S-001", settings, head or self.head, steps_sum)
 
     def stamp(self):
         return (self.run_dir / "S-001" / preview.STAMP_NAME).read_text(encoding="utf-8").strip()
@@ -171,7 +170,7 @@ class EvidenceRunTest(unittest.TestCase):
         plan = subprocess.run([sys.executable, str(PREVIEW), "S-001", "evidence-plan"],
                               cwd=self.root, capture_output=True, text=True, timeout=60)
         self.assertEqual(json.loads(plan.stdout), {"ui_evidence": True, "takes_over_screen": False,
-                                                   "steps_doc": "docs/ui-walk.md", "themes": [], "evidence_files": []})
+                                                   "steps_doc": "docs/ui-walk.md", "themes": []})
 
     def test_S_068_1_the_plan_without_ui_evidence_says_so(self):
         self.assertEqual(preview.evidence_plan(None), {"ui_evidence": False})
@@ -288,43 +287,32 @@ class EvidenceRunTest(unittest.TestCase):
         head = self.story_changes("app/WalkMode.swift", "app/View.swift", "scripts/capture.sh")
         marker = pathlib.Path(self.tmp.name) / "ran"
         result = self.run_evidence(self.globbed(command=f"touch {marker} {{steps}} {{folder}}"), head=head,
-                                   base_branch="main")
+                                   )
         self.assertTrue(result["skipped"])
         self.assertIn("app/WalkMode.swift, scripts/capture.sh", result["reason"])
         self.assertNotIn("View.swift", result["reason"])
         self.assertIn("a person should look", result["reason"])
         self.assertFalse(marker.exists())
 
-    def test_S_069_2_the_plan_lists_the_touched_files(self):
-        self.story_changes("app/WalkMode.swift")
-        files, problem = preview.evidence_files(self.run_dir, self.worktree, "S-001", self.globbed(), "main")
-        self.assertEqual((files, problem), (["app/WalkMode.swift"], ""))
-        plan = preview.evidence_plan(self.globbed(), files, problem)
-        self.assertEqual(plan["evidence_files"], ["app/WalkMode.swift"])
-        self.assertNotIn("error", plan)
-
     def test_S_069_2_when_git_cannot_say_the_evidence_is_not_trusted(self):
         files, problem = preview.evidence_files(self.run_dir, self.worktree, "S-001", self.globbed(), "no-such-branch")
         self.assertEqual(files, [])
         self.assertIn("can't be trusted", problem)
-        self.assertIn("error", preview.evidence_plan(self.globbed(), files, problem))
-        result = self.run_evidence(self.globbed(), base_branch=None)
+        write(self.accio / "config.json", json.dumps({"base_branch": "no-such-branch"}))
+        result = self.run_evidence(self.globbed())
         self.assertTrue(result["skipped"])
         self.assertIn("can't be trusted", result["reason"])
 
     def test_S_069_3_a_diff_touching_no_evidence_glob_runs_the_evidence_step_as_before(self):
         head = self.story_changes("app/View.swift")
-        result = self.run_evidence(self.globbed(), head=head, base_branch="main")
+        result = self.run_evidence(self.globbed(), head=head)
         self.assertEqual(result, {"ok": True, "folder": str(self.folder), "head": head, "screenshots": 1})
         files, problem = preview.evidence_files(self.run_dir, self.worktree, "S-001", self.globbed(), "main")
         self.assertEqual((files, problem), ([], ""))
 
-    def test_S_069_2_the_cli_plan_and_run_both_see_the_touched_files(self):
+    def test_S_069_2_the_cli_run_sees_the_touched_files(self):
         head = self.story_changes("scripts/capture.sh")
         write(self.accio / "config.json", json.dumps({"ui_evidence": self.globbed()}))
-        plan = subprocess.run([sys.executable, str(PREVIEW), "S-001", "evidence-plan"],
-                              cwd=self.root, capture_output=True, text=True, timeout=60)
-        self.assertEqual(json.loads(plan.stdout)["evidence_files"], ["scripts/capture.sh"], plan.stderr)
         ran = subprocess.run([sys.executable, str(PREVIEW), "S-001", "evidence", "--head", head],
                              cwd=self.root, capture_output=True, text=True, timeout=60)
         self.assertIn("scripts/capture.sh", json.loads(ran.stdout)["reason"], ran.stderr)

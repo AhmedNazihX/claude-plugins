@@ -604,8 +604,7 @@ const PLAN_SCHEMA = {
   type: 'object',
   properties: {
     ui_evidence: { type: 'boolean' }, takes_over_screen: { type: 'boolean' }, steps_doc: { type: 'string' },
-    themes: { type: 'array', items: { type: 'string' } }, evidence_files: { type: 'array', items: { type: 'string' } },
-    error: { type: 'string' },
+    themes: { type: 'array', items: { type: 'string' } }, error: { type: 'string' },
   },
   required: ['ui_evidence'],  // a reply without it is retried, never read as false
 }
@@ -691,9 +690,6 @@ async function lookingWay(story, worktree, whole) {
   if (failed(plan)) return { skip: `reading ui_evidence failed (${(plan && plan.error) || 'no answer'})` }
   if (!plan.ui_evidence) return { skip: 'config.json has no `preview` or `ui_evidence`' }
   if (plan.takes_over_screen) return { skip: TAKES_OVER }
-  if (plan.evidence_files && plan.evidence_files.length) {  // S-069: the story's code makes its own evidence
-    return { skip: `the story changes how its evidence is made (${plan.evidence_files.join(', ')}); a person should look` }
-  }
   return { what: 'screenshots', look: (pkg, head) => lookAtEvidence(story, pkg, plan, worktree, head) }
 }
 
