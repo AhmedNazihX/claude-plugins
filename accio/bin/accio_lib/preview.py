@@ -19,7 +19,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
-from accio_lib import runlock
+from accio_lib import config, runlock
 
 LOCK_NAME = "preview.lock"
 STATE_NAME = "preview.json"
@@ -279,10 +279,40 @@ EVIDENCE_FOLDER = "ui-evidence"
 STEPS_NAME = "ui-steps.txt"
 STAMP_NAME = "ui-evidence.head"
 EVIDENCE_LOG = "ui-evidence.log"
-DEFAULT_EVIDENCE_TIMEOUT = 600  # seconds
+DEFAULT_EVIDENCE_TIMEOUT = config.EVIDENCE_TIMEOUT_MAX  # seconds, under prefect's Bash limit (S-070)
 PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
 TAKES_OVER = ("ui_evidence.takes_over_screen is true: its command takes over the screen (mouse, keyboard or focus), "
               "so it can't run in an unattended build")
+FNV_OFFSET = 0x811C9DC5
+FNV_PRIME = 0x01000193
+WORD_MASK = 0xFFFFFFFF
+
+
+def steps_sum(text):
+    """32-bit FNV-1a over the text's code points, as 8 hex digits. brew.js computes the same over mad-eye's steps
+    (stepsSum), so a ui-steps.txt prefect changed while copying is caught; a copying mistake, not an attacker."""
+    value = FNV_OFFSET
+    for char in text:
+        value = ((value ^ ord(char)) * FNV_PRIME) & WORD_MASK
+    return f"{value:08x}"
+
+
+def evidence_timeout(settings):
+    return settings.get("timeout", DEFAULT_EVIDENCE_TIMEOUT)
+
+
+def _steps_problem(steps, wanted):
+    """'' when the steps file's text has the checksum the workflow passed (or none was passed), else why not."""
+    if wanted is None:
+        return ""
+    try:
+        got = steps_sum(steps.read_bytes().decode("utf-8"))
+    except (OSError, UnicodeDecodeError):
+        got = "unreadable"
+    if got == wanted:
+        return ""
+    return (f"the steps file {STEPS_NAME} was changed: its checksum is {got}, not the {wanted} of the steps mad-eye "
+            "wrote, so the evidence command did not run")
 
 
 def evidence_plan(settings):
@@ -315,7 +345,7 @@ def _fill(command, steps, folder):
 
 def _run_command(settings, worktree, steps, folder, log_path):
     """Run the filled-in command in the worktree; '' when it exited 0, else why not."""
-    timeout = settings.get("timeout", DEFAULT_EVIDENCE_TIMEOUT)
+    timeout = evidence_timeout(settings)
     see_log = f"see {log_path}"
     try:
         with open(log_path, "wb") as log:
@@ -368,8 +398,9 @@ def stamp_problem(run_dir, story_id, head):
     return ""
 
 
-def evidence(run_dir, worktree, story_id, settings, head):
-    """Run `ui_evidence.command` on the steps file; {ok, folder, head, screenshots} or {skipped, reason}."""
+def evidence(run_dir, worktree, story_id, settings, head, steps_checksum=None):
+    """Run `ui_evidence.command` on the steps file; {ok, folder, head, screenshots} or {skipped, reason}. With
+    `steps_checksum` (brew.js passes it), a steps file whose steps_sum differs never runs (S-070)."""
     if settings is None:
         return _skip("config.json has no `ui_evidence`")
     if settings["takes_over_screen"]:
@@ -380,6 +411,9 @@ def evidence(run_dir, worktree, story_id, settings, head):
     steps = story_dir / STEPS_NAME
     if not steps.is_file():
         return _skip(f"no steps file at {steps}: mad-eye's steps were not written")
+    problem = _steps_problem(steps, steps_checksum)
+    if problem:
+        return _skip(problem)
     folder = _fresh_folder(story_dir)
     problem = _run_command(settings, worktree, steps, folder, story_dir / EVIDENCE_LOG)
     if problem:
