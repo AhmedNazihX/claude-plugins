@@ -123,6 +123,8 @@ def _check_preview(value):
 EVIDENCE_REQUIRED = ("command", "steps_doc", "takes_over_screen")
 EVIDENCE_KEYS = {*EVIDENCE_REQUIRED, "themes", "timeout"}
 EVIDENCE_PLACEHOLDERS = ("{steps}", "{folder}")
+PREFECT_BASH_LIMIT = 600  # seconds: prefect runs the evidence command, and its Bash tool stops there
+EVIDENCE_TIMEOUT_MAX = 540  # the default too: the command stops first, so its own note reaches the build (S-070)
 
 
 def _check_steps_doc(value):
@@ -146,6 +148,9 @@ def _check_evidence_values(value):
         return 'themes must be a list of theme names, like ["light", "dark"]'
     if "timeout" in value and _positive_int(value["timeout"]):
         return "timeout must be a whole number of seconds, 1 or more"
+    if "timeout" in value and value["timeout"] > EVIDENCE_TIMEOUT_MAX:
+        return (f"timeout must be {EVIDENCE_TIMEOUT_MAX} seconds or less: prefect runs the command, and its Bash tool "
+                f"stops at {PREFECT_BASH_LIMIT}")
     return _check_steps_doc(value["steps_doc"])
 
 

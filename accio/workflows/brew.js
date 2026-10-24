@@ -638,11 +638,20 @@ function askSteps(story, pkg, plan, worktree) {
     { agentType: MAD_EYE, model: REVIEW_MODEL, schema: STEPS_SCHEMA, label: label(story, 'mad-eye-steps') })
 }
 
+// 32-bit FNV-1a over the text's code points, as 8 hex digits: the same as preview.steps_sum, so accio-preview refuses
+// a ui-steps.txt that prefect changed while copying it (S-070). A copying mistake is the threat, not an attacker.
+function stepsSum(text) {
+  let value = 0x811c9dc5
+  for (const char of text) value = Math.imul(value ^ char.codePointAt(0), 0x01000193) >>> 0
+  return value.toString(16).padStart(8, '0')
+}
+
 function runEvidence(story, steps, head) {
   return callRetry(
     `Step 4c, make the UI evidence of story ${story.id}. First, with the Write tool, write the value of this JSON ` +
       `string, unchanged and nothing else, to ${stepsPath(story)} ${IN_MAIN}: ${JSON.stringify(steps)}. Then run ` +
-      `\`accio-preview ${story.id} evidence --head ${head}\` with the Bash tool's longest timeout (600000 ms) and reply ` +
+      `\`accio-preview ${story.id} evidence --head ${head} --steps-sum ${stepsSum(steps)}\` on its own, with the Bash ` +
+      "tool's longest timeout (600000 ms), and reply " +
       'with its JSON as it prints it ({ok, folder, head, screenshots} or {skipped, reason}), or {error} with what it ' +
       'printed if it fails.',
     { agentType: PREFECT, model: 'haiku', schema: EVIDENCE_SCHEMA, label: label(story, 'evidence') })

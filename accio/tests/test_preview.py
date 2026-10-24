@@ -373,9 +373,11 @@ class PreviewTest(unittest.TestCase):
 
 
 class PolicyTest(unittest.TestCase):
-    def test_S_045_1_portkey_may_run_accio_preview(self):
+    def test_S_070_1_prefect_runs_accio_preview_not_portkey(self):
+        # brew.js has prefect start and stop the preview (S-047); portkey's old entry never matched (S-070).
         from accio_lib import policy
-        self.assertEqual(policy.SCRIPTS["scripts"]["accio-preview"], frozenset({"start", "stop"}))
+        self.assertIn("accio-preview", policy.SCRIPTS["checks"])
+        self.assertNotIn("accio-preview", policy.SCRIPTS["scripts"])
 
 
 if __name__ == "__main__":

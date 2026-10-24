@@ -3,6 +3,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
+import { execFileSync } from 'node:child_process'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { runWorkflow, happy, story, fail, pass } from './stub.mjs'
@@ -169,6 +170,39 @@ test('S-068/5 evidence whose stamp names another commit is refused: mad-eye is s
   const told = 'the evidence is of commit bbbbbbbbbbbb but the story\'s head is aaaaaaaaaaaa, so it is refused'
   const refused = await run({ evidence: async () => ({ skipped: true, reason: told }) })
   assert.equal(skipNote(refused.result), told)
+})
+
+// S-070: ask accio's own Python (preview.steps_sum, policy.PREFECT_PREVIEW) about what brew.js wrote.
+const BIN = join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'bin')
+const python = (code, ...args) => execFileSync('python3', ['-c', `import sys; sys.path.insert(0, ${JSON.stringify(BIN)}); ${code}`, ...args], { encoding: 'utf8' }).trim()
+const pythonSum = (text) => python('from accio_lib import preview; print(preview.steps_sum(sys.argv[1]))', text)
+const previewCommands = (calls) => calls.flatMap((call) => [...call.prompt.matchAll(/`accio-preview ([^`]*)`/g)].map((match) => match[1]))
+const prefectMayRun = (args) => python('from accio_lib import policy; print(bool(policy.PREFECT_PREVIEW.fullmatch(sys.argv[1])))', args) === 'True'
+
+test('S-070/4 brew passes the checksum of the steps mad-eye sent, computed as accio-preview computes it', async () => {
+  for (const text of [STEPS.steps, 'open main\n', 'café ☕ \u{1F600}\r\nswitch-tab 2']) {
+    const { calls } = await run({ 'mad-eye-steps': async () => ({ steps: text }) })
+    const sum = (prompt(calls, 'S-001 evidence').match(/--steps-sum ([0-9a-f]+)/) || [])[1]
+    assert.equal(sum, pythonSum(text), JSON.stringify(text))
+  }
+})
+
+test('S-070/4 a changed ui-steps.txt never runs: mad-eye is skipped with a note saying the steps file was changed', async () => {
+  const reason = 'the steps file ui-steps.txt was changed: its checksum is 00000000, not the 1234abcd of the steps mad-eye wrote, so the evidence command did not run'
+  const { result, calls } = await run({ evidence: async () => ({ skipped: true, reason }) })
+  assert.ok(!labels(calls).includes('S-001 mad-eye'))
+  assert.match(result, /S-001 Story S-001\s+READY/)
+  assert.match(skipNote(result), /the steps file ui-steps\.txt was changed/)
+})
+
+test('S-070/1 every accio-preview command brew gives prefect is one curfew lets prefect run', async () => {
+  const app = await run()
+  const web = await run({ package: native({ preview: true, test_data: true }) })
+  const commands = [...previewCommands(app.calls), ...previewCommands(web.calls)]
+  for (const action of ['start', 'stop', 'evidence-plan', 'evidence --head']) {
+    assert.ok(commands.some((args) => args.startsWith(`S-001 ${action}`)), `brew gives prefect ${action}`)
+  }
+  for (const args of commands) assert.ok(prefectMayRun(args), args)
 })
 
 test('S-068/7 a command that takes over the screen never runs: mad-eye is skipped with a note saying why', async () => {

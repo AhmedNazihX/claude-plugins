@@ -21,6 +21,7 @@ steps, folder = pathlib.Path(sys.argv[1]), pathlib.Path(sys.argv[2])
 (folder / "main-light.png").write_bytes(bytes.fromhex(sys.argv[3]))
 """
 
+STEPS_TEXT = "open main\nresize 800x600\nminimize\nrestore\n"
 GOOD = {"command": "app --ui-walk {steps} --out {folder}", "steps_doc": "docs/ui-walk.md", "takes_over_screen": False}
 
 
@@ -77,6 +78,21 @@ class EvidenceConfigTest(unittest.TestCase):
                 self.assertIn("ui_evidence", self.refused({"ui_evidence": {**GOOD, **extra}}))
         self.assertIn("ui_evidence", self.refused({"ui_evidence": "app"}))
 
+    def test_S_070_5_a_timeout_above_540_is_refused_naming_prefects_600_second_limit(self):
+        for timeout in (541, 600, 3600):
+            with self.subTest(timeout=timeout):
+                message = self.refused({"ui_evidence": {**GOOD, "timeout": timeout}})
+                self.assertIn("ui_evidence", message)
+                self.assertIn("540", message)
+                self.assertIn("600", message)
+        self.assertEqual(self.load({"ui_evidence": {**GOOD, "timeout": 540}})["ui_evidence"]["timeout"], 540)
+
+    def test_S_070_5_without_a_timeout_the_evidence_command_gets_540_seconds(self):
+        self.assertEqual(preview.DEFAULT_EVIDENCE_TIMEOUT, 540)
+        self.assertEqual(config.EVIDENCE_TIMEOUT_MAX, 540)
+        self.assertEqual(preview.evidence_timeout(self.load({"ui_evidence": GOOD})["ui_evidence"]), 540)
+        self.assertEqual(preview.evidence_timeout({**GOOD, "timeout": 30}), 30)
+
 
 class EvidenceRunTest(unittest.TestCase):
     def setUp(self):
@@ -89,7 +105,7 @@ class EvidenceRunTest(unittest.TestCase):
         self.head = git(self.worktree, "rev-parse", "HEAD")
         self.walk = base / "walk.py"
         self.walk.write_text(WALK_SCRIPT)
-        write(self.run_dir / "S-001" / preview.STEPS_NAME, "open main\nresize 800x600\nminimize\nrestore\n")
+        write(self.run_dir / "S-001" / preview.STEPS_NAME, STEPS_TEXT)
         self.folder = self.run_dir / "S-001" / preview.EVIDENCE_FOLDER
 
     def tearDown(self):
@@ -99,8 +115,8 @@ class EvidenceRunTest(unittest.TestCase):
         command = command or f"{sys.executable} {self.walk} {{steps}} {{folder}} {PNG.hex()}"
         return {"command": command, "steps_doc": "docs/ui-walk.md", "takes_over_screen": False, **extra}
 
-    def run_evidence(self, settings, head=None):
-        return preview.evidence(self.run_dir, self.worktree, "S-001", settings, head or self.head)
+    def run_evidence(self, settings, head=None, steps_sum=None):
+        return preview.evidence(self.run_dir, self.worktree, "S-001", settings, head or self.head, steps_sum)
 
     def stamp(self):
         return (self.run_dir / "S-001" / preview.STAMP_NAME).read_text(encoding="utf-8").strip()
@@ -194,6 +210,50 @@ class EvidenceRunTest(unittest.TestCase):
         write(self.run_dir / "S-001" / preview.STAMP_NAME, self.head + "\n")
         self.run_evidence(self.settings(command="false {steps} {folder}"))
         self.assertFalse((self.run_dir / "S-001" / preview.STAMP_NAME).exists())
+
+    def test_S_070_4_steps_sum_is_32_bit_fnv_1a_over_the_texts_code_points(self):
+        for text, expected in (("", "811c9dc5"), ("a", "e40c292c"), ("foobar", "bf9cf968")):
+            with self.subTest(text=text):
+                self.assertEqual(preview.steps_sum(text), expected)
+        self.assertNotEqual(preview.steps_sum("open main\n"), preview.steps_sum("open main"))
+        self.assertRegex(preview.steps_sum("café ☕ \U0001F600"), r"^[0-9a-f]{8}$")
+
+    def test_S_070_4_a_matching_steps_file_runs_the_command(self):
+        result = self.run_evidence(self.settings(), steps_sum=preview.steps_sum(STEPS_TEXT))
+        self.assertTrue(result.get("ok"), result)
+
+    def test_S_070_4_a_changed_steps_file_never_runs_the_command_and_says_it_was_changed(self):
+        marker = pathlib.Path(self.tmp.name) / "ran"
+        settings = self.settings(command=f"touch {marker} {{steps}} {{folder}}")
+        write(self.folder / "old.png", "")
+        for changed in (STEPS_TEXT + "\n", STEPS_TEXT.rstrip("\n"), STEPS_TEXT.replace("main", "Main"), ""):
+            with self.subTest(changed=changed):
+                write(self.run_dir / "S-001" / preview.STEPS_NAME, changed)
+                result = self.run_evidence(settings, steps_sum=preview.steps_sum(STEPS_TEXT))
+                self.assertTrue(result["skipped"])
+                self.assertIn(f"{preview.STEPS_NAME} was changed", result["reason"])
+                self.assertIn("did not run", result["reason"])
+                self.assertFalse(marker.exists())
+                self.assertTrue((self.folder / "old.png").exists(), "the old evidence is left alone")
+
+    def test_S_070_4_a_steps_file_that_is_not_utf8_counts_as_changed(self):
+        (self.run_dir / "S-001" / preview.STEPS_NAME).write_bytes(b"\xff\xfe open")
+        result = self.run_evidence(self.settings(), steps_sum=preview.steps_sum(STEPS_TEXT))
+        self.assertTrue(result["skipped"])
+        self.assertIn("was changed", result["reason"])
+
+    def test_S_070_4_the_cli_takes_steps_sum_and_refuses_a_changed_file(self):
+        write(self.accio / "config.json", json.dumps({"ui_evidence": self.settings()}))
+        base = [sys.executable, str(PREVIEW), "S-001", "evidence", "--head", self.head, "--steps-sum"]
+        good = subprocess.run(base + [preview.steps_sum(STEPS_TEXT)], cwd=self.root, capture_output=True, text=True,
+                              timeout=60)
+        self.assertEqual(json.loads(good.stdout).get("screenshots"), 1, good.stderr)
+        bad = subprocess.run(base + ["00000000"], cwd=self.root, capture_output=True, text=True, timeout=60)
+        self.assertEqual(bad.returncode, 0, bad.stderr)
+        self.assertIn("was changed", json.loads(bad.stdout)["reason"])
+        odd = subprocess.run(base + ["not-hex"], cwd=self.root, capture_output=True, text=True, timeout=60)
+        self.assertEqual(odd.returncode, 1)
+        self.assertIn("--steps-sum", odd.stderr)
 
     def test_S_068_7_a_command_that_takes_over_the_screen_never_runs(self):
         marker = pathlib.Path(self.tmp.name) / "ran"

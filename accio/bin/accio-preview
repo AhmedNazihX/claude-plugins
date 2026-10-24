@@ -7,9 +7,10 @@ first preview is stopped. `stop` kills the process group, frees the port and rem
 preview-login.json.
 
 For a native app (config `ui_evidence`, S-068): `evidence-plan` prints what mad-eye needs to write a steps file, as
-JSON. `evidence --head <commit>` empties run/<ID>/ui-evidence/, runs the command on run/<ID>/ui-steps.txt in the
-worktree, counts the PNG screenshots, stamps run/<ID>/ui-evidence.head and prints {ok, folder, head, screenshots},
-or {skipped, reason} when the evidence can't be had.
+JSON. `evidence --head <commit> [--steps-sum <8 hex>]` empties run/<ID>/ui-evidence/, runs the command on
+run/<ID>/ui-steps.txt in the worktree, counts the PNG screenshots, stamps run/<ID>/ui-evidence.head and prints
+{ok, folder, head, screenshots}, or {skipped, reason} when the evidence can't be had. With `--steps-sum` (the
+workflow passes the checksum of mad-eye's steps), a ui-steps.txt that differs is refused before anything runs.
 """
 import argparse
 import json
@@ -22,6 +23,7 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 from accio_lib import config, paths, preview, story  # noqa: E402
 
 COMMIT = re.compile(r"[0-9a-f]{7,40}")
+STEPS_SUM = re.compile(r"[0-9a-f]{8}")
 
 
 def _evidence(args, root, accio):
@@ -30,8 +32,10 @@ def _evidence(args, root, accio):
         return preview.evidence_plan(settings)
     if not args.head or not COMMIT.fullmatch(args.head):
         raise preview.PreviewError("evidence needs --head <the story's head commit>")
+    if args.steps_sum is not None and not STEPS_SUM.fullmatch(args.steps_sum):
+        raise preview.PreviewError(f"--steps-sum must be 8 lowercase hex digits, got {args.steps_sum}")
     worktree = paths.worktree_root(root) / args.story_id
-    return preview.evidence(accio / "run", worktree, args.story_id, settings, args.head)
+    return preview.evidence(accio / "run", worktree, args.story_id, settings, args.head, args.steps_sum)
 
 
 def main(argv=None):
@@ -44,6 +48,8 @@ def main(argv=None):
     parser.add_argument("--wait", type=int, default=preview.DEFAULT_WAIT,
                         help="seconds to wait on run/preview.lock (start)")
     parser.add_argument("--head", help="the story's head commit the evidence must be of (evidence)")
+    parser.add_argument("--steps-sum", help="the checksum of the steps mad-eye wrote; a ui-steps.txt that differs "
+                                            "never runs (evidence)")
     args = parser.parse_args(argv)
     try:
         root, accio = paths.main_root(), paths.accio_dir()
