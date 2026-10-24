@@ -409,6 +409,7 @@ A dropped story also records `dropped: <reason>` in its frontmatter.
 | `mutation` | optional `{"command": "…{diff}…"}`: the project's mutation tool, run on the story's diff file; it prints each surviving mutant as a `file:line …` line (decision 011, option A) |
 
 | `snapshot_skip` | optional glob paths the main snapshot ignores: files another tool keeps writing during a run (e.g. `.remember/**`); never anything under `.accio/` |
+| `ui_evidence` | optional, for a native app (no web `preview`; config refuses both, "set one"): `{"command": "…{steps}…{folder}…", "steps_doc": "docs/ui-walk.md", "takes_over_screen": false, "themes": ["light", "dark"], "timeout": 600}`. On a story that touches `ui_globs`, mad-eye writes a steps file in the `steps_doc` vocabulary (Read only); accio writes it to `run/<ID>/ui-steps.txt`, empties `run/<ID>/ui-evidence/`, runs the command in the story's worktree (`accio-preview <ID> evidence --head <commit>`), needs at least one PNG, and stamps `run/<ID>/ui-evidence.head`; mad-eye then judges the screenshots in every theme, Read only, and its findings go to a fix round. `takes_over_screen: true` (it moves the mouse, types or takes focus, e.g. XCUITest) never runs in an unattended build. A failed or timed-out command, no PNGs, or a stamp that isn't the story's head skips mad-eye with a note, never a block (S-068) |
 
 A missing key falls back to its default.
 
