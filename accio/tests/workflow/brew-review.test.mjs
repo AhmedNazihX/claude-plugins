@@ -496,8 +496,10 @@ test('S-047/2 a diff that touches no ui_globs file never calls mad-eye, or start
 })
 
 test('S-047/3 a UI diff with no preview in config logs a skip that names the preview', async () => {
-  const { result, calls } = await runWorkflow('brew', happy([story('S-001')], { package: withUi({ preview: false, test_data: false }) }))
-  assert.deepEqual(steps(calls, 'S-001').slice(-2), ['professor', 'outcome'])
+  const { result, calls } = await runWorkflow('brew', happy([story('S-001')], {
+    package: withUi({ preview: false, test_data: false }), 'evidence-plan': async () => ({ ui_evidence: false }),
+  }))
+  assert.deepEqual(steps(calls, 'S-001').slice(-3), ['professor', 'evidence-plan', 'outcome'])  // S-068: no ui_evidence either
   assert.match(result, /S-001 Story S-001\s+READY\s+(?:boggart skipped[^;\n]*; )?mad-eye skipped: config\.json has no `preview`/)
 })
 
