@@ -182,6 +182,9 @@ class SnapshotTest(CheckTestBase):
         run = lambda: subprocess.run(ledger_cli, cwd=self.repo, capture_output=True, text=True, check=True).stdout
         from_merge_base = run()
         write(self.accio / "run" / "S-001" / "base", git(self.worktree, "rev-parse", "HEAD") + "\n")
+        self.assertEqual(run(), from_merge_base)  # S-072/1: the story's own HEAD is never trusted, here either
+        write(self.accio / "stories" / "S-001.md", STORY.replace("status: doing\n", "status: doing\ndeps: [S-002]\n"))
+        git(self.repo, "branch", "story/S-002", git(self.worktree, "rev-parse", "HEAD"))  # S-072/2: a parent's head
         self.assertNotEqual(run(), from_merge_base)
 
     def test_S_017_4_refs_git_config_hooks_and_the_runs_control_files_are_watched(self):
@@ -343,13 +346,6 @@ class SnapshotTest(CheckTestBase):
         reply = self.check("S-001")
         self.assertEqual((reply["pass"], reply["remote_moved"]), (False, True))
 
-    def test_the_diff_starts_where_accio_brief_recorded_it(self):
-        run_dir = self.accio / "run" / "S-001"
-        self.assertEqual(checks.diff_start(run_dir, self.worktree, "main"), git(self.repo, "rev-parse", "main"))
-        self.change({"src/a.py": "value = 2\n"})
-        write(run_dir / "base", git(self.worktree, "rev-parse", "HEAD") + "\n")
-        self.assertEqual(checks.diff_start(run_dir, self.worktree, "main"), git(self.worktree, "rev-parse", "HEAD"))
-
     def test_a_check_that_runs_too_long_is_stopped_and_named(self):
         failing = merge.run_checks(self.worktree, ["sleep 5"], timeout=1)
         self.assertIn("stopped after", failing["sleep 5"])
@@ -359,6 +355,62 @@ class SnapshotTest(CheckTestBase):
                                 text=True, check=False)
         self.assertEqual(result.returncode, 1)
         self.assertIn("snapshot", result.stderr)
+
+
+class DiffStartTest(CheckTestBase):
+    """S-072: the recorded base is used only when the story's own branch didn't make it."""
+
+    def setUp(self):
+        super().setUp()
+        self.run_dir = self.accio / "run" / "S-001"
+        self.prepared = git(self.repo, "rev-parse", "main")
+
+    def record(self, commit):
+        write(self.run_dir / "base", commit + "\n")
+
+    def start(self):
+        return checks.diff_start(self.run_dir, self.worktree, "main")
+
+    def test_the_diff_starts_where_accio_brief_recorded_it(self):
+        self.assertEqual(self.start(), self.prepared)
+        self.record(self.prepared)
+        self.change({"src/a.py": "value = 2\n"})
+        self.assertEqual(self.start(), self.prepared)
+
+    def test_S_072_1_the_storys_head_or_own_commit_is_not_the_diff_start(self):
+        self.change({"src/a.py": "value = 2\n"})
+        self.change({"src/new.py": "x = 1\n"})
+        for own in ("HEAD", "HEAD~1"):
+            self.record(git(self.worktree, "rev-parse", own))
+            self.assertEqual(self.start(), self.prepared, own)
+            self.assertIsNone(checks.trusted_base(self.run_dir, self.worktree, "main"), own)
+        changed = checks.changed_files(self.worktree, self.start())
+        self.assertEqual(sorted(changed), ["src/a.py", "src/new.py"])
+
+    def test_S_072_1_another_story_branch_that_isnt_a_dep_does_not_make_it_trusted(self):
+        self.change({"src/a.py": "value = 2\n"})
+        own = git(self.worktree, "rev-parse", "HEAD")
+        git(self.repo, "branch", "story/S-009", own)  # planted by the story's code; S-001 has no deps
+        self.record(own)
+        self.assertEqual(self.start(), self.prepared)
+
+    def test_S_072_2_a_stacked_storys_parent_head_is_still_the_diff_start(self):
+        write(self.accio / "stories" / "S-001.md", STORY.replace("status: doing\n", "status: doing\ndeps: [S-002]\n"))
+        self.change({"src/a.py": "value = 2\n"})  # the parent's work, on the parent's branch
+        parent_head = git(self.worktree, "rev-parse", "HEAD")
+        git(self.repo, "branch", "story/S-002", parent_head)
+        self.change({"src/new.py": "x = 1\n"})
+        self.record(parent_head)
+        self.assertEqual(self.start(), parent_head)
+        self.assertEqual(checks.changed_files(self.worktree, self.start()), ["src/new.py"])
+
+    def test_S_072_3_the_base_branch_commit_from_prepare_time_is_still_used_after_main_moves(self):
+        self.record(self.prepared)
+        write(self.repo / "later.txt", "main moved on\n")
+        commit_all(self.repo, "main moves on")
+        self.change({"src/a.py": "value = 2\n"})
+        self.assertEqual(checks.trusted_base(self.run_dir, self.worktree, "main"), self.prepared)
+        self.assertEqual(self.start(), self.prepared)
 
 
 class MutationAuditTest(CheckTestBase):
