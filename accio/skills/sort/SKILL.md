@@ -2,7 +2,7 @@
 name: sort
 description: Stories (sort): turns accio's design into a backlog of small, testable stories and commits them.
 when_to_use: When the user asks to "turn the design into stories", "write the backlog", "sort the design", or runs /accio:sort, in a repo with .accio/design.md. Not for designing (wand), planning an iteration (prophecy), building (/accio:brew) or reviewing a build (owl).
-allowed-tools: Read, Glob, Agent, Bash(${CLAUDE_PLUGIN_ROOT}/bin/accio-board new), Bash(${CLAUDE_PLUGIN_ROOT}/bin/accio-board record *), Bash(${CLAUDE_PLUGIN_ROOT}/bin/accio-score *)
+allowed-tools: Read, Glob, Agent, Bash(${CLAUDE_PLUGIN_ROOT}/bin/accio-board new), Bash(${CLAUDE_PLUGIN_ROOT}/bin/accio-board record), Bash(${CLAUDE_PLUGIN_ROOT}/bin/accio-board record *), Bash(${CLAUDE_PLUGIN_ROOT}/bin/accio-score *)
 ---
 
 # sort: from the design to stories
@@ -40,8 +40,8 @@ Add the IDs it names and score them as in step 3. Don't check a second time; fin
 summary. A question this fix raises is asked as above before step 5.
 
 ## 5. Record
-Run `accio-board record <each story file in the list>`. It checks every story (ids, dependencies, no cycles), regenerates the board and commits those files. If it
-refuses:
+Run `accio-board record <each story file in the list>`. It checks every story (ids, dependencies, no cycles), regenerates the board and commits those files. If the design note led to no new story, run `accio-board record` with no files: it
+only empties `run/unsorted.json`, so `/accio` moves on. If it refuses:
 - a build is running: the stories are written but not committed; give the exact `record` command to run after it
 - "record takes story files in …": your list is wrong; fix it and record again
 - a story problem in one of this run's files: call quill once ("Fix: <message>") and record again; if it still

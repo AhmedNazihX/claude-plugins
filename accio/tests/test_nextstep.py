@@ -180,6 +180,18 @@ class UnsortedTest(unittest.TestCase):
         self.assertEqual(self.headings(), [])
         self.assertEqual(self.step(), "prophecy")
 
+    def test_S_077_1_record_with_no_story_files_empties_the_file_and_commits_nothing(self):
+        write(self.accio / "design.md", DESIGN_ONE)
+        write(self.accio / "stories" / "S-001.md", story_text("S-001", "done"))
+        self.board("record-design")
+        self.assertEqual(self.step(), "sort")
+        before = subprocess.run(["git", "rev-parse", "HEAD"], cwd=self.repo, capture_output=True, text=True).stdout
+        self.board("record")
+        after = subprocess.run(["git", "rev-parse", "HEAD"], cwd=self.repo, capture_output=True, text=True).stdout
+        self.assertEqual(before, after)
+        self.assertEqual(self.headings(), [])
+        self.assertNotEqual(self.step(), "sort")
+
     def test_S_060_5_a_missing_or_unreadable_file_changes_nothing(self):
         write(self.accio / "design.md", DESIGN_ONE)
         write(self.accio / "stories" / "S-001.md", story_text("S-001", "done"))
