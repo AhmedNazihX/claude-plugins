@@ -17,7 +17,7 @@ script exits with an `accio-…:` error, say it in plain words and stop: nothing
 1. `accio-hooks verify`. A missing, broken or switched-off hook, or an error from verify itself, becomes a question
    in step 2 (fix it as verify says, or carry on without that check); never stop on it. Any other note: one line.
 2. `accio-summary --latest` writes `.accio/run/owl.md`. If it says a build is running, say to review after it ends,
-   and stop. Read only owl.md: never reports, diffs or story files. With nothing to review, say so and stop.
+   and stop. Read only owl.md: never reports, diffs or story files. Nothing to review: say so and stop.
 
 ## 2. Ask for one batch answer
 Show owl.md as it is, then ask for everything in one message, as `${CLAUDE_SKILL_DIR}/references/batch-answer.md`
@@ -38,7 +38,8 @@ pre-commit framework it prints a snippet: show it to paste. Then run `accio-owl 
 `--accept <ID>`, `--reject <ID> '<reason>'`, `--drop <ID> '<reason>'`, `--answer <ID> '<text>'`, and for an override
 `--allow-once <ID> '<command>'`, `--allow <ID> '<command>'` (from now on) or `--answer <ID> 'no: find another way
 than <command>'`. An allowed command answers its story. Push is not a flag (step 6). If check refuses (for example
-"S-002 is built on S-001"), say it in plain words, ask only about that story, and check again.
+"S-002 is built on S-001"), say it in plain words, ask only about that story, and check again. If it says an answer
+names a file outside the story's files, add `--widen <ID> <path>` or reword the answer.
 
 ## 4. Merge what was accepted
 If anything was accepted, run `accio-merge <N> <IDs>`, N being the highest number in `.accio/iterations/<N>.md` and
@@ -67,14 +68,13 @@ happened" line you are about to report. When `prev` is `null`, tell howler there
 End in the report format:
 
 ```
-What happened: <merged k, sent back m, dropped d, answered q; pushed or not; any accepted story not merged>
+What happened: <merged k, sent back m, dropped d, answered q; pushed or not; any accepted story not merged; any widening, as "S-088 widened by src/a.py">
 What I need from you: <nothing | the fix for an error or leftover | type /accio:prophecy for the next iteration>
 My recommendation: <one line>
 ```
 
 If the user asked to build the answered stories now, the second line says to type `/accio:brew`.
-
-When ARGUMENTS says `driven`, `/accio` is driving: the
-second line says `next: prophecy (accio carries on)`; with only READY stories in owl.md (no question, no hook
-problem) skip step 2: accept all, run steps 3-5, report the accepts in one line; never reject or drop for the user.
-Push (step 6), `needs_user` and failed merges stay stops. With no `driven` argument this skill runs alone: keep every question, step 2 and its ending.
+When ARGUMENTS says `driven`, `/accio` is driving: the second line says `next: prophecy (accio carries on)`; with
+only READY stories in owl.md (no question, no hook problem) skip step 2: accept all, run steps 3-5, report the accepts
+in one line; never reject or drop for the user. Push (step 6), `needs_user` and failed merges stay stops. With no
+`driven` argument this skill runs alone: keep every question, step 2 and its ending.

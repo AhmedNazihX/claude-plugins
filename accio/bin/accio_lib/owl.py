@@ -5,6 +5,11 @@
   (`--allow` from now on, for every story; `--allow-once` for that story's next build only), which answers it too. A story is accepted only with
   each parent it is built on (done, or accepted too). Reasons fit on one line; commands must parse. The accepted
   stories come back in merge order.
+- **paths (S-075):** a repo path in a reject reason or an answer (backticked or bare, with a `/` or a known source
+  extension; a file that doesn't exist yet counts when its folder does) outside that story's `files:` (judged as
+  prefect judges it: a folder entry covers what is under it, a test area is free) makes check refuse, unless
+  `--widen <ID> <path>` names it. Close adds each widened path to the story's `files:`. Only a story with a reject or an
+  answer can be widened.
 - **close** (after `accio-merge`, on the base branch): merged → done, each merged story's parents merged or done.
   Rejected → Ready with the reason in its Review notes and its ledger entries cleared; a merge culprit likewise, with
   the failure. Each story stacked on one of those goes back to Ready too. Dropped → `dropped` with the reason, its
@@ -23,7 +28,7 @@ import re
 import shlex
 import subprocess
 
-from accio_lib import board, ledger, merge, paths, plan, pushguard, runlock, storyfiles
+from accio_lib import board, checks, globs, ledger, merge, paths, plan, pushguard, runlock, storyfiles
 
 COMMIT_MESSAGE = "chore(accio): iteration {number} review"
 PUSH_TOKEN = pushguard.TOKEN_NAME
@@ -46,6 +51,7 @@ class Answers:
     answer: tuple = ()
     allow: tuple = ()  # (id, command) pairs
     allow_once: tuple = ()
+    widen: tuple = ()  # (id, path) pairs: a path added to that story's `files:`
 
 
 def _state(status):
@@ -99,18 +105,84 @@ def _check_text(answers):
             raise OwlError(f"the command allowed for {sid} can't be read as a command: {command!r}")
 
 
+SOURCE_EXTENSIONS = frozenset("py js mjs cjs ts tsx jsx swift kt java go rs rb sh md json yml yaml toml html css c h cpp "
+                               "m mm sql txt plist".split())
+WORD = re.compile(r"[^\s`'\"()\[\]<>{},;]+")
+LOCATION = re.compile(r"(:\d+.*|::.*)$")
+TRAILING = ".:!?*"
+
+
+def _candidate(root, word):
+    """The repo-relative path a word names, or None: it has a `/` or a source extension, stays inside the repo, and
+    exists or has its folder."""
+    word = LOCATION.sub("", word.rstrip(TRAILING)).removeprefix("./").rstrip("/")
+    name = word.rsplit("/", 1)[-1]
+    if not word or "://" in word or word.startswith(("/", "~", "-")) or ".." in word.split("/"):
+        return None
+    if "/" not in word and name.rpartition(".")[2].lower() not in SOURCE_EXTENSIONS:
+        return None
+    target = pathlib.Path(root) / word
+    return word if target.exists() or target.parent.is_dir() else None
+
+
+def answer_paths(root, text):
+    """The repo paths a reject reason or answer names, in order, once each."""
+    return list(dict.fromkeys(path for word in WORD.findall(text) if (path := _candidate(root, word))))
+
+
+def _check_widen(stories, status, answers, verdicts):
+    for sid, path in answers.widen:
+        if not path.strip() or CONTROL.search(path) or path.startswith(("/", "~")) or ".." in path.split("/"):
+            raise OwlError(f"--widen {sid} {path!r}: give a path inside the repo, such as src/app.py or src/")
+        if sid not in stories:
+            raise OwlError(f"--widen {sid}: there is no story {sid}")
+        if verdicts.get(sid) not in ("reject", "answer"):
+            here = f"{verdicts[sid]} here" if sid in verdicts else "not in this review"
+            raise OwlError(f"--widen {sid} {path}: only a story rejected or answered at this review can be widened "
+                           f"({sid} is {_state(status[sid])}, {here})")
+
+
+def _check_paths(stories, answers, root):
+    """Refuse a reject reason or answer that sends the builder to a file its story may not touch."""
+    widened = {}
+    for sid, path in answers.widen:
+        widened.setdefault(sid, []).append(path.removeprefix("./"))
+    for sid, text in (*answers.reject, *answers.answer):
+        allowed = [*stories[sid].meta.get("files", ()), *widened.get(sid, ())]
+        outside = [path for path in answer_paths(root, text)
+                   if not checks.in_test_area(path) and not globs.matches_any(path, allowed)]
+        if outside:
+            names = ", ".join(f"`{path}`" for path in outside)
+            flags = " ".join(f"--widen {sid} {path}" for path in outside)
+            raise OwlError(f"the answer for {sid} names {names}, outside {sid}'s files, so its builder would be "
+                           f"stopped as out of bounds. Add them with {flags}, or reword the answer")
+
+
+def _widened_files(stories, answers):
+    """{story id: new `files:` value} for the stories widened, paths already covered left out."""
+    added = {}
+    for sid, path in answers.widen:
+        path = path.removeprefix("./")
+        current = [*stories[sid].meta.get("files", ()), *added.get(sid, ())]
+        if not globs.matches_any(path, current):
+            added.setdefault(sid, []).append(path)
+    return {sid: f"[{', '.join([*stories[sid].meta.get('files', ()), *new])}]" for sid, new in added.items()}
+
+
 def _sent_back(stories, status, answers):
     gone = [sid for sid, _ in answers.reject + answers.drop]
     return {sid for sid in _children(stories, gone) if status[sid] in SENT_BACK_FROM}
 
 
-def check(stories, status, answers):
-    """The accepted stories in merge order; raises OwlError naming what is wrong."""
+def check(stories, status, answers, root=None):
+    """The accepted stories in merge order; raises OwlError naming what is wrong. With `root` (the repo), the paths
+    the answers name are checked against the stories' files."""
     verdicts = _verdicts(answers)
     _check_text(answers)
     unknown = [sid for sid in verdicts if sid not in stories]
     if unknown:
         raise OwlError(f"there is no story {', '.join(unknown)}")
+    _check_widen(stories, status, answers, verdicts)
     for sid, kind in verdicts.items():
         if kind in ("accept", "reject") and status[sid] != "review":
             raise OwlError(f"{sid} is {_state(status[sid])}: only a story in review is accepted or rejected")
@@ -129,6 +201,8 @@ def check(stories, status, answers):
     if undecided:
         raise OwlError(f"these stories in review have no answer yet: {', '.join(undecided)} (accept, reject or drop "
                        "each)")
+    if root is not None:
+        _check_paths(stories, answers, root)
     return merge.merge_order(stories, status, tuple(answers.accept))
 
 
@@ -192,8 +266,8 @@ def _escaped(text):
     return "\n".join(HEADING.sub(r"\1\\#", line) for line in text.splitlines())
 
 
-def _story_text(parsed, new_status, note, question, answered, dropped):
-    fields = {"status": new_status, **({"dropped": dropped} if dropped else {})}
+def _story_text(parsed, new_status, note, question, answered, dropped, files=None):
+    fields = {"status": new_status, **({"dropped": dropped} if dropped else {}), **({"files": files} if files else {})}
     text = storyfiles.with_fields(parsed.path, fields)
     if note:
         text = storyfiles.with_section(text, "Review notes", f"- {_escaped(note)}", append=True)
@@ -400,13 +474,13 @@ def _remove_worktree(root, sid):
 
 def _texts(accio, stories, status, answers, outcomes, number, extra=()):
     run_dir = board.run_dir(accio)
-    answered, dropped = _answered(answers), dict(answers.drop)
+    answered, dropped, widened = _answered(answers), dict(answers.drop), _widened_files(stories, answers)
     texts = {}
     for sid, (new_status, _, note, _) in outcomes.items():
         kept = status[sid] == "blocked" and (new_status == "blocked" or sid in answered)
         question = _question(run_dir, sid) if kept else ""
         texts[stories[sid].path] = _story_text(stories[sid], new_status, note, question, answered.get(sid, []),
-                                               dropped.get(sid))
+                                               dropped.get(sid), widened.get(sid))
     if number is not None:
         iteration = accio / plan.ITERATIONS / f"{number}.md"
         texts[iteration] = _log_text(accio, stories, _iteration_text(iteration, outcomes), extra)
@@ -469,7 +543,7 @@ def close(accio, answers, base, merged=(), culprit=None, lines=()):
     _on_base(accio.parent, base)
     stories = board.load_stories(accio)
     status = board.statuses(stories, board.read_overrides(accio))
-    accepted = check(stories, status, answers)
+    accepted = check(stories, status, answers, accio.parent)
     _check_merge(stories, status, accepted, tuple(merged), culprit)
     iterations = plan.iterations(accio)
     number = iterations[-1][0] if iterations else None

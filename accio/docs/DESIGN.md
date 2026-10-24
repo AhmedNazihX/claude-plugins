@@ -341,7 +341,7 @@ script's absolute path.
 | `accio-hooks` | install (with chaining), `verify`, `run <hook>`, uninstall |
 | `accio-summary` | reports and cost data → `run/owl.md` for the review; `--latest` finds this repo's brew runs since the iteration was planned |
 | `accio-vow` | `next` (the next decision record's number and path), `record` (check its number and sections, commit it alone) |
-| `accio-owl` | owl's batch answer: `check` it, `close` the iteration after `accio-merge` (story files, outcome, board, `agent_allow`, one commit), `push-ok` (the token, never during a build) |
+| `accio-owl` | owl's batch answer: `check` it, `close` the iteration after `accio-merge` (story files, outcome, board, `agent_allow`, one commit), `push-ok` (the token, never during a build). A repo path in a `--reject` or `--answer` text outside that story's `files:` makes `check` refuse; `--widen <ID> <path>` accepts it and `close` adds it to the story's `files:` (S-075) |
 
 ### 4.7 Output style (v1.1)
 `output-styles/plain.md` holds the plain-words rule for users who want it always on.
