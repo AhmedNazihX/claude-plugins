@@ -205,6 +205,21 @@ test('S-070/1 every accio-preview command brew gives prefect is one curfew lets 
   for (const args of commands) assert.ok(prefectMayRun(args), args)
 })
 
+test('S-069/2 a story whose diff touches an evidence file skips mad-eye before any steps or evidence, and is still READY', async () => {
+  const files = ['app/WalkMode.swift', 'scripts/capture.sh']
+  const { result, calls } = await run({ 'evidence-plan': async () => ({ ...PLAN, evidence_files: files }) })
+  assert.deepEqual(steps(calls, 'S-001').slice(-3), ['professor', 'evidence-plan', 'outcome'])
+  assert.match(result, /S-001 Story S-001\s+READY/)
+  assert.ok(result.includes('mad-eye skipped: the story changes how its evidence is made (app/WalkMode.swift, scripts/capture.sh); a person should look'), result)
+})
+
+test('S-069/3 a plan with no evidence files runs the evidence step as in S-068', async () => {
+  for (const plan of [{ ...PLAN, evidence_files: [] }, PLAN]) {
+    const { calls } = await run({ 'evidence-plan': async () => plan })
+    assert.deepEqual(steps(calls, 'S-001').slice(-5), EVIDENCE_WALK.concat('outcome'))
+  }
+})
+
 test('S-068/7 a command that takes over the screen never runs: mad-eye is skipped with a note saying why', async () => {
   const { result, calls } = await run({ 'evidence-plan': async () => ({ ...PLAN, takes_over_screen: true }) })
   assert.deepEqual(steps(calls, 'S-001').slice(-3), ['professor', 'evidence-plan', 'outcome'])

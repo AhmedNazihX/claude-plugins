@@ -27,15 +27,19 @@ STEPS_SUM = re.compile(r"[0-9a-f]{8}")
 
 
 def _evidence(args, root, accio):
-    settings = config.load(accio)["ui_evidence"]
+    whole = config.load(accio)
+    settings, base = whole["ui_evidence"], whole["base_branch"]
+    worktree = paths.worktree_root(root) / args.story_id
     if args.action == "evidence-plan":
-        return preview.evidence_plan(settings)
+        if settings is None:
+            return preview.evidence_plan(None)
+        touched, problem = preview.evidence_files(accio / "run", worktree, args.story_id, settings, base)
+        return preview.evidence_plan(settings, touched, problem)
     if not args.head or not COMMIT.fullmatch(args.head):
         raise preview.PreviewError("evidence needs --head <the story's head commit>")
     if args.steps_sum is not None and not STEPS_SUM.fullmatch(args.steps_sum):
         raise preview.PreviewError(f"--steps-sum must be 8 lowercase hex digits, got {args.steps_sum}")
-    worktree = paths.worktree_root(root) / args.story_id
-    return preview.evidence(accio / "run", worktree, args.story_id, settings, args.head, args.steps_sum)
+    return preview.evidence(accio / "run", worktree, args.story_id, settings, args.head, args.steps_sum, base)
 
 
 def main(argv=None):

@@ -120,7 +120,7 @@ def _check_preview(value):
     return f"preview {problem}" if problem else None
 
 
-EVIDENCE_REQUIRED = ("command", "steps_doc", "takes_over_screen")
+EVIDENCE_REQUIRED = ("command", "steps_doc", "takes_over_screen", "evidence_globs")
 EVIDENCE_KEYS = {*EVIDENCE_REQUIRED, "themes", "timeout"}
 EVIDENCE_PLACEHOLDERS = ("{steps}", "{folder}")
 PREFECT_BASH_LIMIT = 600  # seconds: prefect runs the evidence command, and its Bash tool stops there
@@ -144,6 +144,9 @@ def _check_evidence_values(value):
         return f"command must contain {' and '.join(missing)}: accio fills in the steps file and the evidence folder"
     if not isinstance(value["takes_over_screen"], bool):
         return "takes_over_screen must be true or false"
+    if not _strings(value["evidence_globs"]):
+        return ("evidence_globs must be a list of glob strings: the files that make the evidence (its walk mode and "
+                "window capture); [] means none")
     if "themes" in value and not _strings(value["themes"]):
         return 'themes must be a list of theme names, like ["light", "dark"]'
     if "timeout" in value and _positive_int(value["timeout"]):
@@ -158,7 +161,7 @@ def _check_ui_evidence(value):
     if value is None:
         return None
     shape = ('must be {"command": "<makes screenshots, with {steps} and {folder}>", "steps_doc": "<repo file>", '
-             '"takes_over_screen": false}')
+             '"takes_over_screen": false, "evidence_globs": ["<files that make the evidence>"]}')
     if not isinstance(value, dict):
         return shape
     unknown = sorted(set(value) - EVIDENCE_KEYS)
