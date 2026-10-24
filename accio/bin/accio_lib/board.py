@@ -140,7 +140,7 @@ def resume_point(main, accio, story_id, base_branch):
     from accio_lib import checks  # checks imports merge, which imports this module
     branch = f"refs/heads/story/{story_id}"
     worktree = paths.worktree_root(main) / story_id
-    recorded = checks.trusted_base(run_dir(accio) / story_id, worktree) if worktree.is_dir() else None
+    recorded = checks.trusted_base(run_dir(accio) / story_id, worktree, base_branch) if worktree.is_dir() else None
     base = recorded or _git_ok(main, "merge-base", base_branch, branch)
     count = _git_ok(main, "rev-list", "--count", f"{base}..{branch}") if base else None
     return "check" if count and int(count) > 0 else "prepare"

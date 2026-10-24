@@ -26,8 +26,9 @@ Scripts, not a model, decide these, so an agent's claim never does:
   **Limit:** the snapshot file lives in `.accio/run/` too, so code the story runs could rewrite it; like curfew
   (DESIGN § 6), this catches mistakes and leaves a trail, not a determined agent.
 - **diff start:** the base `accio-brief` recorded for the story (its parent's head when stacked), when it is a full
-  commit id and an ancestor of the story's HEAD; never a caller's choice, and the same one `accio-ledger key` uses;
-  the merge-base with the base branch otherwise.
+  commit id, an ancestor of the story's HEAD, and an ancestor of the base branch or of a dep's story branch (so never
+  a commit only the story's own branch has, S-072); never a caller's choice, and the same one `accio-ledger key`
+  uses; the merge-base with the base branch otherwise.
 - **test audit (decision 011, option A):** with `mutation.command` in config.json, the story's diff goes to
   `run/<ID>/story.diff` and the command runs in the worktree with `{diff}` replaced by that file's path, within what
   is left of the time budget. The tool mutates only the changed lines (natively, like `cargo mutants --in-diff`, or
@@ -44,7 +45,7 @@ import shlex
 import subprocess
 import time
 
-from accio_lib import brief, globs, merge
+from accio_lib import brief, globs, merge, story
 
 TEST_FOLDERS = frozenset({"test", "tests", "__tests__", "spec", "specs", "__snapshots__", "testdata", "fixtures",
                           "e2e", "cypress"})
@@ -166,20 +167,46 @@ def test_texts(worktree):
     return texts
 
 
-def trusted_base(run_dir, worktree):
-    """The base accio-brief recorded, when it is a full commit id and an ancestor of the story's HEAD; else None
-    (the run folder is reachable from code the story runs, so the record is checked, not trusted)."""
-    recorded = brief.recorded_base(run_dir)
-    if not recorded or not COMMIT_ID.fullmatch(recorded):
-        return None
-    result = subprocess.run(["git", "merge-base", "--is-ancestor", recorded, "HEAD"], cwd=worktree,
+def _is_ancestor(worktree, commit, rev):
+    result = subprocess.run(["git", "merge-base", "--is-ancestor", commit, rev], cwd=worktree,
                             capture_output=True, check=False)
-    return recorded if result.returncode == 0 else None
+    return result.returncode == 0
+
+
+def _story_deps(run_dir):
+    """The story's deps from its file in the main checkout (`.accio/stories/<ID>.md`); () when it can't be read."""
+    path = pathlib.Path(run_dir).parent.parent / "stories" / f"{pathlib.Path(run_dir).name}.md"
+    try:
+        return tuple(story.parse(path).meta.get("deps", ()))
+    except story.StoryError:
+        return ()
+
+
+def _allowed_starts(run_dir, base_branch):
+    """The branches a story's diff may start on: the base branch, and each dep's story branch (a stacked parent)."""
+    return (base_branch, *(f"refs/heads/{brief.branch_name(dep)}" for dep in _story_deps(run_dir)))
+
+
+def trusted_base(run_dir, worktree, base_branch):
+    """The base accio-brief recorded, when it is a full commit id, an ancestor of the story's HEAD, and an ancestor of
+    the base branch or of a dep's story branch (a stacked story's parent); else None.
+
+    The run folder is reachable from code the story runs, so the record is checked, not trusted. Being an ancestor of
+    HEAD alone isn't enough: HEAD, or any commit the story made, is one too, and would shorten the diff (S-072). The
+    main snapshot also lists a write to `run/<ID>/base`, but only up to `accio-check`, and its own file lives in the
+    run folder too; this check asks git, not a file. Limit: code that moves the base branch or a dep's branch still
+    passes it (a moved base branch shows in the snapshot's `git refs`; story branches are not watched)."""
+    recorded = brief.recorded_base(run_dir)
+    if not recorded or not COMMIT_ID.fullmatch(recorded) or not _is_ancestor(worktree, recorded, "HEAD"):
+        return None
+    allowed = any(_is_ancestor(worktree, recorded, rev) for rev in _allowed_starts(run_dir, base_branch))
+    return recorded if allowed else None
 
 
 def diff_start(run_dir, worktree, base_branch):
     """Where the story's diff starts: the trusted recorded base, else the merge-base with the base branch."""
-    return trusted_base(run_dir, worktree) or _git(worktree, "merge-base", base_branch, "HEAD").decode().strip()
+    return (trusted_base(run_dir, worktree, base_branch)
+            or _git(worktree, "merge-base", base_branch, "HEAD").decode().strip())
 
 
 # --- the main checkout ---------------------------------------------------------------------------------------------

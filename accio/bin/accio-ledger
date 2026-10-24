@@ -26,7 +26,8 @@ def cmd_key(args):
     parsed = story.parse(args.story)
     accio, _ = _run_dir(args.story.resolve().parent)
     settings = config.load(accio)
-    recorded = checks.trusted_base(accio / "run" / parsed.meta["id"], args.worktree)  # the same as accio-check
+    recorded = checks.trusted_base(accio / "run" / parsed.meta["id"], args.worktree,
+                                   settings["base_branch"])  # the same as accio-check
     start = recorded or ledger.diff_base(args.worktree, settings["base_branch"], args.parent)
     work = ledger.work_digest(args.worktree, start)
     print(ledger.key(work, settings["checks"], ledger.panel_id(args.panel, parsed, settings["risky_paths"]), parsed))
