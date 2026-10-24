@@ -4,9 +4,14 @@
 answers. One preview runs at a time, because they share a port: it holds `run/preview.lock` until `stop`, and a
 second `start` waits for it. `stop` kills the group and then whatever still listens on the URL's port, so it works
 after a `start` that crashed too. A lock whose owner process is gone is stale and is replaced.
+
+`evidence` is a native app's stand-in for a preview (S-068): it runs `ui_evidence.command` once on mad-eye's steps
+file and leaves screenshots for mad-eye to judge (see the section at the end).
 """
 import json
 import os
+import shlex
+import shutil
 import signal
 import subprocess
 import time
@@ -263,3 +268,127 @@ def _stop_locked(run_dir, story_id, settings):
         _free_port(url)  # the port is another story's while it holds the lock
     _clear(run_dir, story_id)
     return True
+
+
+# --- ui_evidence: screenshots of a native app's real window (S-068) ------------------------------------------------
+# mad-eye writes a steps file, accio writes it to run/<ID>/ui-steps.txt, and `evidence` runs the project's command on
+# it in the story's worktree. The folder is accio's own, emptied first, so nothing the builder left there counts; the
+# stamp ties what the command made to the commit it ran on. Every problem is a skip with its reason, never a block.
+
+EVIDENCE_FOLDER = "ui-evidence"
+STEPS_NAME = "ui-steps.txt"
+STAMP_NAME = "ui-evidence.head"
+EVIDENCE_LOG = "ui-evidence.log"
+DEFAULT_EVIDENCE_TIMEOUT = 600  # seconds
+PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
+TAKES_OVER = ("ui_evidence.takes_over_screen is true: its command takes over the screen (mouse, keyboard or focus), "
+              "so it can't run in an unattended build")
+
+
+def evidence_plan(settings):
+    """What the workflow needs to know before it asks mad-eye for steps."""
+    if settings is None:
+        return {"ui_evidence": False}
+    return {"ui_evidence": True, "takes_over_screen": settings["takes_over_screen"],
+            "steps_doc": settings["steps_doc"], "themes": list(settings.get("themes", []))}
+
+
+def _skip(reason):
+    return {"skipped": True, "reason": reason}
+
+
+def _fresh_folder(story_dir):
+    """Empty the evidence folder and remove the old stamp."""
+    folder = story_dir / EVIDENCE_FOLDER
+    if folder.is_symlink() or folder.is_file():
+        folder.unlink()
+    elif folder.exists():
+        shutil.rmtree(folder)
+    folder.mkdir(parents=True)
+    (story_dir / STAMP_NAME).unlink(missing_ok=True)
+    return folder
+
+
+def _fill(command, steps, folder):
+    return command.replace("{steps}", shlex.quote(str(steps))).replace("{folder}", shlex.quote(str(folder)))
+
+
+def _run_command(settings, worktree, steps, folder, log_path):
+    """Run the filled-in command in the worktree; '' when it exited 0, else why not."""
+    timeout = settings.get("timeout", DEFAULT_EVIDENCE_TIMEOUT)
+    see_log = f"see {log_path}"
+    try:
+        with open(log_path, "wb") as log:
+            process = subprocess.Popen(_fill(settings["command"], steps, folder), shell=True, cwd=worktree,
+                                       start_new_session=True, stdin=subprocess.DEVNULL, stdout=log,
+                                       stderr=subprocess.STDOUT)
+    except OSError as error:
+        return f"the evidence command could not start: {error}"
+    try:
+        code = process.wait(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        code = None
+    _kill_group(process.pid)  # the app it opened, or what is left after a timeout
+    process.wait()
+    if code is None:
+        return f"the evidence command ran past its timeout of {timeout}s and was stopped ({see_log})"
+    return f"the evidence command exited with {code} ({see_log})" if code else ""
+
+
+def _is_png(path):
+    try:
+        with open(path, "rb") as handle:
+            return handle.read(len(PNG_SIGNATURE)) == PNG_SIGNATURE
+    except OSError:
+        return False
+
+
+def _screenshots(folder):
+    return [path for path in folder.rglob("*") if path.suffix.lower() == ".png" and path.is_file() and _is_png(path)]
+
+
+def _write_stamp(story_dir, worktree):
+    """Write the worktree's head commit as the evidence stamp; no stamp when git can't say."""
+    result = subprocess.run(["git", "rev-parse", "HEAD"], cwd=worktree, capture_output=True, text=True, check=False)
+    head = result.stdout.strip()
+    if result.returncode == 0 and head:
+        (story_dir / STAMP_NAME).write_text(head + "\n", encoding="utf-8")
+
+
+def stamp_problem(run_dir, story_id, head):
+    """'' when run/<ID>/ui-evidence.head names `head`, else why the evidence is refused (both commits named)."""
+    try:
+        stamped = (run_dir / story_id / STAMP_NAME).read_text(encoding="utf-8").strip()
+    except (OSError, UnicodeDecodeError):
+        stamped = ""
+    if not stamped:
+        return f"the evidence stamp {STAMP_NAME} is missing (none), so it is refused: the story's head is {head[:12]}"
+    if stamped != head:
+        return f"the evidence is of commit {stamped[:12]} but the story's head is {head[:12]}, so it is refused"
+    return ""
+
+
+def evidence(run_dir, worktree, story_id, settings, head):
+    """Run `ui_evidence.command` on the steps file; {ok, folder, head, screenshots} or {skipped, reason}."""
+    if settings is None:
+        return _skip("config.json has no `ui_evidence`")
+    if settings["takes_over_screen"]:
+        return _skip(TAKES_OVER)
+    if not worktree.is_dir():
+        return _skip(f"no worktree for {story_id} at {worktree}")
+    story_dir = run_dir / story_id
+    steps = story_dir / STEPS_NAME
+    if not steps.is_file():
+        return _skip(f"no steps file at {steps}: mad-eye's steps were not written")
+    folder = _fresh_folder(story_dir)
+    problem = _run_command(settings, worktree, steps, folder, story_dir / EVIDENCE_LOG)
+    if problem:
+        return _skip(problem)
+    shots = _screenshots(folder)
+    if not shots:
+        return _skip(f"the evidence command left no PNG screenshots in {folder}")
+    _write_stamp(story_dir, worktree)
+    problem = stamp_problem(run_dir, story_id, head)
+    if problem:
+        return _skip(problem)
+    return {"ok": True, "folder": str(folder), "head": head, "screenshots": len(shots)}

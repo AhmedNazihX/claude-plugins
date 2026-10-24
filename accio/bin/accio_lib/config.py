@@ -22,6 +22,7 @@ DEFAULTS = freeze({
     "preview": None,
     "breaker": None,
     "ui_globs": [],
+    "ui_evidence": None,
 })
 
 
@@ -119,6 +120,51 @@ def _check_preview(value):
     return f"preview {problem}" if problem else None
 
 
+EVIDENCE_REQUIRED = ("command", "steps_doc", "takes_over_screen")
+EVIDENCE_KEYS = {*EVIDENCE_REQUIRED, "themes", "timeout"}
+EVIDENCE_PLACEHOLDERS = ("{steps}", "{folder}")
+
+
+def _check_steps_doc(value):
+    if not isinstance(value, str) or not value.strip():
+        return "steps_doc must be the repo file that documents the steps, like docs/ui-walk.md"
+    if value.startswith("/") or ".." in value.split("/"):
+        return "steps_doc must be a path inside the repo, like docs/ui-walk.md"
+    return None
+
+
+def _check_evidence_values(value):
+    command = value["command"]
+    if not isinstance(command, str) or not command.strip():
+        return "command must be the command that makes the screenshots, with {steps} and {folder}"
+    missing = [mark for mark in EVIDENCE_PLACEHOLDERS if mark not in command]
+    if missing:
+        return f"command must contain {' and '.join(missing)}: accio fills in the steps file and the evidence folder"
+    if not isinstance(value["takes_over_screen"], bool):
+        return "takes_over_screen must be true or false"
+    if "themes" in value and not _strings(value["themes"]):
+        return 'themes must be a list of theme names, like ["light", "dark"]'
+    if "timeout" in value and _positive_int(value["timeout"]):
+        return "timeout must be a whole number of seconds, 1 or more"
+    return _check_steps_doc(value["steps_doc"])
+
+
+def _check_ui_evidence(value):
+    if value is None:
+        return None
+    shape = ('must be {"command": "<makes screenshots, with {steps} and {folder}>", "steps_doc": "<repo file>", '
+             '"takes_over_screen": false}')
+    if not isinstance(value, dict):
+        return shape
+    unknown = sorted(set(value) - EVIDENCE_KEYS)
+    if unknown:
+        return f"has unknown keys {', '.join(unknown)}; known keys are {', '.join(sorted(EVIDENCE_KEYS))}"
+    missing = [key for key in EVIDENCE_REQUIRED if key not in value]
+    if missing:
+        return f"lacks {', '.join(missing)}: it {shape}"
+    return _check_evidence_values(value)
+
+
 CHECKERS = {
     "base_branch": lambda v: None if isinstance(v, str) and v.strip() else "must be a branch name",
     "push_mode": lambda v: None if v in PUSH_MODES else f"must be one of {', '.join(PUSH_MODES)} (\"pr\" comes in v2)",
@@ -136,6 +182,7 @@ CHECKERS = {
     "preview": _check_preview,
     "breaker": _check_breaker,
     "ui_globs": lambda v: None if _strings(v) else "must be a list of glob strings",
+    "ui_evidence": _check_ui_evidence,
 }
 
 
@@ -164,5 +211,8 @@ def load(accio_dir):
         problem = CHECKERS[key](value)
         if problem:
             raise ConfigError(f"{path}: {key} {problem}")
+    if data.get("preview") is not None and data.get("ui_evidence") is not None:
+        raise ConfigError(f"{path}: preview and ui_evidence are both set; set one (preview for a web app, "
+                          "ui_evidence for a native app)")
     budgets = {**DEFAULTS["budgets"], **data.get("budgets", {})}
     return freeze({**DEFAULTS, **data, "budgets": budgets})

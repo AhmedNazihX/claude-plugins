@@ -28,6 +28,7 @@ export const meta = {
 // prefect running `accio-break <ID> verify` (S-043; see "boggart" below).
 // After boggart, a story whose diff touches `ui_globs` (and whose config has a `preview` with `test_data: true`) goes to
 // mad-eye between `accio-preview <ID> start` and `stop`; its findings go to a fix round (S-047; see "mad-eye" below).
+// With `ui_evidence` instead (a native app), mad-eye judges screenshots from `accio-preview <ID> evidence` (S-068).
 // Every label starts with the story id: accio-cost ties usage to stories by it.
 
 const DEFAULT_WIP = 3  // used only when the load reply carries no usable wip
@@ -593,11 +594,94 @@ function seenOutcome(reply) {
   return Array.isArray(reply.findings) && reply.findings.length ? { findings: reply.findings } : {}
 }
 
-// Why a story that touches the UI can't be walked, from the whole story's package flags; '' when it can.
-function uiSkip(whole) {
-  if (!whole.preview) return 'config.json has no `preview`'
-  if (!whole.test_data) return 'config.json preview has no `"test_data": true`'
-  return ''
+// --- mad-eye on a native app: screenshots `ui_evidence` makes (S-068) -------------------------------------------
+// With no web `preview`, prefect reads `ui_evidence` (`accio-preview <ID> evidence-plan`). mad-eye writes a steps file
+// with Read only, prefect writes it unchanged to ui-steps.txt and runs `accio-preview <ID> evidence --head <head>`,
+// which runs the project's command in the worktree, counts the PNGs and stamps the head; then mad-eye judges the
+// screenshots with Read only. A command that takes over the screen never runs; every other problem is a skip note.
+
+const PLAN_SCHEMA = {
+  type: 'object',
+  properties: {
+    ui_evidence: { type: 'boolean' }, takes_over_screen: { type: 'boolean' }, steps_doc: { type: 'string' },
+    themes: { type: 'array', items: { type: 'string' } }, error: { type: 'string' },
+  },
+  required: ['ui_evidence'],  // a reply without it is retried, never read as false
+}
+const STEPS_SCHEMA = { type: 'object', properties: { steps: { type: 'string' }, error: { type: 'string' } } }
+const EVIDENCE_SCHEMA = {
+  type: 'object',
+  properties: {
+    ok: { type: 'boolean' }, skipped: { type: 'boolean' }, reason: { type: 'string' }, folder: { type: 'string' },
+    head: { type: 'string' }, screenshots: { type: 'integer' }, error: { type: 'string' },
+  },
+}
+const TAKES_OVER = "ui_evidence.takes_over_screen is true: its command takes over the screen, so it can't run in an unattended build"
+const stepsPath = (story) => `.accio/run/${story.id}/ui-steps.txt`
+const evidenceFolder = (story) => `.accio/run/${story.id}/ui-evidence/`
+const themesText = (plan) => (plan.themes && plan.themes.length
+  ? `in every theme the project names (${plan.themes.join(', ')})` : "in the app's default look")
+
+function evidencePlan(story) {
+  return callRetry(
+    `Step 4c, read the ui_evidence of story ${story.id}: run \`accio-preview ${story.id} evidence-plan\` and reply with ` +
+      'its JSON as it prints it, or {error} with what it printed if it fails.',
+    { agentType: PREFECT, model: 'haiku', schema: PLAN_SCHEMA, label: label(story, 'evidence-plan') })
+}
+
+function askSteps(story, pkg, plan, worktree) {
+  return call(
+    `Step 4c, evidence mode, pass 1: write the UI steps for story ${story.id}. Your review package: ${pkg.package}. ` +
+      `Use only Read. Read the steps vocabulary in ${worktree}/${plan.steps_doc} and write a steps file that shows ` +
+      `each DoD line a user can see, ${themesText(plan)}; for anything with a terminal always include resize, ` +
+      'minimize and restore, and tab switching. Reply {"steps": "<the file\'s text>"}.',
+    { agentType: MAD_EYE, model: REVIEW_MODEL, schema: STEPS_SCHEMA, label: label(story, 'mad-eye-steps') })
+}
+
+function runEvidence(story, steps, head) {
+  return callRetry(
+    `Step 4c, make the UI evidence of story ${story.id}. First, with the Write tool, write the value of this JSON ` +
+      `string, unchanged and nothing else, to ${stepsPath(story)} ${IN_MAIN}: ${JSON.stringify(steps)}. Then run ` +
+      `\`accio-preview ${story.id} evidence --head ${head}\` with the Bash tool's longest timeout (600000 ms) and reply ` +
+      'with its JSON as it prints it ({ok, folder, head, screenshots} or {skipped, reason}), or {error} with what it ' +
+      'printed if it fails.',
+    { agentType: PREFECT, model: 'haiku', schema: EVIDENCE_SCHEMA, label: label(story, 'evidence') })
+}
+
+function judgeEvidence(story, pkg, plan) {
+  return call(
+    `Step 4c, evidence mode, pass 2: judge story ${story.id} from its screenshots. Your review package: ` +
+      `${pkg.package}. The evidence folder, made by running your steps on the story's head: <your working folder>/` +
+      `${evidenceFolder(story)}. Use only Read: no browser tools. For each DoD line a user can see, look at its ` +
+      `screenshots ${themesText(plan)}, and the element dumps there when present, and cite one screenshot per line. ` +
+      'A screen that is missing, blank, garbled or wrong is a finding. Reply {findings}, each naming its screenshot.',
+    { agentType: MAD_EYE, model: REVIEW_MODEL, schema: SEEN_SCHEMA, label: label(story, 'mad-eye') })
+}
+
+// Steps, evidence, judgement. Returns {skip}, {findings} or {}, as walkAndStop does.
+async function lookAtEvidence(story, pkg, plan, worktree, head) {
+  const asked = await askSteps(story, pkg, plan, worktree)
+  if (failed(asked) || typeof asked.steps !== 'string' || !asked.steps.trim()) {
+    return { skip: `mad-eye wrote no steps (${(asked && asked.error) || 'no steps file text'})` }
+  }
+  const ran = await runEvidence(story, asked.steps, head)
+  if (failed(ran)) return { skip: `the evidence command did not run (${(ran && ran.error) || 'no answer'})` }
+  if (!ran.ok) return { skip: ran.reason || 'the evidence command made no evidence' }
+  if (ran.head !== head) return { skip: `the evidence is of commit ${ran.head || 'none'} but the story's head is ${head}, so it is refused` }
+  return seenOutcome(await judgeEvidence(story, pkg, plan))
+}
+
+// How mad-eye looks at a UI story: {skip: why} or {what, look(pkg, head)}. A web `preview` wins; else `ui_evidence`.
+async function lookingWay(story, worktree, whole) {
+  if (whole.preview) {
+    if (!whole.test_data) return { skip: 'config.json preview has no `"test_data": true`' }
+    return { what: 'preview', look: (pkg) => walkAndStop(story, pkg) }
+  }
+  const plan = await evidencePlan(story)
+  if (failed(plan)) return { skip: `reading ui_evidence failed (${(plan && plan.error) || 'no answer'})` }
+  if (!plan.ui_evidence) return { skip: 'config.json has no `preview` or `ui_evidence`' }
+  if (plan.takes_over_screen) return { skip: TAKES_OVER }
+  return { what: 'screenshots', look: (pkg, head) => lookAtEvidence(story, pkg, plan, worktree, head) }
 }
 
 // Preview up, mad-eye, preview down (also when mad-eye fails or throws). Returns {skip}, {findings} or {}.
@@ -614,18 +698,18 @@ async function walkAndStop(story, pkg) {
 // `state` is {fixes, ruling, head}: where boggart left the story. Returns a stop, or {fixes, ruling, head, note}.
 async function madEyeStage(story, worktree, model, state, whole) {
   if (!whole.ui) return state  // the diff touches no `ui_globs` file (or config has none)
-  const missing = uiSkip(whole)
-  if (missing) return { ...state, note: `mad-eye skipped: ${missing}` }
+  const way = await lookingWay(story, worktree, whole)
+  if (way.skip) return { ...state, note: `mad-eye skipped: ${way.skip}` }
   let pkg = whole
   if (state.fixes > 0) {  // a re-review package holds only a fix diff: mad-eye reads the whole story
     pkg = await packageFor(story, `${state.fixes}m`, null)
     if (pkg.stop) return { ...state, note: 'mad-eye did not run: its package failed' }
   }
-  const seen = await walkAndStop(story, pkg)
+  const seen = await way.look(pkg, state.head)
   if (seen.skip) return { ...state, note: `mad-eye skipped: ${seen.skip}` }
   if (!seen.findings) return state
   if (state.fixes >= MAX_FIX_ROUNDS) {
-    return stop(`mad-eye found problems in the preview after ${MAX_FIX_ROUNDS} fix rounds: ${JSON.stringify(seen.findings)}. ` +
+    return stop(`mad-eye found problems in the ${way.what} after ${MAX_FIX_ROUNDS} fix rounds: ${JSON.stringify(seen.findings)}. ` +
       'Fix them by hand, or change the story?')
   }
   const round = state.fixes + 1
