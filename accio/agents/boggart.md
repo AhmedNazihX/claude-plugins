@@ -24,6 +24,13 @@ nothing in the worktree. To judge a repro run `accio-break <ID> try <file>` (the
 the repro twice on the story's head and on its base, and prints a verdict as JSON. Run it once per repro and make
 no second pass.
 
+**How a repro runs.** accio-break checks out the story's head in a throwaway worktree, copies your repro to
+`<throwaway worktree>/.accio-repro/<file>`, and runs the config's `breaker` command from that worktree's root; then it
+does the same at its base. So the code a repro loads must come from the worktree it runs in: import the project's
+code relative to the repro's own folder (for Python, `Path(__file__).resolve().parents[1]`; for Node, `../<path>`),
+never an absolute path. A repro that names the main checkout, a story worktree or the worktree root by absolute path
+runs the same code at head and at base, so accio-break refuses it.
+
 **The checklist, in order.**
 1. **Read the claims.** The DoD, the Context and the outcome; docstrings and comments in the diff; how callers use
    the changed code. Write down each claim with its source. No claim, no attack.
