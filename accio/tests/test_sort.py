@@ -37,6 +37,7 @@ class SortQuillReadsLessTest(unittest.TestCase):
     def test_S_088_2_quill_reads_only_the_named_sections_and_the_stories_it_depends_on(self):
         text = (ROOT / "agents" / "quill.md").read_text(encoding="utf-8")
         job = text.split("**Write (from the design).**", 1)[1].split("```markdown", 1)[0]
+        job = " ".join(job.split())  # the prompt wraps its lines
         self.assertIn("Grep", job)
         self.assertIn("offset and limit", job)
         self.assertIn("only to depend on", job)
