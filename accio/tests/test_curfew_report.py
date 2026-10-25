@@ -90,7 +90,8 @@ class ReviewersNeverReadTheReportTest(CurfewTestBase):
     def test_S_079_2_a_file_pattern_that_could_pick_out_the_report_from_above_the_run_folder_is_denied(self):
         # ripgrep's --glob overrides git's ignore rules, so `.accio/run/` being ignored doesn't keep these out of it.
         searches = (("Grep", {"pattern": "risk", "glob": pattern}) for pattern in
-                    ("*.md", "**/*.md", "build-re*", "*REPORT*", "*.{md,txt}", "!*.py", "**", "docs/**"))
+                    ("*.md", "**/*.md", "build-re*", "*REPORT*", "*.{md,txt}", "!*.py", "**", "docs/**",
+                     "*.md *.py", "*.md,*.py", "build\\-report.md", "[^x]uild-report.md", "[b]uild-report.md"))
         globs = (("Glob", {"pattern": "**/*.md"}), ("Glob", {"pattern": f"{self.repo}/**/*.md"}),
                  ("Glob", {"pattern": "**/*", "path": str(self.repo / ".accio")}))
         for agent in REVIEWERS:

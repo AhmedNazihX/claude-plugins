@@ -65,6 +65,7 @@ REPORT_BLIND = frozenset({"examiner", "professor", "auror", "boggart"})
 REPORT_WORD = REPORT_NAME.removesuffix(".md")  # "build-report", in a Grep or Glob pattern, glob or path
 SEARCH_TOOLS = frozenset({"Grep", "Glob"})
 GLOB_CHARS = re.compile(r"[*?\[{]")
+PLAIN_PATTERN = re.compile(r"[A-Za-z0-9_./*?-]+")  # a file pattern ripgrep and fnmatch read alike
 REPORT_WHY = ("a reviewer judges the story, its diff and its tests, and never reads house-elf's report or its "
               "reasoning (rule: builder's report)")
 
@@ -319,15 +320,16 @@ def _report_rule(tool, tool_input, ctx):
 
 
 def _may_name_report(name_pattern):
-    """True when a search's file pattern (a Grep `glob`, a Glob `pattern`) could pick out a `build-report.md`: its last
-    part matches the name, letter case ignored, or it holds braces or a `!` curfew doesn't expand (fail closed).
-    None or "" is no pattern."""
+    """True when a search's file pattern (a Grep `glob`, a Glob `pattern`) could pick out a `build-report.md`. Only a
+    plain pattern is judged: letters, digits, `. _ - /`, `*` and `?`, which mean the same to ripgrep and to fnmatch;
+    its last part must not match the name, letter case ignored. Anything else (spaces or commas, which Grep splits into
+    several patterns; `\\` escapes; `[...]` classes; braces; `!`) counts as a match (fail closed). None or "" is no
+    pattern."""
     if name_pattern is None or name_pattern == "":
         return False
-    if not isinstance(name_pattern, str) or any(char in name_pattern for char in "{}!"):
+    if not isinstance(name_pattern, str) or not PLAIN_PATTERN.fullmatch(name_pattern):
         return True
-    last = re.split(r"[/\\]", name_pattern)[-1].casefold()
-    return fnmatch.fnmatchcase(REPORT_NAME, last)
+    return fnmatch.fnmatchcase(REPORT_NAME, name_pattern.rsplit("/", 1)[-1].casefold())
 
 
 def _search_folders(tool, tool_input, ctx):
