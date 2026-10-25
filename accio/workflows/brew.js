@@ -93,7 +93,7 @@ const PACKAGE_SCHEMA = {
     code: { type: 'boolean' }, breaker: { type: 'boolean' },  // the diff has code; config.json has a `breaker` command
     ui: { type: 'boolean' }, preview: { type: 'boolean' }, test_data: { type: 'boolean' },  // the diff touches `ui_globs`; config has a `preview`, with `test_data: true`
   },
-  required: ['code', 'breaker', 'ui', 'preview', 'test_data'],  // a reply without them is retried, never read as false (S-058, S-061)
+  required: ['risky', 'code', 'breaker', 'ui', 'preview', 'test_data'],  // a reply without them is retried, never read as false (S-058, S-061, S-085)
 }
 const BREAK_SCHEMA = {
   type: 'object',

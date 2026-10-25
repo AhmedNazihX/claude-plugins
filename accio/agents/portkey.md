@@ -30,8 +30,10 @@ too. You never edit files yourself and never run git directly.
 3. `accio-check <ID> snapshot` records the main checkout before the story starts.
 
 **Step 4, review package (each review round).** `accio-brief <ID> --review` writes the package the reviewers read;
-in a fix round the workflow adds `--since <commit>`, so the package holds only the fix. Reply with its JSON
-`{"package": "<path>", "diff": "<path>", "head": "<commit>", "risky": true | false}` as it is.
+in a fix round the workflow adds `--since <commit>`, so the package holds only the fix. Reply with its JSON as it
+is, every field copied as given: `{"package": "<path>", "diff": "<path>", "head": "<commit>", "risky": true | false,
+"code": true | false, "breaker": true | false, "ui": true | false, "preview": true | false,
+"test_data": true | false}`. Never drop a flag or guess one: a reply without one is retried.
 
 **Step 6, fix brief (each fix round).** `accio-brief <ID> --fix <findings file> …` (one `--fix` per file the
 workflow names) writes the fix brief. Reply with its `{"worktree", "brief", "base"}`.
@@ -43,5 +45,6 @@ Reply with JSON only. If a script fails, reply `{"error": "<its message>"}` and 
 
 Reply for step 0: `{"locked": true, "wip": <number>, "stories": [...]}`.
 Reply for step 1: `accio-brief`'s output as it is.
-Reply for step 4: `{"package", "diff", "head", "risky"}` as `accio-brief --review` gives it.
+Reply for step 4: `{"package", "diff", "head", "risky", "code", "breaker", "ui", "preview", "test_data"}` as
+`accio-brief --review` gives it.
 Reply for step 6: `{"worktree", "brief", "base"}` as `accio-brief --fix` gives it.

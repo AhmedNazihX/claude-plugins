@@ -345,6 +345,39 @@ test('S-058/1 a package reply without the flags is retried, not read as false', 
   assert.ok(steps(calls, 'S-001').includes('boggart'))
 })
 
+test('S-085/2 the package schema requires the risky flag', async () => {
+  const { calls } = await runWorkflow('brew', happy([story('S-001')]))
+  const schema = calls.find((call) => call.label === 'S-001 package').opts.schema
+  assert.ok(schema.required.includes('risky'))
+})
+
+test('S-085/2 a package reply without risky is retried, and the story still gets auror once it comes', async () => {
+  let tries = 0
+  const { calls } = await runWorkflow('brew', happy([story('S-001')], {
+    package: async (call, id) => {
+      const reply = { package: `/run/${id}/review-package.md`, head: 'h0', risky: true, code: false, breaker: false, ...NO_UI }
+      if (++tries === 1) delete reply.risky
+      return reply
+    },
+  }))
+  assert.ok(labels(calls).includes('S-001 package retry'))
+  assert.ok(types(calls, 'S-001').includes('accio:auror'))
+})
+
+test('S-085/3 portkey.md and the package prompt name every field PACKAGE_SCHEMA requires', async () => {
+  const { calls } = await runWorkflow('brew', happy([story('S-001')]))
+  const call = calls.find((each) => each.label === 'S-001 package')
+  const fields = [...call.opts.schema.required, 'package', 'head']
+  const text = readFileSync(join(AGENTS, 'portkey.md'), 'utf8')
+  const step4 = text.slice(text.indexOf('**Step 4'), text.indexOf('**Step 6'))
+  const reply4 = text.split('\n').find((line) => line.startsWith('Reply for step 4:'))
+  for (const field of fields) {
+    assert.match(step4, new RegExp(`"${field}"`), `step 4 names ${field}`)
+    assert.match(reply4, new RegExp(`"${field}"`), `the step 4 reply line names ${field}`)
+    assert.match(call.prompt, new RegExp(`\\b${field}\\b`), `the package prompt names ${field}`)
+  }
+})
+
 test('S-058/2 a boggart skip names the false flag in the story note', async () => {
   const cases = [[{ code: false, breaker: true }, /code/], [{ code: true, breaker: false }, /breaker/]]
   for (const [flags, word] of cases) {
