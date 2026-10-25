@@ -46,6 +46,7 @@ accio's names come from a school of magic; each comes with a plain role.
 | `quill` | `sonnet` | the story writer | turns the design into small, testable story files |
 | `seeker` | `sonnet` | the researcher | checks facts against live docs and the code |
 | `wandmaker` | `opus` | the architect | proposes 2–3 designs with their trade-offs |
+| `first-year` | `sonnet` | the fresh reader | reads the written design with no memory of the interview and lists what a builder would have to guess |
 | `librarian` | `haiku` | the doc reader | quotes the parts of a long document you need |
 | `howler` | `haiku` | the CI watcher | watches CI after a push and reports how it ended |
 

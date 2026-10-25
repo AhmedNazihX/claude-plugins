@@ -101,6 +101,12 @@ it goes on to `owl` (spikes S1 and S2, S-014).
    rawest material to work from, the methods and tools the best people use, and what besides the model or the user
    would show it is right; that last answer seeds the DoD lines.
 4. **Grill the user's choice.**
+5. **A fresh read (S-081).** Before `record-design`, `first-year` reads only the written design (or the note's
+   section), the code and `.accio/decisions/`, with no memory of the interview, and lists what a builder would have
+   to guess, what nobody needs, code that already does a part, and any clash with a recorded decision. wand drops
+   what the interview already settled and asks the rest, one at a time, once per run. A design or note that
+   contradicts a recorded decision is asked about: replace the decision (a new `vow` that says "Replaces decision
+   NNN") or change the note.
 
 **Output:** `.accio/design.md`, one page plus sections that grow as needed, and a `vow` per real decision.
 
@@ -267,6 +273,7 @@ The build itself is the workflow `/accio:brew` (§ 4.3), not a skill.
 |---|---|---|---|---|
 | `seeker` | researcher (live docs and code facts in `wand`; better ways via `telescope` in v1.1) | Sonnet | Read, Grep, Glob, WebSearch, WebFetch; Write to `run/wand/seeker-notes.md` | `findings: <path>` |
 | `wandmaker` | architect, 2–3 options | Opus | read-only; Write to `run/wand/wandmaker-options.md` | `options: <path>` |
+| `first-year` | fresh reader of the written design, before `record-design` (S-081) | Sonnet | Read, Grep, Glob; Write to `run/wand/first-year-notes.md` | `notes: <path> · points: <n>` |
 | `portkey` | worktree and brief | Haiku | Bash (scripts only) | `{worktree, brief, base}` |
 | `house-elf` | implementer | Sonnet / Opus | Read, Grep, Glob, Write, Edit, Bash, kept short because `curfew` must answer every tool (§ 4.4) | `{status, head, report}` |
 | `prefect` | checks, ledger, DoD tags, main snapshot (`accio-check`); starts and stops the preview and makes the UI evidence (`accio-preview`) | Haiku | Bash, Write (only `run/questions/`, `run/<ID>/ui-steps.txt`, and the `run/<ID>/mad-eye-findings.md` and `run/<ID>/boggart-findings.md` it writes for those two, which never edit, S-071; and a READY story's `run/<ID>/brew-notes.md`, S-076) | `{pass, failing[], skipped}` |

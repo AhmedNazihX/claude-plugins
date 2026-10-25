@@ -18,5 +18,10 @@ Short questions are fine for facts ("Who uses this: your team, or customers?").
   deleted: "Nobody needs X, so I've taken it out." Owners can be the user ("me, for the weekly report").
 - **What must not change** (existing behaviour, data, integrations) and the limits (budget, deadline, hosting).
 - **What is out of scope**, said out loud, so the stories don't grow.
+- **A clash with a recorded decision.** Read the titles of `.accio/decisions/*.md`, and the whole of any that bear
+  on the idea. When the new design or note contradicts one, say which decision (its number and title) and what
+  each side says, then ask: replace the decision (record a new one with vow, its text saying "Replaces decision
+  NNN"), or change the note so it keeps the decision. Example: decision 004 says "data stays on our server", and
+  the note sends invoices to a hosted service.
 
 Stop when a builder would no longer have to guess; don't ask what the code or seeker can answer.

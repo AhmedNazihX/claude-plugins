@@ -568,6 +568,20 @@ class OtherAgentsTest(CurfewTestBase):
         self.assert_allowed("WebSearch", {"query": "x"}, agent="accio:seeker")
         self.assert_denied("WebSearch", {"query": "x"}, "wandmaker", agent="accio:wandmaker")
 
+    def test_S_081_2_first_year_writes_only_its_notes_file(self):
+        accio = self.repo / ".accio"
+        agent = "accio:first-year"
+        self.assert_allowed("Write", {"file_path": str(self.run_dir / "wand" / "first-year-notes.md"),
+                                      "content": "x"}, agent=agent)
+        for target in (accio / "design.md", accio / "decisions" / "001-x.md", self.run_dir / "wand" / "seeker-notes.md",
+                       self.run_dir / "wand" / "other.md", self.worktree / "a.py", self.repo / "first-year-notes.md"):
+            with self.subTest(str(target)):
+                self.assert_denied("Write", {"file_path": str(target), "content": "x"}, "first-year", agent=agent)
+        self.assert_denied("Edit", {"file_path": str(accio / "design.md"), "old_string": "a", "new_string": "b"},
+                           "first-year", agent=agent)
+        self.assert_denied("Bash", self.bash("ls"), "Bash", agent=agent)
+        self.assert_denied("WebSearch", {"query": "x"}, "first-year", agent=agent)
+
     def test_S_023_1_quill_writes_story_files_and_its_summary_only(self):
         accio = self.repo / ".accio"
         for target in (accio / "stories" / "S-012.md", self.run_dir / "sort" / "quill-summary.md"):

@@ -398,5 +398,31 @@ class BoggartTest(unittest.TestCase):
                 self.assertEqual("none" in first.lower(), case.name.startswith("clean-"))
 
 
+class FirstYearTest(unittest.TestCase):
+    """S-081: first-year, the fresh reader, reads only the written design, the code and the decisions."""
+
+    def body(self):
+        return " ".join(front_and_body("first-year")[1].split())
+
+    def test_S_081_1_front_matter_gives_read_grep_glob_write_and_skips_claude_md(self):
+        fields, _ = front_and_body("first-year")
+        self.assertEqual(fields["name"].strip(), "first-year")
+        self.assertEqual(fields["model"].strip(), "sonnet")
+        self.assertEqual(fields["omitClaudeMd"].strip(), "true")
+        self.assertEqual(fields["maxTurns"].strip(), "40")
+        self.assertEqual(tools("first-year"), {"Read", "Grep", "Glob", "Write"})
+        self.assertIn("Only accio calls this agent", fields["description"])
+        self.assertRegex(fields["description"], r"Use (to|when|after|before|it)\b")
+
+    def test_S_081_1_prompt_names_its_notes_file_the_four_kinds_and_the_reply(self):
+        body = self.body()
+        for words in (".accio/run/wand/first-year-notes.md", ".accio/decisions/",
+                      "a builder would have to guess", "nobody in the design needs", "already does",
+                      "`file:line`", "clash with a recorded decision", "At most 10 points", "nothing found",
+                      "notes: <path> · points: <n>"):
+            with self.subTest(words):
+                self.assertIn(words, body)
+
+
 if __name__ == "__main__":
     unittest.main()
