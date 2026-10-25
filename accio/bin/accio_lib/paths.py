@@ -9,11 +9,10 @@ import os
 import pathlib
 import subprocess
 
-from accio_lib import summary
-
 ACCIO_DIR_NAME = ".accio"
 WORKTREE_ROOT_SUFFIX = "-accio-wt"
 REPORTS_DIR_NAME = ".reports"  # house-elf's reports, beside the story worktrees (S-082)
+REPORT_NAME = "build-report.md"  # house-elf writes it; a name Claude Code lets a subagent write (S-023)
 RUN_PROBE = ".accio/run/x"  # git checks a path inside the run folder
 
 
@@ -56,7 +55,7 @@ def reports_dir(main):
 
 def report_path(main, story_id):
     """House-elf's report for one story: `<worktree root>/.reports/<ID>/build-report.md` (S-082)."""
-    return reports_dir(main) / story_id / summary.REPORT_NAME
+    return reports_dir(main) / story_id / REPORT_NAME
 
 
 def accio_dir(start="."):
