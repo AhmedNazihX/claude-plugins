@@ -88,6 +88,7 @@ AGENTS = {
     "headmaster": Lists(writes=("run/questions/*.md", "run/*/ruling-r[0-9]*.md"), bash="ledger"),
     "seeker": Lists(web=True, writes=("run/wand/seeker-notes.md",)),
     "wandmaker": Lists(writes=("run/wand/wandmaker-options.md",)),
+    "first-year": Lists(writes=("run/wand/first-year-notes.md",)),  # S-081: the fresh reader's notes only
     "quill": Lists(writes=("stories/S-*.md", "run/sort/quill-summary.md")),
     "librarian": Lists(),
     "howler": Lists(bash="howler"),
