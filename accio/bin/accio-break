@@ -10,6 +10,10 @@
 
 Verdicts: kept (a regression, with its claim and source), dropped, pre-existing, fixed. With no `breaker` command in
 config.json both actions skip and log it.
+
+A repro runs from `<throwaway worktree>/.accio-repro/<file>`, so it imports the project's code relative to its own
+folder. One that names the main checkout, the worktree root, a story worktree or a `.accio-repro` folder by absolute
+path would run the same code at head and at base: `try` refuses it and `verify` drops it unrun (S-086).
 """
 import argparse
 import json

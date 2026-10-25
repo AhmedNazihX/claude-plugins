@@ -248,6 +248,61 @@ class BreakerTest(unittest.TestCase):
         write(self.boggart / "repros" / "repro_q.py", HEADER + "from src.a import value\nassert value == 1\n")
         self.assertEqual(self.verdicts_by_file()["repro_q.py"]["verdict"], "kept")
 
+    def absolute_repros(self):
+        """Repros that load code from a fixed folder: the story worktree, the main checkout, the worktree root, and
+        a throwaway worktree's `.accio-repro` folder."""
+        root = paths.worktree_root(self.repo)
+        return {"story worktree": (self.worktree, f"sys.path.insert(0, {str(self.worktree)!r})\n"),
+                "main checkout": (self.repo, f"sys.path.insert(0, \"{self.repo}/src\")\n"),
+                "worktree root": (root, f"open('{root}/S-002/src/a.py')\n"),
+                "repro folder": ("/tmp/accio-break-x/wt/.accio-repro",
+                                 "sys.path.insert(0, '/tmp/accio-break-x/wt/.accio-repro/..')\n")}
+
+    def refused(self, name, text):
+        result = subprocess.run([sys.executable, "-I", str(BREAK), "S-001", "try", str(self.repro(name, text))],
+                                cwd=self.repo, capture_output=True, text=True, check=False)
+        return result
+
+    def test_S_086_2_try_refuses_a_repro_naming_a_fixed_folder_and_says_how_to_import(self):
+        for label, (path, line) in self.absolute_repros().items():
+            with self.subTest(label):
+                result = self.refused("repro_abs.py", HEADER + "import sys\n" + line + KEEPS_VALUE)
+                self.assertEqual(result.returncode, 1, result.stdout)
+                self.assertIn(str(path), result.stderr)
+                self.assertIn("absolute path", result.stderr)
+                self.assertIn("relative to the repro's own folder", result.stderr)
+                self.assertIn("Path(__file__).resolve().parents[1]", result.stderr)
+                self.assertFalse((self.boggart / "repros" / "repro_abs.py").exists())
+
+    def test_S_086_2_a_path_that_only_starts_like_the_main_checkout_is_not_refused(self):
+        text = HEADER + f"OTHER = {str(self.repo) + '2'!r}\n" + KEEPS_VALUE
+        self.assertEqual(self.try_repro("repro_near.py", text)["verdict"], "kept")
+
+    def test_S_086_3_verify_drops_a_saved_repro_naming_a_fixed_folder_without_running_it(self):
+        self.try_repro("repro_t.py", KEEPS_VALUE)
+        self.assertEqual(self.verdicts_by_file()["repro_t.py"]["verdict"], "kept")
+        marker = self.scratch / "ran"
+        for label, (path, line) in self.absolute_repros().items():
+            with self.subTest(label):
+                text = HEADER + f"open({str(marker)!r}, 'w').close()\nimport sys\n" + line + KEEPS_VALUE
+                write(self.boggart / "repros" / "repro_t.py", text)  # an old saved repro, kept before
+                entry = self.verdicts_by_file()["repro_t.py"]
+                self.assertEqual(entry["verdict"], "dropped")
+                self.assertIn(str(path), entry["reason"])
+                self.assertIn("relative to the repro's own folder", entry["reason"])
+                self.assertFalse(marker.exists(), "the repro was run")
+
+    def test_S_086_4_a_relative_import_repro_runs_each_commits_code_so_a_head_only_break_is_kept(self):
+        self.configure({"command": "python3 {file}"})
+        text = HEADER + ("import pathlib, sys\nsys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))\n"
+                         "from src.a import value\nassert value == 1, f'value is {value}'\n")
+        entry = self.try_repro("repro_rel.py", text)
+        self.assertEqual((entry["verdict"], entry["in_dod"]), ("kept", True))
+        self.assertIn("assertion", entry["reason"])
+        self.assertEqual(self.verdicts_by_file()["repro_rel.py"]["verdict"], "kept")
+        self.change("value = 1\n")  # head now holds the fixed code, and the repro sees it
+        self.assertEqual(self.verdicts_by_file()["repro_rel.py"]["verdict"], "fixed")
+
     def test_S_041_8_config_needs_a_file_placeholder(self):
         for bad in ({"command": "pytest"}, {"cmd": "x {file}"}, "pytest {file}"):
             self.configure(bad)

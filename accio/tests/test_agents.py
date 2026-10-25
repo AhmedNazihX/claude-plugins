@@ -399,6 +399,14 @@ class BoggartTest(unittest.TestCase):
             with self.subTest(words):
                 self.assertIn(words, body)
 
+    def test_S_086_1_says_how_a_repro_runs_and_to_import_relative_to_its_own_folder(self):
+        body = self.body()
+        for words in ("<throwaway worktree>/.accio-repro/<file>", "story's head", "its base",
+                      "from that worktree's root", "`breaker` command", "relative to the repro's own folder",
+                      "Path(__file__).resolve().parents[1]", "../<path>", "never an absolute path"):
+            with self.subTest(words):
+                self.assertIn(words, body)
+
     def test_S_042_4_the_eval_set_has_three_breaks_three_clean_and_a_readme(self):
         evals = ROOT / "evals" / "boggart"
         self.assertIn("by hand", (evals / "README.md").read_text(encoding="utf-8"))
