@@ -132,12 +132,10 @@ def _pre_tool_use(payload, root, accio, cwd):
     agent, agent_id = payload["agent_type"][len(AGENT_PREFIX):], str(payload.get("agent_id", ""))
     claims = _claims(run_dir)
     tool = payload.get("tool_name") if isinstance(payload.get("tool_name"), str) else ""
-    # Asked only when it matters: a reviewer's search may start above `.accio/run/` only while git ignores it (S-079).
-    run_ignored = agent in policy.REPORT_BLIND and tool in policy.SEARCH_TOOLS and paths.run_ignored(root)
     context = policy.Context(root=root, accio=accio, bin_dir=BIN,
                              config=_settings(accio, run_dir, claims.get(agent_id, {}).get("story")),
                              claims=claims, statuses=_statuses(run_dir), fenced=_is_fenced(run_dir, agent_id),
-                             cwd=pathlib.Path(cwd), run_ignored=run_ignored)
+                             cwd=pathlib.Path(cwd))
     decision = policy.decide(agent, agent_id, tool, payload["tool_input"], context)
     if not decision.allow:
         return False, decision.reason

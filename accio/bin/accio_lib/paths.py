@@ -24,11 +24,6 @@ def _git(start, *args):
     return result.stdout.strip() if result.returncode == 0 else None
 
 
-def run_ignored(root):
-    """True when git ignores `.accio/run/` in this checkout; False when it doesn't, or git fails."""
-    return _git(root, "check-ignore", "-q", RUN_PROBE) is not None
-
-
 def main_root(start="."):
     """The main checkout's root, or None outside a git repo."""
     output = _git(start, "rev-parse", "--path-format=absolute", "--absolute-git-dir", "--git-common-dir")
