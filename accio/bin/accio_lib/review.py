@@ -37,13 +37,15 @@ def rules_line(main, base, run_dir):
     """The package line naming the project's own instructions files (S-084): each of RULES_FILES as the base branch
     holds it, copied into `run_dir/project-rules/`. The base branch, never a working copy: a story's worktree, or a
     direct fix's branch checked out in the main checkout, must not change the rules it is judged by. No file on the
-    base branch: no line."""
+    base branch, or one that isn't a plain file (a submodule, a folder): no line. Any git failure is a BriefError,
+    never read as "no file" (fail closed: the reviewers would lose the rules without a word)."""
     copies = pathlib.Path(run_dir) / RULES_FOLDER
     if copies.exists():
         shutil.rmtree(copies)  # a file the base branch no longer has must not stay named
+    commit = _git(main, "rev-parse", "--verify", "--end-of-options", f"{base}^{{commit}}").strip()
     found = []
     for name in RULES_FILES:
-        text = _at_base(main, base, name)
+        text = _at_base(main, commit, name)
         if text is None:
             continue
         copy = copies / name
@@ -57,14 +59,22 @@ def rules_line(main, base, run_dir):
             "accio's rules in your prompt come first)")
 
 
-def _at_base(main, base, name):
-    """The bytes of `name` on the base branch, or None when the branch has no such file."""
+def _at_base(main, commit, name):
+    """The bytes of `name` at `commit`, or None when it holds no such plain file; a git failure raises."""
+    entry = _git(main, "ls-tree", "-z", commit, "--", name).rstrip("\0")
+    if not entry:
+        return None
+    _mode, kind, blob = entry.split("\t", 1)[0].split()
+    if kind != "blob":
+        return None
     try:
-        result = subprocess.run(["git", "cat-file", "blob", f"{base}:{name}"], cwd=main, capture_output=True,
-                                check=False)
+        result = subprocess.run(["git", "cat-file", "blob", blob], cwd=main, capture_output=True, check=False)
     except OSError as error:
         raise brief.BriefError(f"git could not run in {main}: {error}") from error
-    return result.stdout if result.returncode == 0 else None
+    if result.returncode != 0:
+        raise brief.BriefError(f"git cat-file blob {blob} ({name} on the base branch) failed in {main}: "
+                               f"{result.stderr.decode(errors='replace').strip()}")
+    return result.stdout
 
 
 def _git(worktree, *args):

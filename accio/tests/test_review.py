@@ -8,6 +8,8 @@ import unittest
 
 from support import ROOT, commit_all, git, init_repo, write
 
+from accio_lib import brief, review
+
 BRIEF = ROOT / "bin" / "accio-brief"
 
 STORY = """---
@@ -345,6 +347,19 @@ class ReviewPackageTest(unittest.TestCase):
         git(self.repo, "commit", "-q", "-m", "drop the rules")
         self.assertEqual(self.rules_lines(self.package()[1]), [])
         self.assertFalse(self.copies("S-001").exists())
+
+    def test_S_084_3_a_base_git_cant_read_is_a_plain_error_never_a_package_without_rules(self):
+        self.commit_rules(**{"CLAUDE.md": "main rules\n"})
+        run_dir = self.accio / "run" / "S-001"
+        for base in ("no-such-branch", "-x", "main~99"):
+            with self.subTest(base=base):
+                with self.assertRaises(brief.BriefError) as raised:
+                    review.rules_line(self.repo, base, run_dir)
+                self.assertIn("git rev-parse", str(raised.exception))
+
+    def test_S_084_4_a_folder_or_submodule_named_like_a_rules_file_is_not_named(self):
+        self.commit_rules(**{"CLAUDE.md/notes.md": "a folder, not rules\n"})
+        self.assertEqual(review.rules_line(self.repo, "main", self.accio / "run" / "S-001"), "")
 
     def test_a_git_failure_is_a_plain_error_not_a_traceback(self):
         self.story()
