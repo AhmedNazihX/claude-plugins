@@ -25,6 +25,25 @@ def story_text(story_id, files, deps=(), track="story"):
             f"- [ ] {story_id}/1 WHEN x THE SYSTEM SHALL y\n")
 
 
+class SortQuillReadsLessTest(unittest.TestCase):
+    def test_S_088_1_sort_passes_quill_the_unsorted_headings_and_the_story_list(self):
+        text = (ROOT / "skills" / "sort" / "SKILL.md").read_text(encoding="utf-8")
+        step = text.split("## 2. Write", 1)[1].split("## 3.", 1)[0]
+        self.assertIn("run/unsorted.json", step)
+        self.assertIn("accio-board board --print", step)
+        self.assertIn("the whole design", step)  # no unsorted headings: a first design
+        self.assertIn("accio-board board --print)", text.split("---", 2)[1])  # allowed
+
+    def test_S_088_2_quill_reads_only_the_named_sections_and_the_stories_it_depends_on(self):
+        text = (ROOT / "agents" / "quill.md").read_text(encoding="utf-8")
+        job = text.split("**Write (from the design).**", 1)[1].split("```markdown", 1)[0]
+        self.assertIn("Grep", job)
+        self.assertIn("offset and limit", job)
+        self.assertIn("only to depend on", job)
+        self.assertNotIn("Read `.accio/design.md`", job)
+        self.assertNotIn("Glob `.accio/stories/S-*.md`", job)
+
+
 class SortSkillNoStoryTest(unittest.TestCase):
     def test_S_077_2_step_5_tells_sort_to_record_with_no_files_when_no_story_came(self):
         text = (ROOT / "skills" / "sort" / "SKILL.md").read_text(encoding="utf-8")

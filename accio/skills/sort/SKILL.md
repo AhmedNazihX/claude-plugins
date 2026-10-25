@@ -2,7 +2,7 @@
 name: sort
 description: Stories (sort): turns accio's design into a backlog of small, testable stories and commits them.
 when_to_use: When the user asks to "turn the design into stories", "write the backlog", "sort the design", or runs /accio:sort, in a repo with .accio/design.md. Not for designing (wand), planning an iteration (prophecy), building (/accio:brew) or reviewing a build (owl).
-allowed-tools: Read, Glob, Agent, Bash(${CLAUDE_PLUGIN_ROOT}/bin/accio-board new), Bash(${CLAUDE_PLUGIN_ROOT}/bin/accio-board record), Bash(${CLAUDE_PLUGIN_ROOT}/bin/accio-board record *), Bash(${CLAUDE_PLUGIN_ROOT}/bin/accio-score *)
+allowed-tools: Read, Glob, Agent, Bash(${CLAUDE_PLUGIN_ROOT}/bin/accio-board new), Bash(${CLAUDE_PLUGIN_ROOT}/bin/accio-board board --print), Bash(${CLAUDE_PLUGIN_ROOT}/bin/accio-board record), Bash(${CLAUDE_PLUGIN_ROOT}/bin/accio-board record *), Bash(${CLAUDE_PLUGIN_ROOT}/bin/accio-score *)
 ---
 
 # sort: from the design to stories
@@ -19,7 +19,10 @@ first free ID (it refuses while a build runs: then stop). Keep a list of **this 
 reply names.
 
 ## 2. Write
-Call the `accio:quill` agent: "Write: turn .accio/design.md into story files, numbering from <ID>." Its reply is one
+Read `.accio/run/unsorted.json` (a list of design headings; missing or empty means a first design) and run
+`accio-board board --print` for the story list (ID, title, status). Call the `accio:quill` agent: "Write: turn
+.accio/design.md into story files, numbering from <ID>. Design headings to cover: <the headings from unsorted.json,
+or 'the whole design'>. Existing stories:" followed by the board's story list. Quill reads only those sections. Its reply is one
 line, `stories: <n> (<IDs>) · summary: <path>`, maybe with `open:` and `question:`. Add its IDs to the list.
 
 ## 3. Score and split
