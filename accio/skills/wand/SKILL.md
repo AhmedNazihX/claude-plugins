@@ -2,7 +2,7 @@
 name: wand
 description: Design (wand): interviews the user one question at a time, checks the facts, settles the choice and writes .accio/design.md.
 when_to_use: When the user wants to design a new project or feature ("help me design X", "plan the architecture", "write the design", "add a design note for …", "I want to build …"), or runs /accio:wand, in a git repo. Not for stories (sort), planning an iteration (prophecy), building (/accio:brew) or reviewing (owl).
-allowed-tools: Read, Glob, Grep, Write, Edit, Agent, Bash(${CLAUDE_PLUGIN_ROOT}/bin/accio-board init), Bash(${CLAUDE_PLUGIN_ROOT}/bin/accio-board record-design), Bash(${CLAUDE_PLUGIN_ROOT}/bin/accio-hooks install), Bash(${CLAUDE_PLUGIN_ROOT}/bin/accio-vow *), Bash(python3 ${CLAUDE_PLUGIN_ROOT}/bin/accio_lib/checkfinder.py)
+allowed-tools: Read, Glob, Grep, Write, Edit, Agent, Bash(${CLAUDE_PLUGIN_ROOT}/bin/accio-board init), Bash(${CLAUDE_PLUGIN_ROOT}/bin/accio-board wand-reset), Bash(${CLAUDE_PLUGIN_ROOT}/bin/accio-board record-design), Bash(${CLAUDE_PLUGIN_ROOT}/bin/accio-hooks install), Bash(${CLAUDE_PLUGIN_ROOT}/bin/accio-vow *), Bash(python3 ${CLAUDE_PLUGIN_ROOT}/bin/accio_lib/checkfinder.py)
 ---
 
 # wand: design what to build
@@ -17,7 +17,9 @@ agents one at a time.
 If the repo has no `.accio/` and the user did not type `/accio:wand` or `/accio` (a plain "I want to build …" can
 start wand), ask once before setting up: "This adds an `.accio/` folder and git hooks (no secrets in commits, no
 unconfirmed pushes) to this repo. Set accio up?" Wait for the answer; on no, stop and change nothing. Then run
-`accio-board init` (it changes nothing once accio is set up), then `accio-hooks install` (accio's git hooks: no
+`accio-board init` (it changes nothing once accio is set up), then `accio-board wand-reset` (it removes the last
+run's helper notes in `.accio/run/wand/`, so the notes read below are this run's; it refuses while a build runs:
+say so and stop), then `accio-hooks install` (accio's git hooks: no
 secrets in commits, no unconfirmed pushes). Whatever install prints or exits with (a snippet to paste, a warning,
 hooks switched off), tell the user in one line, as a statement with its fix (never a question), and go on.
 
@@ -49,13 +51,15 @@ Call the `accio:seeker` agent with the facts the design rests on (libraries, ser
 code already has): "Answer these, writing to .accio/run/wand/seeker-notes.md: …". To check a new fact later, call
 it again with every question, old and new. A capability it marks unavailable or not checked stays out of the
 design; if the user still wants it, its spike (a small throwaway test of whether it works) goes under Open
-questions. Skip steps 3–5 only when the user has already chosen the design, given the facts it rests on and said what would
+questions. If its reply has no `findings:` line, or `.accio/run/wand/seeker-notes.md` is not there, say "the seeker didn't
+run: <why>" and stop: the design rests on it. Skip steps 3–5 only when the user has already chosen the design, given the facts it rests on and said what would
 show it works; then go to step 6.
 
 ## 4. Get options
 Call the `accio:wandmaker` agent: "Write options to .accio/run/wand/wandmaker-options.md for these requirements
 (with owners): …; outcome: …; must not change and limits: …; out of scope: …; unavailable (seeker): …; research:
-.accio/run/wand/seeker-notes.md; code: <where, or none>." Read its file.
+.accio/run/wand/seeker-notes.md; code: <where, or none>." Read its file. If its reply has no `options:` line, or the file is not there, say "the wandmaker didn't run: <why>"
+and stop: the design rests on it.
 
 ## 5. Settle the choice
 Show the options in the format of `${CLAUDE_SKILL_DIR}/references/interview.md` (what each looks like, pros, cons,
@@ -72,12 +76,14 @@ way, one question at a time, until nothing a builder would have to guess is left
    3–5 were skipped, the evidence the user gave): they seed the stories' DoD lines.
 3. **Fresh reader.** Call the `accio:first-year` agent once, with only the design's path (and the note's heading
    for a note), nothing else from the interview: "Read .accio/design.md (note: `## <Feature>`); write your notes to
-   .accio/run/wand/first-year-notes.md." Read its notes; drop a point the interview already settled; ask each
+   .accio/run/wand/first-year-notes.md." If its reply has no `notes:` line, says `incomplete`, or `.accio/run/wand/first-year-notes.md` is not there, say
+   "the fresh reader didn't run: <why>", never "found nothing", and go on without it. Otherwise read its notes; drop a point the interview already settled; ask each
    remaining one as a question in the format of `${CLAUDE_SKILL_DIR}/references/interview.md`, one at a time;
    write each answer into the design with Edit (a clash with a decision is asked as step 2 says; an answer that
    settles a choice between real alternatives is recorded as in 1, and the design cites it). One read-back
    only: never call it twice in a run. With `driven`, these questions are still asked (they are real decisions).
-   With no points left, go on and say "the fresh reader found nothing" in the What happened line.
+   With no points left, go on and say "the fresh reader found nothing" in the What happened line (only when it ran and its notes say
+   `nothing found`).
 4. Run `accio-board record-design`. If it refuses an older design for a missing `## Outcome`, ask the user for the
    project's outcome and add `## Outcome` right under the `# Design:` title (the one change allowed outside a note),
    then run it again.
@@ -85,7 +91,7 @@ way, one question at a time, until nothing a builder would have to guess is left
 End:
 
 ```
-What happened: <the design or note in one sentence>; <k> decisions recorded; <the fresh reader found nothing | j fresh-reader questions asked> (<n> not committed: <why>, when any); design committed | written but not committed (<why>)
+What happened: <the design or note in one sentence>; <k> decisions recorded; <the fresh reader found nothing | the fresh reader didn't run: why | j fresh-reader questions asked> (<n> not committed: <why>, when any); design committed | written but not committed (<why>)
 What I need from you: <nothing | the hooks fix or snippet | the commit fix> — then /accio:sort to turn it into stories
 My recommendation: <one line, with why>
 ```

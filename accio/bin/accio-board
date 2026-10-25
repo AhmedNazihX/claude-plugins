@@ -20,6 +20,7 @@
   lock / unlock         take or release the build's run lock
   next [--json]         the one next step (wand, sort, prophecy, brew, owl, wait or done), whether it runs
                         on its own (auto), and the plain sentence
+  wand-reset            remove the files wand's helpers wrote in run/wand/ (wand, step 1; not during a build)
   refresh               mark the running build as alive (every brew step calls it)
 """
 import argparse
@@ -147,6 +148,10 @@ def cmd_unlock(_args, accio):
     runlock.release(board.run_dir(accio))
 
 
+def cmd_wand_reset(_args, accio):
+    board.wand_reset(accio)
+
+
 def cmd_refresh(_args, accio):
     runlock.refresh(board.run_dir(accio))
 
@@ -185,7 +190,8 @@ def parser():
     board_parser = commands.add_parser("board")
     board_parser.add_argument("--print", action="store_true", help="print the board instead of writing board.md")
     board_parser.set_defaults(run=cmd_board)
-    for name, run in (("status", cmd_status), ("lock", cmd_lock), ("unlock", cmd_unlock), ("refresh", cmd_refresh)):
+    for name, run in (("status", cmd_status), ("lock", cmd_lock), ("unlock", cmd_unlock), ("refresh", cmd_refresh),
+                      ("wand-reset", cmd_wand_reset)):
         commands.add_parser(name).set_defaults(run=run)
     return top
 
