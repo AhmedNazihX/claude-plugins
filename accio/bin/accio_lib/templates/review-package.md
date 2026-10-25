@@ -6,7 +6,7 @@ $scope
 - Worktree: `$worktree` (branch `$branch`); reviewed commit `$head`
 - The diff: `$diff` ($shortstat). Read it in parts if it is long.
 $source_line
-- The project's checks and accio's scripted checks passed; don't run them again.
+- The project's checks and accio's scripted checks passed; don't run them again.$rules_line
 
 ## Your findings
 $findings_line That is the only file
