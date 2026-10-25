@@ -19,7 +19,7 @@ import tempfile
 from accio_lib import board, paths, runlock, storyfiles
 
 RUN_IGNORE = ".accio/run/"
-RUN_PROBE = ".accio/run/x"  # git checks a path inside the folder
+RUN_PROBE = paths.RUN_PROBE  # git checks a path inside the folder
 DESIGN_NAME = "design.md"
 UNSORTED_NAME = "unsorted.json"  # in run/: the new design headings sort hasn't turned into stories yet
 OUTCOME = "## Outcome"

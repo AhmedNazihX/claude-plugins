@@ -1,8 +1,10 @@
 """S-079: the reviewers (examiner, professor, auror, boggart) judge the code and the story, never house-elf's report.
 
-curfew denies them a Read of any `build-report.md` under `.accio/run/`, and a Grep or Glob inside `.accio/run/` or
-for `build-report`, with the reason. Their package and findings files stay readable, and house-elf, headmaster and
-prefect keep their access to the report. Payloads go through the real hook, as the other curfew tests do.
+curfew denies them a Read of any `build-report.md` under `.accio/run/`, and a Grep or Glob inside `.accio/run/`, for
+files named `build-report`, or from above `.accio/run/` while git doesn't ignore it, with the reason; `~` and
+relative paths count as the tool reads them (security review, 2026-10-25). Their package and findings files stay
+readable, a Grep for the word `build-report` in the code is allowed, and house-elf, headmaster and prefect keep their
+access to the report. Payloads go through the real hook, as the other curfew tests do.
 """
 import os
 
@@ -44,7 +46,6 @@ class ReviewersNeverReadTheReportTest(CurfewTestBase):
                     ("Grep", {"pattern": "risk", "path": str(self.run_dir)}),
                     ("Grep", {"pattern": "risk", "path": str(self.report)}),
                     ("Grep", {"pattern": "risk", "path": str(self.story_run / "boggart" / "..")}),
-                    ("Grep", {"pattern": "build-report"}),
                     ("Grep", {"pattern": "Risks", "glob": "**/Build-Report.md"}),
                     ("Glob", {"pattern": "*.md", "path": str(self.story_run)}),
                     ("Glob", {"pattern": "**/build-report.md"}),
@@ -54,6 +55,42 @@ class ReviewersNeverReadTheReportTest(CurfewTestBase):
             for tool, tool_input in searches:
                 with self.subTest(agent=agent, tool=tool, tool_input=tool_input):
                     self.assert_denied(tool, tool_input, REASON, agent=agent)
+
+    def test_S_079_2_a_home_or_relative_path_is_taken_as_the_tool_takes_it(self):
+        home_run = "~/../app/.accio/run"  # the tests' HOME is a sibling of the repo
+        cases = (("Read", {"file_path": f"{home_run}/S-001/build-report.md"}, None),
+                 ("Grep", {"pattern": "risk", "path": home_run}, None),
+                 ("Glob", {"pattern": f"{home_run}/S-*/*.md"}, None),
+                 ("Read", {"file_path": ".accio/run/S-001/build-report.md"}, self.repo),
+                 ("Grep", {"pattern": "risk", "path": ".accio/run"}, self.repo),
+                 ("Grep", {"pattern": "risk", "path": "run/S-001"}, self.repo / ".accio"),
+                 ("Glob", {"pattern": ".accio/run/S-*/*.md"}, self.repo),
+                 ("Glob", {"pattern": "S-001/*.md", "path": "run"}, self.repo / ".accio"))
+        for agent in REVIEWERS:
+            for tool, tool_input, cwd in cases:
+                with self.subTest(agent=agent, tool=tool, tool_input=tool_input):
+                    self.assert_denied(tool, tool_input, REASON, agent=agent, cwd=cwd)
+
+    def test_S_079_2_a_path_curfew_cant_resolve_is_denied(self):
+        for agent in REVIEWERS:
+            with self.subTest(agent=agent):
+                self.assert_denied("Grep", {"pattern": "risk", "path": 5}, REASON, "can't resolve", agent=agent)
+
+    def test_S_079_2_a_search_from_above_the_run_folder_needs_git_to_ignore_it(self):
+        write(self.repo / ".gitignore", "")  # git no longer ignores .accio/run/, so a root search would reach it
+        for agent in REVIEWERS:
+            for tool_input in ({"pattern": "risk"}, {"pattern": "risk", "path": str(self.repo)},
+                               {"pattern": "risk", "path": str(self.repo / ".accio")}):
+                with self.subTest(agent=agent, tool_input=tool_input):
+                    self.assert_denied("Grep", tool_input, REASON, "doesn't ignore", agent=agent)
+            with self.subTest(agent=agent, tool="worktree"):
+                self.assert_allowed("Grep", {"pattern": "risk", "path": str(self.worktree)}, agent=agent)
+
+    def test_S_079_3_a_reviewer_may_search_the_code_for_the_word_build_report(self):
+        for agent in REVIEWERS:
+            for tool_input in ({"pattern": "build-report"}, {"pattern": "build-report", "path": str(self.worktree)}):
+                with self.subTest(agent=agent, tool_input=tool_input):
+                    self.assert_allowed("Grep", tool_input, agent=agent)
 
     def test_S_079_3_a_reviewer_still_reads_its_package_findings_diff_and_the_code(self):
         for agent in REVIEWERS:

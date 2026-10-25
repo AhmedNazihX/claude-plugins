@@ -11,6 +11,7 @@ import subprocess
 
 ACCIO_DIR_NAME = ".accio"
 WORKTREE_ROOT_SUFFIX = "-accio-wt"
+RUN_PROBE = ".accio/run/x"  # git checks a path inside the run folder
 
 
 def _git(start, *args):
@@ -19,6 +20,11 @@ def _git(start, *args):
     except OSError:
         return None
     return result.stdout.strip() if result.returncode == 0 else None
+
+
+def run_ignored(root):
+    """True when git ignores `.accio/run/` in this checkout; False when it doesn't, or git fails."""
+    return _git(root, "check-ignore", "-q", RUN_PROBE) is not None
 
 
 def main_root(start="."):

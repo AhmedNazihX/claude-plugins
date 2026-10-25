@@ -16,8 +16,10 @@ the exact forms brew.js gives it (PREFECT_PREVIEW), each on its own, and writes 
 the mad-eye and boggart findings files (S-071) and a READY story's brew-notes.md (S-076).
 
 The reviewers (examiner, professor, auror, boggart) never read house-elf's report (REPORT_BLIND, S-079): no Read of
-a `build-report.md` under `.accio/run/`, and no Grep or Glob inside `.accio/run/` or for `build-report`. They read
-their package and findings files with Read. house-elf, headmaster and prefect keep reading the report.
+a `build-report.md` under `.accio/run/`, and no Grep or Glob inside `.accio/run/`, for files named `build-report`, or
+from above `.accio/run/` unless git ignores it. Paths are read as the tool reads them (`~`, relative to the agent's
+folder), and one curfew can't resolve is denied. They read their package and findings files with Read. house-elf,
+headmaster and prefect keep reading the report.
 """
 import collections.abc
 import dataclasses
@@ -134,6 +136,8 @@ class Context:
     claims: dict            # agent_id -> {"story", "worktree"}
     statuses: dict          # story -> status, from run/status.json
     fenced: bool = False    # mad-eye is on a page off the preview (the fence record names this agent, S-064)
+    cwd: pathlib.Path = None  # the agent's folder (the hook's `cwd`): where its relative paths start
+    run_ignored: bool = False  # git ignores `.accio/run/`, so a search from above it never reaches the reports
 
 
 @dataclasses.dataclass(frozen=True)
@@ -280,32 +284,57 @@ def _verdict(reason):
 # --- the reviewers never read house-elf's report (S-079) -----------------------------------------------------------
 
 def _report_rule(tool, tool_input, ctx):
-    """The reason to deny a reviewer a read tool, or "": no Read of a `build-report.md` under `.accio/run/`, and no
-    Grep or Glob inside `.accio/run/` or for `build-report`. Its package and findings files stay readable by Read."""
-    run = ctx.accio / "run"
+    """The reason to deny a reviewer a read tool, or "": no Read of a `build-report.md` under `.accio/run/`; no Grep
+    or Glob inside `.accio/run/`, for files named `build-report`, or from above `.accio/run/` unless git ignores it
+    (a search skips ignored files). Its package and findings files stay readable by Read. Paths are taken as the tool
+    takes them (`~` expanded, relative to the agent's folder); one that can't be resolved is denied (fail closed).
+    A Grep's text pattern is not a file name: searching the code for the word `build-report` stays allowed."""
+    run = pathlib.Path(os.path.realpath(ctx.accio / "run"))
     if tool == "Read":
-        target = _target(tool_input)
+        target = _resolved(tool_input.get("file_path"), ctx)
         is_report = target is not None and target.name.casefold() == REPORT_NAME and _inside_any_case(target, run)
         return f"Read of {target} is denied: {REPORT_WHY}." if is_report else ""
     if tool not in SEARCH_TOOLS:
         return ""
-    words = [tool_input.get(key) for key in ("pattern", "glob", "path")]
-    if any(isinstance(word, str) and REPORT_WORD in word.casefold() for word in words):
-        return f"{tool} for `{REPORT_WORD}` is denied: {REPORT_WHY}."
-    if any(_inside_any_case(folder, run) for folder in _search_folders(tool, tool_input)):
-        return (f"{tool} inside {run} is denied: {REPORT_WHY}. Read your review package and findings file by the "
-                "paths the package gives.")
+    names = [tool_input.get("glob"), tool_input.get("path"), tool_input.get("pattern") if tool == "Glob" else None]
+    if any(isinstance(name, str) and REPORT_WORD in name.casefold() for name in names):
+        return f"{tool} for `{REPORT_WORD}` files is denied: {REPORT_WHY}."
+    for folder in _search_folders(tool, tool_input, ctx):
+        if folder is None:
+            return f"{tool} on a path curfew can't resolve is denied: {REPORT_WHY}. Give an absolute path."
+        if _inside_any_case(folder, run):
+            return (f"{tool} inside {run} is denied: {REPORT_WHY}. Read your review package and findings file by "
+                    "the paths the package gives.")
+        if _inside_any_case(run, folder) and not ctx.run_ignored:
+            return (f"{tool} from {folder} would reach {run}, which git doesn't ignore, so it is denied: {REPORT_WHY}. "
+                    "Search the worktree or a folder below the repo root.")
     return ""
 
 
-def _search_folders(tool, tool_input):
-    """Where a Grep or Glob searches, symlinks and `..` resolved: its `path`, and an absolute Glob pattern's fixed
-    start (the part before its first wildcard)."""
-    found = [tool_input.get("path")]
+def _search_folders(tool, tool_input, ctx):
+    """Where a Grep or Glob searches: its `path` (the agent's folder when it gives none) and, for a Glob, the folder
+    its pattern's fixed start (the part before its first wildcard) names, from that path. None for one that can't be
+    resolved."""
+    path = tool_input.get("path")
+    root = _resolved(path, ctx) if path is not None and path != "" else _resolved(str(ctx.cwd or ctx.root), ctx)
     pattern = tool_input.get("pattern")
-    if tool == "Glob" and isinstance(pattern, str) and os.path.isabs(pattern):
-        found.append(GLOB_CHARS.split(pattern, 1)[0])
-    return [target for target in (_target({"file_path": value}) for value in found) if target is not None]
+    if tool != "Glob" or not isinstance(pattern, str) or root is None:
+        return [root]
+    start = GLOB_CHARS.split(os.path.expanduser(pattern), 1)[0]
+    folder = start if start.endswith(("/", os.sep)) or not start else os.path.dirname(start)
+    return [root, _resolved(os.path.join(root, folder) if folder else str(root), ctx)]
+
+
+def _resolved(value, ctx):
+    """A path as the tool takes it: `~` expanded, a relative path from the agent's folder, links and `..` resolved;
+    None for a value that isn't a path or can't be resolved."""
+    if not isinstance(value, str) or not value:
+        return None
+    try:
+        path = pathlib.Path(os.path.expanduser(value))
+        return pathlib.Path(os.path.realpath(path if path.is_absolute() else (ctx.cwd or ctx.root) / path))
+    except (OSError, ValueError, RuntimeError):
+        return None
 
 
 def _inside_any_case(path, folder):

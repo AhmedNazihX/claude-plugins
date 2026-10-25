@@ -127,14 +127,17 @@ def _is_fenced(run_dir, agent_id):
     return not isinstance(fence, dict) or agent_id in fence
 
 
-def _pre_tool_use(payload, root, accio):
+def _pre_tool_use(payload, root, accio, cwd):
     run_dir = accio / "run"
     agent, agent_id = payload["agent_type"][len(AGENT_PREFIX):], str(payload.get("agent_id", ""))
     claims = _claims(run_dir)
+    tool = payload.get("tool_name") if isinstance(payload.get("tool_name"), str) else ""
+    # Asked only when it matters: a reviewer's search may start above `.accio/run/` only while git ignores it (S-079).
+    run_ignored = agent in policy.REPORT_BLIND and tool in policy.SEARCH_TOOLS and paths.run_ignored(root)
     context = policy.Context(root=root, accio=accio, bin_dir=BIN,
                              config=_settings(accio, run_dir, claims.get(agent_id, {}).get("story")),
-                             claims=claims, statuses=_statuses(run_dir), fenced=_is_fenced(run_dir, agent_id))
-    tool = payload.get("tool_name") if isinstance(payload.get("tool_name"), str) else ""
+                             claims=claims, statuses=_statuses(run_dir), fenced=_is_fenced(run_dir, agent_id),
+                             cwd=pathlib.Path(cwd), run_ignored=run_ignored)
     decision = policy.decide(agent, agent_id, tool, payload["tool_input"], context)
     if not decision.allow:
         return False, decision.reason
@@ -172,7 +175,7 @@ def main():
             pass
         return 0
     try:
-        allowed, reason = _pre_tool_use(payload, root, accio)
+        allowed, reason = _pre_tool_use(payload, root, accio, cwd)
     except Exception as error:  # noqa: BLE001 — a policy that crashes must say no, not leave a question to freeze on
         allowed, reason = False, f"could not check this call ({type(error).__name__}: {error})."
     _answer(allowed, reason)
