@@ -326,6 +326,14 @@ class BriefTest(unittest.TestCase):
         write(findings, "- major, 90, src/a.py:1: the link never expires\n")
         return pathlib.Path(self.brief("S-001", "--fix", str(findings))["brief"]).read_text(encoding="utf-8")
 
+    def test_S_082_1_the_brief_and_the_fix_brief_name_the_report_outside_the_main_checkout(self):
+        report = self.wt_root / ".reports" / "S-001" / "build-report.md"
+        story_brief = pathlib.Path(self.brief("S-001")["brief"]).read_text(encoding="utf-8")
+        for text in (story_brief, self.fix_text()):
+            with self.subTest(brief=text[:40]):
+                self.assertIn(f"Write your report to `{report}`", text)
+                self.assertNotIn(str(self.accio / "run" / "S-001" / "build-report.md"), text)
+
     def test_S_021_1_a_fix_brief_names_the_story_briefs_path(self):
         self.assertIn(str(self.accio / "run" / "S-001" / "brief.md"), self.fix_text())
 

@@ -9,8 +9,11 @@ import os
 import pathlib
 import subprocess
 
+from accio_lib import summary
+
 ACCIO_DIR_NAME = ".accio"
 WORKTREE_ROOT_SUFFIX = "-accio-wt"
+REPORTS_DIR_NAME = ".reports"  # house-elf's reports, beside the story worktrees (S-082)
 RUN_PROBE = ".accio/run/x"  # git checks a path inside the run folder
 
 
@@ -43,6 +46,17 @@ def main_root(start="."):
 def worktree_root(main):
     """Where story worktrees live: outside the repo, so the project's tools never scan them (DESIGN § 5)."""
     return main.parent / f".{main.name}{WORKTREE_ROOT_SUFFIX}"
+
+
+def reports_dir(main):
+    """Where house-elf's reports live: beside the story worktrees, so no reviewer's search of the main checkout or
+    of a worktree passes over them (S-082)."""
+    return worktree_root(main) / REPORTS_DIR_NAME
+
+
+def report_path(main, story_id):
+    """House-elf's report for one story: `<worktree root>/.reports/<ID>/build-report.md` (S-082)."""
+    return reports_dir(main) / story_id / summary.REPORT_NAME
 
 
 def accio_dir(start="."):
