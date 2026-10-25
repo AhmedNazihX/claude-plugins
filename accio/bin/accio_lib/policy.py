@@ -379,7 +379,7 @@ def _house_elf(agent_id, tool, tool_input, ctx):
         return deny("house-elf first runs `accio-claim <ID>` (the command in its brief); until then it may only read.")
     worktree = pathlib.Path(claim["worktree"])
     if tool in WRITE_TOOLS:
-        return _house_elf_write(_target(tool_input), worktree, ctx.accio / "run" / claim["story"] / REPORT_NAME)
+        return _house_elf_write(_target(tool_input), worktree, paths.report_path(ctx.root, claim["story"]))
     if tool == "Bash":
         return _verdict(bashpolicy.check(_command(tool_input), _house_elf_judge(worktree, ctx), start_in=worktree))
     return deny(f"{tool} isn't on accio:house-elf's list.")
