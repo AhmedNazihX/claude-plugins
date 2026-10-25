@@ -102,6 +102,24 @@ class ReviewPackageTest(unittest.TestCase):
                 else:
                     self.assertIn("Checklists: none", text)
 
+    def test_S_085_1_a_risk_that_names_a_guard_is_risky_and_gets_the_security_checklist(self):
+        security = str(ROOT / "references" / "checklists" / "auth-and-security.md")
+        for risk in ("curfew (what each agent may write)", "guard", "guards", "hook", "hooks", "sandbox",
+                     "access", "ui"):
+            with self.subTest(risk):
+                self.story(risk=risk)
+                self.brief()
+                self.build(text=f"value = '{risk}'\n")
+                reply, text = self.package()
+                is_guard = risk != "ui"
+                self.assertIs(reply["risky"], is_guard)
+                self.assertEqual(security in text, is_guard)
+
+    def test_S_085_1_guard_words_are_matched_whole(self):
+        for risk in ("curfews", "hooked", "accessibility", "guardian", "sandboxed"):
+            with self.subTest(risk):
+                self.assertNotIn(review.SECURITY, review.checklists(risk, False))
+
     def test_S_043_1_the_code_flag_is_false_for_a_diff_of_docs_and_config_only(self):
         self.story(files="src/a.py, docs/guide.md, config.json")
         self.brief()
