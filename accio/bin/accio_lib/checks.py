@@ -153,6 +153,16 @@ def untagged(dod, test_texts):
             if line.testable and not any(pattern.search(joined) for pattern in _tag_patterns(line.id))]
 
 
+def drift(stories, status, root):
+    """Done stories whose testable DoD lines no test in `root` carries any more: [{id, title, lines}], by id."""
+    done = [sid for sid in sorted(stories) if status[sid] == "done"]
+    if not done:
+        return []
+    texts = test_texts(root)
+    lost = [(sid, untagged(stories[sid].dod, texts)) for sid in done]
+    return [{"id": sid, "title": stories[sid].meta["title"], "lines": lines} for sid, lines in lost if lines]
+
+
 def changed_files(worktree, start):
     return [path for path in _git(worktree, "diff", "--name-only", "-z", "--no-renames", start, "HEAD")
             .decode("utf-8", errors="replace").split("\0") if path]

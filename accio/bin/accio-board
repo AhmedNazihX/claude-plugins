@@ -9,7 +9,8 @@
                         build's load) puts first the stories a crash left in doing, with where they resume
   board [--print]       regenerate .accio/board.md (--print: show it, write nothing)
   status                one-line summary of the columns
-  plan [--json]         the next iteration's proposal: eligible stories (deps done, or stacked within
+  drift [--json]        done stories whose testable DoD lines no test carries any more (writes nothing)
+  plan [--json]        the next iteration's proposal: eligible stories (deps done, or stacked within
                         stack_depth), held ones and why, and stories whose dep was dropped (prophecy)
   go <ID>... [--track <ID>=<track>] [--also <story file>]   make them exactly the next iteration: status
                         ready in the story files, iterations/<N>.md and board.md, committed with any --also
@@ -29,7 +30,7 @@ import sys
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 
-from accio_lib import backlog, board, config, design, nextstep, paths, plan, runlock, story  # noqa: E402
+from accio_lib import backlog, board, checks, config, design, nextstep, paths, plan, runlock, story  # noqa: E402
 
 
 def _accio():
@@ -114,6 +115,21 @@ def cmd_status(_args, accio):
     print(board.summary(status))
 
 
+def cmd_drift(args, accio):
+    stories, status = _loaded(accio)
+    root = paths.main_root()
+    if root is None:
+        raise board.BoardError("this folder is not in a git repo")
+    lost = checks.drift(stories, status, root)
+    if args.json:
+        print(json.dumps({"drift": lost}, indent=2))
+    elif not lost:
+        print("no drift")
+    else:
+        for item in lost:
+            print(f"{' '.join(item['lines'])} · {item['title']}")
+
+
 def cmd_next(args, accio):
     stories, status = _loaded(accio)
     dropped = plan.propose(stories, status, config.load(accio))["dropped_deps"] if "backlog" in status.values() else ()
@@ -155,6 +171,9 @@ def parser():
     go.add_argument("--track", action="append", default=[])
     go.add_argument("--also", action="append", default=[], help="a story file the skill edited, to commit too")
     go.set_defaults(run=cmd_go)
+    drift_parser = commands.add_parser("drift")
+    drift_parser.add_argument("--json", action="store_true")
+    drift_parser.set_defaults(run=cmd_drift)
     next_parser = commands.add_parser("next")
     next_parser.add_argument("--json", action="store_true")
     next_parser.set_defaults(run=cmd_next)

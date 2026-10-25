@@ -338,7 +338,7 @@ script's absolute path.
 
 | Script | Does |
 |---|---|
-| `accio-board` | parse stories → board.md (with a Dropped line), `ready --json` (including stacked children), `status`, `move`, `new` (IDs), `lock` / `unlock` (the run lock), `plan` / `go` (prophecy's proposal and commit), `record` (sort), `init` / `record-design` (wand's setup and design commit), `board --print` (map) |
+| `accio-board` | parse stories → board.md (with a Dropped line), `ready --json` (including stacked children), `status`, `move`, `new` (IDs), `lock` / `unlock` (the run lock), `plan` / `go` (prophecy's proposal and commit), `record` (sort), `init` / `record-design` (wand's setup and design commit), `board --print` (map), `drift` (map: done stories whose tagged tests are gone) |
 | `accio-brief` | story → brief.md (template), from base or from the parent's head; fix brief from findings |
 | `accio-ledger` | patch-id verdicts, `check`, `record` |
 | `accio-score` | complexity score → track, split flag |
