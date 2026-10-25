@@ -141,5 +141,58 @@ class WandAsksFirstTest(unittest.TestCase):
         self.assertIn("no", before.lower())
 
 
+def skill_flat():
+    return " ".join((ROOT / "skills" / "wand" / "SKILL.md").read_text(encoding="utf-8").split())
+
+
+def section(text, start, end):
+    return text.split(start, 1)[1].split(end, 1)[0]
+
+
+class FreshReaderTest(unittest.TestCase):
+    """S-081/3: wand calls first-year once, after writing the design and before record-design."""
+
+    def step_6(self):
+        return section(skill_flat(), "## 6. Record and write", "End:")
+
+    def test_S_081_3_first_year_runs_after_the_design_is_written_and_before_record_design(self):
+        text = self.step_6()
+        written, reader = text.index("Write `.accio/design.md`"), text.index("`accio:first-year`")
+        self.assertLess(written, reader)
+        self.assertLess(reader, text.index("accio-board record-design"))
+
+    def test_S_081_3_called_once_with_only_the_design_path(self):
+        text = self.step_6()
+        for words in ("once", "only the design's path", "the note's heading", "never call it twice in a run",
+                      ".accio/run/wand/first-year-notes.md"):
+            with self.subTest(words):
+                self.assertIn(words, text)
+
+    def test_S_081_3_points_are_asked_one_at_a_time_and_written_into_the_design(self):
+        text = self.step_6()
+        for words in ("drop a point the interview already settled", "one at a time", "interview.md",
+                      "write each answer into the design with Edit", "With `driven`", "still asked",
+                      "the fresh reader found nothing"):
+            with self.subTest(words):
+                self.assertIn(words, text)
+
+
+class DecisionClashTest(unittest.TestCase):
+    """S-081/4: wand reads the recorded decisions and asks about a clash: replace the decision or change the note."""
+
+    def check(self, text):
+        for words in (".accio/decisions/", "replace the decision", "change the note", "Replaces decision NNN",
+                      "vow"):
+            with self.subTest(words):
+                self.assertIn(words, text)
+
+    def test_S_081_4_wand_step_2_reads_the_decisions_and_asks_on_a_clash(self):
+        self.check(section(skill_flat(), "## 2. Interview", "## 3. Check the facts"))
+
+    def test_S_081_4_the_interview_guide_asks_on_a_clash(self):
+        self.check(" ".join((ROOT / "skills" / "wand" / "references" / "interview.md").read_text(
+            encoding="utf-8").split()))
+
+
 if __name__ == "__main__":
     unittest.main()

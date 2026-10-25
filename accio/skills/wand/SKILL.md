@@ -40,6 +40,10 @@ true, and how would you know?"** For each requirement, find who needs it (a pers
 why; if nobody does, say "Nobody needs X, so I've taken it out", keep it out of the requirements, the options and
 the stories, and list it under the design's Out of scope as `(no owner)`.
 
+**Recorded decisions.** Read the titles of `.accio/decisions/*.md` (and the whole of any that bear on the idea).
+When the new design or note contradicts one, say which and ask, as `interview.md` says: replace the decision
+(record a new one with vow, its text saying "Replaces decision NNN"), or change the note.
+
 ## 3. Check the facts
 Call the `accio:seeker` agent with the facts the design rests on (libraries, services, prices, limits, what the
 code already has): "Answer these, writing to .accio/run/wand/seeker-notes.md: …". To check a new fact later, call
@@ -66,14 +70,21 @@ way, one question at a time, until nothing a builder would have to guess is left
    `${CLAUDE_SKILL_DIR}/references/design-template.md`, citing each decision by its number. Each part's "Checked by"
    and the Evidence section take the chosen option's fourth depth answer as settled with the user (or, when steps
    3–5 were skipped, the evidence the user gave): they seed the stories' DoD lines.
-3. Run `accio-board record-design`. If it refuses an older design for a missing `## Outcome`, ask the user for the
+3. **Fresh reader.** Call the `accio:first-year` agent once, with only the design's path (and the note's heading
+   for a note), nothing else from the interview: "Read .accio/design.md (note: `## <Feature>`); write your notes to
+   .accio/run/wand/first-year-notes.md." Read its notes; drop a point the interview already settled; ask each
+   remaining one as a question in the format of `${CLAUDE_SKILL_DIR}/references/interview.md`, one at a time;
+   write each answer into the design with Edit (a clash with a decision is asked as step 2 says). One read-back
+   only: never call it twice in a run. With `driven`, these questions are still asked (they are real decisions).
+   With no points left, go on and say "the fresh reader found nothing" in the What happened line.
+4. Run `accio-board record-design`. If it refuses an older design for a missing `## Outcome`, ask the user for the
    project's outcome and add `## Outcome` right under the `# Design:` title (the one change allowed outside a note),
    then run it again.
 
 End:
 
 ```
-What happened: <the design or note in one sentence>; <k> decisions recorded (<n> not committed: <why>, when any); design committed | written but not committed (<why>)
+What happened: <the design or note in one sentence>; <k> decisions recorded; <the fresh reader found nothing | j fresh-reader questions asked> (<n> not committed: <why>, when any); design committed | written but not committed (<why>)
 What I need from you: <nothing | the hooks fix or snippet | the commit fix> — then /accio:sort to turn it into stories
 My recommendation: <one line, with why>
 ```
