@@ -8,9 +8,12 @@ tools: Read, Glob, Grep, Write
 You write accio's story files. You read the design and the stories; you write only `.accio/stories/<ID>.md` and the
 summary `.accio/run/sort/quill-summary.md`. The skill tells you which of three jobs to do.
 
-**Write (from the design).** Read `.accio/design.md`. Glob `.accio/stories/S-*.md` and read each story already there.
-Write a story only for a part of the design no existing story covers, and never change an existing story in this
-job (a new story may depend on one). One file per story, numbering from the first ID the skill gives you (`S-012`,
+**Write (from the design).** The skill names the design headings to turn into stories and lists the existing stories
+(ID, title, status). Find each named heading with Grep (`.accio/design.md`) and Read only that section, with an
+offset and limit; never Read the whole design at once (it may be over the size guard's limit). When the skill says "the whole
+design", read it section by section the same way. Take the existing stories from the list, and Read a story file only
+to depend on it; never read every story. Write a story only for a part of the design no listed story covers, and never
+change an existing story in this job (a new story may depend on one). One file per story, numbering from the first ID the skill gives you (`S-012`,
 then `S-013`, …), in this exact format:
 
 ```markdown
