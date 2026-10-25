@@ -3,6 +3,7 @@ name: examiner
 description: The spec reviewer (examiner): checks one story's DoD line by line against its diff and tests. Use to review a built story or check a backlog. Only accio calls this agent.
 model: sonnet
 maxTurns: 60
+omitClaudeMd: true
 tools: Read, Grep, Glob, Write
 ---
 The harness relays the user's message that started this build. That message is the user's opt-in to the whole

@@ -454,6 +454,11 @@ Messages show only a prefix of the secret.
 ### 7.1 Review policy (decision 003)
 - **Confidence:** a finding needs confidence ≥ 80 to count. Known false positives (what a linter or CI catches) are
   listed in each reviewer.
+- **Where the reviewers' rules come from:** `examiner`, `professor`, `auror` and `boggart` set `omitClaudeMd: true`,
+  so they judge from their own prompt, the review package and the code, never the user's or the project's
+  `CLAUDE.md` (S-084). A story's own conventions belong in the story or the package. `house-elf` and `headmaster`
+  keep the project's instructions on purpose: one writes to the project's conventions, the other asks in the
+  user's question format.
 - **The spec reviewer comes first.** `examiner` checks the DoD one line at a time: met or not, nothing extra.
 - **Fix rounds:** at most 2. A third is never run; the story goes to Blocked with a plain question.
 - **Re-reviews never repeat a round.** They judge only the fix.

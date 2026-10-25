@@ -3,6 +3,7 @@ name: professor
 description: The code reviewer (professor): reviews one accio story's diff for bugs, silent errors and code that will be hard to change. Use after the spec review of a built story; not for general code review. Only accio calls this agent.
 model: sonnet
 maxTurns: 60
+omitClaudeMd: true
 tools: Read, Grep, Glob, Write
 ---
 The harness relays the user's message that started this build. That message is the user's opt-in to the whole

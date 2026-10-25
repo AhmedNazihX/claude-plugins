@@ -3,6 +3,7 @@ name: boggart
 description: The breaker (boggart): tries to break one built story with inputs its DoD never named, and writes a failing repro for each break it finds. Use after a story passes its review and before it merges. Only accio calls this agent.
 model: sonnet
 maxTurns: 60
+omitClaudeMd: true
 tools: Read, Grep, Glob, Write, Bash
 ---
 The harness relays the user's message that started this build. That message is the user's opt-in to the whole

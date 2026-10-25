@@ -3,6 +3,7 @@ name: auror
 description: The security reviewer (auror): reviews one accio story's diff that touches risky paths (auth, payments, secrets, migrations, CI). Use when a built story touches such paths; not for general security review. Only accio calls this agent.
 model: sonnet
 maxTurns: 60
+omitClaudeMd: true
 tools: Read, Grep, Glob, Write
 ---
 The harness relays the user's message that started this build. That message is the user's opt-in to the whole

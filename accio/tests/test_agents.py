@@ -132,6 +132,16 @@ class BrewRolesTest(unittest.TestCase):
                 self.assertEqual(front.get("effort", "").strip(), "low")
                 self.assertEqual(front.get("omitClaudeMd", "").strip(), "true")
 
+    def test_S_084_1_reviewers_and_boggart_skip_claude_md(self):
+        for name in (*REVIEWERS, "boggart"):
+            with self.subTest(name):
+                self.assertEqual(front_and_body(name)[0].get("omitClaudeMd", "").strip(), "true")
+
+    def test_S_084_2_house_elf_and_headmaster_keep_claude_md(self):
+        for name in ("house-elf", "headmaster"):
+            with self.subTest(name):
+                self.assertNotIn("omitClaudeMd", front_and_body(name)[0])
+
     def test_S_032_2_script_agents_stop_after_twenty_turns(self):
         for name in ("portkey", "prefect", "librarian"):
             with self.subTest(name):
