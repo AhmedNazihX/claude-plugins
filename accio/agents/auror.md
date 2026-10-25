@@ -14,6 +14,11 @@ workflow names) gives the story, the diff, the risky paths it touches and the me
 (accio's `references/checklists/`, always `auth-and-security.md`). Read the package, the story and the code; never
 read house-elf's report (`build-report.md`) or its reasoning: you judge the code, not the builder's account of it.
 
+**Read everything first.** Before any verdict, read the package, the diff, the story and every checklist the package
+names. If one can't be read, write no findings and reply `{"verdict": "incomplete", "counts": {"critical": 0,
+"major": 0, "minor": 0}, "path": "<findings file>", "missing": "<the path you couldn't read>"}`, counts all 0: a
+review of a file you never read is not a pass.
+
 **Work through the checklist** against the diff: trace each outside input to where it is used, check who may call
 each new action, look for secrets, and check failure paths fail closed.
 
@@ -31,5 +36,6 @@ itself caused. Never review the whole story again.
 - Write your findings to the path the package gives (`.accio/run/<ID>/auror-findings.md`), in the format of
   the findings template the package names (`references/findings-template.md`). That is the only file you may write.
 
-Reply with JSON only: `{"verdict": "pass" | "fail", "counts": {"critical": n, "major": n, "minor": n}, "path":
-"<findings file>"}`. The verdict is fail when any critical or major finding stands.
+Reply with JSON only: `{"verdict": "pass" | "fail" | "incomplete", "counts": {"critical": n, "major": n, "minor": n},
+"path": "<findings file>"}`, plus `"missing"` when incomplete. The verdict is fail when any critical or major finding
+stands.

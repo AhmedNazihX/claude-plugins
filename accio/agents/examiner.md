@@ -15,6 +15,11 @@ risk flag, the method checklists to apply (accio's `references/checklists/`). Re
 code; never read house-elf's report (`build-report.md`) or its reasoning: you judge the code, not the builder's
 account of it.
 
+**Read everything first.** Before any verdict, read the package, the diff, the story and every checklist the package
+names (in a backlog check: the design and each named story). If one can't be read, write no findings and reply
+`{"verdict": "incomplete", "counts": {"critical": 0, "major": 0, "minor": 0}, "path": "<findings file>", "missing":
+"<the path you couldn't read>"}`, counts all 0: a review of a file you never read is not a pass.
+
 **For each numbered DoD line, in order:**
 1. Is it met by the diff? Met or not; nothing extra counts. An unmet line is a major finding with its DoD tag.
 2. For a line not marked `(no test)`: does the test carrying its tag (`S-012/1` or `test_S_012_1_…`) really check
@@ -49,5 +54,6 @@ itself caused. Never review the whole story again.
 - Write your findings to the path the package gives (`.accio/run/<ID>/examiner-findings.md`), in the format of
   the findings template the package names (`references/findings-template.md`). That is the only file you may write.
 
-Reply with JSON only: `{"verdict": "pass" | "fail", "counts": {"critical": n, "major": n, "minor": n}, "path":
-"<findings file>"}`. The verdict is fail when any DoD line is unmet or any critical or major finding stands.
+Reply with JSON only: `{"verdict": "pass" | "fail" | "incomplete", "counts": {"critical": n, "major": n, "minor": n},
+"path": "<findings file>"}`, plus `"missing"` when incomplete. The verdict is fail when any DoD line is unmet or any
+critical or major finding stands.

@@ -97,7 +97,10 @@ const PACKAGE_SCHEMA = {
 }
 const BREAK_SCHEMA = {
   type: 'object',
-  properties: { breaks: { type: 'array', items: { type: 'object' } }, questions: { type: 'array', items: { type: 'string' } } },
+  properties: {
+    breaks: { type: 'array', items: { type: 'object' } }, questions: { type: 'array', items: { type: 'string' } },
+    incomplete: { type: 'boolean' }, missing: { type: 'string' },  // boggart couldn't read a file it needs (S-080/3)
+  },
 }
 const VERIFY_SCHEMA = {
   type: 'object',
@@ -119,7 +122,8 @@ const COUNT = { type: 'integer' }
 const REVIEW_SCHEMA = {
   type: 'object',
   properties: {
-    verdict: { type: 'string', enum: ['pass', 'fail'] }, path: { type: 'string' },
+    // `incomplete`: the reviewer couldn't read a file it needs (`missing`), so it gave no verdict (S-080)
+    verdict: { type: 'string', enum: ['pass', 'fail', 'incomplete'] }, path: { type: 'string' }, missing: { type: 'string' },
     counts: { type: 'object', properties: { critical: COUNT, major: COUNT, minor: COUNT }, required: ['critical', 'major', 'minor'] },
   },
   required: ['verdict', 'counts', 'path'],
@@ -372,7 +376,7 @@ function reviewPrompt(story, name, pkg, round, ruling) {
   const fix = round
     ? ` This is fix round ${round}: judge only the fix diff, and mark each of your earlier findings resolved or open.` : ''
   return `Step 4, review story ${story.id}. Your review package: ${pkg.package}.${quick}${fix}${rulingNote(ruling)} ` +
-    'Reply {verdict, counts, path}.'
+    'Reply {verdict, counts, path}, plus missing when the verdict is incomplete.'
 }
 
 async function review(story, names, pkg, round, ruling) {
@@ -400,6 +404,12 @@ async function reviewAndFix(story, worktree, model, earlier, usedFixes) {
   return { note: [broken.note, seen.note].filter(Boolean).join('; ') }
 }
 
+// A reviewer that couldn't read its inputs gave no verdict: never a pass (S-080/1).
+const unreadOf = (reply) => reply.missing || 'its inputs'
+function unreadQuestion({ name, reply }) {
+  return `The ${ROLES[name]} (${name}) couldn't read ${unreadOf(reply)}, so it gave no verdict. Fix that and review again?`
+}
+
 // The review rounds for `first`, a package: review, and while a reviewer fails run a fix round and review the fix diff.
 // Returns a stop, or {fixes, ruling, head} (head: the commit the last review judged).
 async function reviewLoop(story, worktree, model, earlier, usedFixes, first, firstNames, startRound) {
@@ -411,6 +421,8 @@ async function reviewLoop(story, worktree, model, earlier, usedFixes, first, fir
     const verdicts = await review(story, names, pkg, round, ruling)
     const silent = verdicts.find((each) => failed(each.reply))
     if (silent) return accioStop(`The ${ROLES[silent.name]} (${silent.name}) stopped answering for over 20 minutes. Review it again?`)
+    const unread = verdicts.find((each) => each.reply.verdict === 'incomplete')
+    if (unread) return accioStop(unreadQuestion(unread))  // house-elf can't fix an unreadable package: no fix round
     const failing = verdicts.filter((each) => each.reply.verdict !== 'pass')
     if (!failing.length) return { fixes, ruling, head: pkg.head }
     const findings = failing.map((each) => each.reply.path)
@@ -438,7 +450,7 @@ async function reviewLoop(story, worktree, model, earlier, usedFixes, first, fir
 // a fix round with boggart-findings.md; one outside the DoD starts none (owl reads it from verdicts.json and logs it).
 // After a fix round, a kept repro that only fails to load (a setup error) gets one boggart turn for its imports or
 // setup, then verify again; if it still can't load it is logged, not fixed. A boggart try that gives no answer found
-// nothing to drop, so it leaves a note. A verify that fails or gives no answer while boggart has breaks (also after a
+// nothing to drop, so it leaves a note; so does one that says it couldn't read a file (`incomplete`, S-080/3). A verify that fails or gives no answer while boggart has breaks (also after a
 // repair turn or a fix round) blocks the story with one question: a break nobody checked never passes (S-076/1).
 
 const brokenPath = (story) => `.accio/run/${story.id}/boggart-findings.md`
@@ -452,7 +464,7 @@ function tryToBreak(story, pkg) {
   return callRetry(
     `Step 4b, try to break story ${story.id}. Your review package: ${pkg.package}. Follow your checklist: write repros ` +
       `to .accio/run/${story.id}/boggart/repros/ and judge each with \`accio-break ${story.id} try <file>\`. ` +
-      'Reply {breaks, questions}.',
+      'Reply {breaks, questions}, plus incomplete and missing when you couldn\'t read a file you need.',
     { agentType: BOGGART, model: REVIEW_MODEL, schema: BREAK_SCHEMA, label: label(story, 'boggart') })
 }
 
@@ -539,7 +551,8 @@ async function boggartStage(story, worktree, model, ruling, fixes, whole, review
   }
   const tried = await tryToBreak(story, pkg)
   if (failed(tried)) return { note: 'boggart gave no answer' }
-  if (!tried.breaks || !tried.breaks.length) return {}
+  const unread = tried.incomplete ? `boggart couldn't read ${unreadOf(tried)}` : ''  // a note, as for no answer (S-080/3)
+  if (!tried.breaks || !tried.breaks.length) return { note: unread }
   let reply = await verify(story, 'verify', 0)
   let used = fixes
   let current = ruling
@@ -555,7 +568,7 @@ async function boggartStage(story, worktree, model, ruling, fixes, whole, review
       continue
     }
     const broken = kept.filter((item) => item.in_dod && !cantLoad(item))
-    if (!broken.length) return { fixes: used, ruling: current, head, note: boggartNote(kept) }
+    if (!broken.length) return { fixes: used, ruling: current, head, note: [unread, boggartNote(kept)].filter(Boolean).join('; ') }
     if (used >= MAX_FIX_ROUNDS) return stop(brokenQuestion(story, broken))
     const fixed = await fixBreaks(story, worktree, model, used, current, broken, head)
     if (fixed.stop) return fixed

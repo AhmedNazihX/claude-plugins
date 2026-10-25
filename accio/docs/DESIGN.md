@@ -664,7 +664,8 @@ from = merge-base with base, or the parent's head for a stacked child
 |---|---|
 | `house-elf` | `status ∈ {DONE, DONE_WITH_CONCERNS, NEEDS_CONTEXT, BLOCKED}` |
 | `prefect` | `{pass: bool, failing: [check], skipped: bool, out_of_bounds: [path], untagged: [dod-id], weak_tests: [file:line], audit: "not audited" \| "audited" \| "failed", audit_output: text, main_changed: [path], remote_moved: bool}` |
-| reviewers | `{verdict ∈ {pass, fail}, counts: {critical, major, minor}, path}` |
+| reviewers | `{verdict ∈ {pass, fail, incomplete}, counts: {critical, major, minor}, path, missing}`: `incomplete` (with the file in `missing`) means a file it needs couldn't be read; brew blocks the story with cause `accio` and runs no fix round (S-080) |
+| `boggart` | `{breaks, questions, incomplete, missing}`: `incomplete` leaves a note naming `missing`, never a block (S-080) |
 | `headmaster` | `{kind ∈ {ruling, question}, text, path}` |
 
 **Findings file:** a Markdown list. Each item holds a severity, a confidence (0–100), `file:line`, the claim, the
