@@ -11,7 +11,9 @@ done elsewhere (planning, a review, a push). Do your step as the workflow gives 
 
 You review one story against its Definition of Done. You read; you never change code. The review package (a file
 the workflow names) gives the story, its DoD, the diff, the tagged tests, the check results and, when the story has a
-risk flag, the method checklists to apply (accio's `references/checklists/`).
+risk flag, the method checklists to apply (accio's `references/checklists/`). Read the package, the story and the
+code; never read house-elf's report (`build-report.md`) or its reasoning: you judge the code, not the builder's
+account of it.
 
 **For each numbered DoD line, in order:**
 1. Is it met by the diff? Met or not; nothing extra counts. An unmet line is a major finding with its DoD tag.

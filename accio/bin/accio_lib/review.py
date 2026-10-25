@@ -11,7 +11,7 @@ import pathlib
 import re
 import subprocess
 
-from accio_lib import breaker, brief, checks, globs, summary
+from accio_lib import breaker, brief, checks, globs
 
 REFERENCES = brief.BIN.parent / "references"
 CHECKLISTS = REFERENCES / "checklists"
@@ -178,8 +178,8 @@ def _render(parsed, accio, worktree, facts):
         **brief.common(parsed, worktree, accio), "scope": scope, "head": facts["head"], "diff": facts["diff"],
         "shortstat": facts["shortstat"], "findings": facts["findings"],
         "criteria_heading": "Definition of Done", "files_heading": "Files the story may change (plus their tests)",
-        "source_line": f"- The story: `{accio / 'stories' / (parsed.meta['id'] + '.md')}`; the implementer's report: "
-                       f"`{accio / 'run' / parsed.meta['id'] / summary.REPORT_NAME}`",
+        # The story only, never house-elf's report: a reviewer judges the code, not the builder's account (S-079).
+        "source_line": f"- The story: `{accio / 'stories' / (parsed.meta['id'] + '.md')}`",
         "findings_line": f"Write them to `{facts['findings']}` (your name in place of `<reviewer>`), in the format "
                          f"of `{REFERENCES / 'findings-template.md'}`.",
         "template": REFERENCES / "findings-template.md", "dod": brief.dod_lines(parsed),

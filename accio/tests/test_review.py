@@ -267,8 +267,20 @@ class ReviewPackageTest(unittest.TestCase):
         self.build()
         text = self.package()[1]
         self.assertIn("## Definition of Done\n- S-001/1", text)
-        self.assertIn("the implementer's report:", text)
+        self.assertIn(f"- The story: `{self.accio / 'stories' / 'S-001.md'}`", text)
         self.assertIn("Write them to `", text)
+
+    def test_S_079_1_a_package_names_the_story_file_and_never_the_report_first_review_or_fix_round(self):
+        self.story()
+        self.brief()
+        first = self.build()
+        self.build("src/b.py", "fixed = True\n")
+        for args in ((), ("--since", first)):
+            with self.subTest(args=args):
+                text = self.package(*args)[1]
+                self.assertIn(str(self.accio / "stories" / "S-001.md"), text)
+                self.assertNotIn("build-report", text)
+                self.assertNotIn("implementer's report", text)
 
     def test_a_git_failure_is_a_plain_error_not_a_traceback(self):
         self.story()

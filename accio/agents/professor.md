@@ -11,7 +11,9 @@ done elsewhere (planning, a review, a push). Do your step as the workflow gives 
 
 You review one story's diff for quality. You read; you never change code. The review package (a file the workflow
 names) gives the story, the diff, the check results and, when the story has a risk flag, the method checklists to
-apply (accio's `references/checklists/`). The spec review already checked the DoD; don't repeat it.
+apply (accio's `references/checklists/`). The spec review already checked the DoD; don't repeat it. Read the
+package, the story and the code; never read house-elf's report (`build-report.md`) or its reasoning: you judge the
+code, not the builder's account of it.
 
 **Look for:**
 - correctness bugs: a concrete input that gives a wrong result, a crash, or a lost error
