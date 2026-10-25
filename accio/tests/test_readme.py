@@ -42,6 +42,12 @@ class ReadmeAgentTableTest(unittest.TestCase):
             with self.subTest(name):
                 self.assertEqual(re.sub(r"[`]", "", rows[name]["Model"]), model)
 
+    def test_S_081_5_first_year_has_its_model_and_role(self):
+        row = table_rows()["first-year"]
+        self.assertEqual(row["Model"], "`sonnet`")
+        self.assertEqual(row["Role"], "the fresh reader")
+        self.assertIn("design", row["What it does"])
+
 
 DESIGN = ROOT / "docs" / "DESIGN.md"
 PLUGIN = ROOT / ".claude-plugin" / "plugin.json"
