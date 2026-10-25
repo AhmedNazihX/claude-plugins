@@ -17,6 +17,19 @@
     "claude --plugin-dir ./accio plugin details accio",
     "claude plugin validate accio"
   ],
+  "risky_paths": [
+    "**/auth/**",
+    "**/payments/**",
+    "**/migrations/**",
+    "**/*secret*",
+    ".github/workflows/**",
+    "accio/bin/accio_lib/policy.py",
+    "accio/bin/accio_lib/bashpolicy.py",
+    "accio/bin/accio_lib/shellpaths.py",
+    "accio/bin/accio_lib/pushguard.py",
+    "accio/hooks/**",
+    "git-guardrails/hooks/**"
+  ],
   "snapshot_skip": [
     ".remember/**"
   ],
