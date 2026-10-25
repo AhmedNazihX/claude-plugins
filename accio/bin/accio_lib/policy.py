@@ -16,9 +16,10 @@ the exact forms brew.js gives it (PREFECT_PREVIEW), each on its own, and writes 
 the mad-eye and boggart findings files (S-071) and a READY story's brew-notes.md (S-076).
 
 The reviewers (examiner, professor, auror, boggart) never read house-elf's report (REPORT_BLIND, S-079): no Read of
-a `build-report.md` under `.accio/run/`, and no Grep or Glob inside `.accio/run/`, for files named `build-report`, or
-from above `.accio/run/` unless git ignores it. Paths are read as the tool reads them (`~`, relative to the agent's
-folder), and one curfew can't resolve is denied. They read their package and findings files with Read. house-elf,
+a `build-report.md` under `.accio/run/`, and no Grep or Glob inside `.accio/run/`, on a path naming `build-report`, or
+from above `.accio/run/` unless git ignores it and the search's file pattern can't pick out the report (ripgrep's
+`--glob` overrides git's ignore rules). Paths are read as the tool reads them (`~`, relative to the agent's folder),
+and one curfew can't resolve is denied. They read their package and findings files with Read. house-elf,
 headmaster and prefect keep reading the report.
 """
 import collections.abc
@@ -296,19 +297,37 @@ def _report_rule(tool, tool_input, ctx):
         return f"Read of {target} is denied: {REPORT_WHY}." if is_report else ""
     if tool not in SEARCH_TOOLS:
         return ""
-    names = [tool_input.get("glob"), tool_input.get("path"), tool_input.get("pattern") if tool == "Glob" else None]
-    if any(isinstance(name, str) and REPORT_WORD in name.casefold() for name in names):
+    path = tool_input.get("path")
+    if isinstance(path, str) and REPORT_WORD in path.casefold():
         return f"{tool} for `{REPORT_WORD}` files is denied: {REPORT_WHY}."
+    name_pattern = tool_input.get("glob" if tool == "Grep" else "pattern")
     for folder in _search_folders(tool, tool_input, ctx):
         if folder is None:
             return f"{tool} on a path curfew can't resolve is denied: {REPORT_WHY}. Give an absolute path."
         if _inside_any_case(folder, run):
             return (f"{tool} inside {run} is denied: {REPORT_WHY}. Read your review package and findings file by "
                     "the paths the package gives.")
-        if _inside_any_case(run, folder) and not ctx.run_ignored:
+        if not _inside_any_case(run, folder):
+            continue
+        if not ctx.run_ignored:
             return (f"{tool} from {folder} would reach {run}, which git doesn't ignore, so it is denied: {REPORT_WHY}. "
                     "Search the worktree or a folder below the repo root.")
+        if _may_name_report(name_pattern):
+            return (f"{tool} from {folder} with the file pattern `{name_pattern}` could reach {run} (a file pattern "
+                    f"overrides git's ignore rules), so it is denied: {REPORT_WHY}. Search the worktree instead.")
     return ""
+
+
+def _may_name_report(name_pattern):
+    """True when a search's file pattern (a Grep `glob`, a Glob `pattern`) could pick out a `build-report.md`: its last
+    part matches the name, letter case ignored, or it holds braces or a `!` curfew doesn't expand (fail closed).
+    None or "" is no pattern."""
+    if name_pattern is None or name_pattern == "":
+        return False
+    if not isinstance(name_pattern, str) or any(char in name_pattern for char in "{}!"):
+        return True
+    last = re.split(r"[/\\]", name_pattern)[-1].casefold()
+    return fnmatch.fnmatchcase(REPORT_NAME, last)
 
 
 def _search_folders(tool, tool_input, ctx):

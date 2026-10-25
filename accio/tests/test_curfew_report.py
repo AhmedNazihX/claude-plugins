@@ -1,8 +1,9 @@
 """S-079: the reviewers (examiner, professor, auror, boggart) judge the code and the story, never house-elf's report.
 
 curfew denies them a Read of any `build-report.md` under `.accio/run/`, and a Grep or Glob inside `.accio/run/`, for
-files named `build-report`, or from above `.accio/run/` while git doesn't ignore it, with the reason; `~` and
-relative paths count as the tool reads them (security review, 2026-10-25). Their package and findings files stay
+files named `build-report`, or from above `.accio/run/` while git doesn't ignore it or with a file pattern that could
+pick out the report (ripgrep's `--glob` overrides the ignore rules), with the reason; `~` and relative paths count as
+the tool reads them (security reviews, 2026-10-25). Their package and findings files stay
 readable, a Grep for the word `build-report` in the code is allowed, and house-elf, headmaster and prefect keep their
 access to the report. Payloads go through the real hook, as the other curfew tests do.
 """
@@ -85,6 +86,26 @@ class ReviewersNeverReadTheReportTest(CurfewTestBase):
                     self.assert_denied("Grep", tool_input, REASON, "doesn't ignore", agent=agent)
             with self.subTest(agent=agent, tool="worktree"):
                 self.assert_allowed("Grep", {"pattern": "risk", "path": str(self.worktree)}, agent=agent)
+
+    def test_S_079_2_a_file_pattern_that_could_pick_out_the_report_from_above_the_run_folder_is_denied(self):
+        # ripgrep's --glob overrides git's ignore rules, so `.accio/run/` being ignored doesn't keep these out of it.
+        searches = (("Grep", {"pattern": "risk", "glob": pattern}) for pattern in
+                    ("*.md", "**/*.md", "build-re*", "*REPORT*", "*.{md,txt}", "!*.py", "**", "docs/**"))
+        globs = (("Glob", {"pattern": "**/*.md"}), ("Glob", {"pattern": f"{self.repo}/**/*.md"}),
+                 ("Glob", {"pattern": "**/*", "path": str(self.repo / ".accio")}))
+        for agent in REVIEWERS:
+            for tool, tool_input in (*searches, *globs):
+                with self.subTest(agent=agent, tool=tool, tool_input=tool_input):
+                    self.assert_denied(tool, tool_input, REASON, "file pattern", agent=agent)
+
+    def test_S_079_3_a_file_pattern_that_cant_name_the_report_or_stays_in_the_worktree_is_allowed(self):
+        searches = (("Grep", {"pattern": "risk", "glob": "*.py"}), ("Grep", {"pattern": "risk", "glob": "src/**/*.py"}),
+                    ("Grep", {"pattern": "risk", "glob": "*.md", "path": str(self.worktree)}),
+                    ("Glob", {"pattern": "**/*.py"}), ("Glob", {"pattern": "**/*.md", "path": str(self.worktree)}))
+        for agent in REVIEWERS:
+            for tool, tool_input in searches:
+                with self.subTest(agent=agent, tool=tool, tool_input=tool_input):
+                    self.assert_allowed(tool, tool_input, agent=agent)
 
     def test_S_079_3_a_reviewer_may_search_the_code_for_the_word_build_report(self):
         for agent in REVIEWERS:
