@@ -14,7 +14,15 @@ with no variables and no `&&` or `;` chains.
 ## Loop
 1. Run `${CLAUDE_PLUGIN_ROOT}/bin/accio-board next --json` before anything else. It gives
    `{"step", "auto", "sentence"}`. If it exits with an `accio-…:` error, say it in plain words and stop.
-2. Do the step, then go back to 1. Never decide the step yourself and never skip step 1 after a step ends.
+2. Do the step, then look at how it ended ("When a step ends"). Only when it ended clean, go back to 1. Never
+   decide the step yourself and never skip step 1 after a clean ending.
+
+## When a step ends
+After a step's skill ends, stop and pass on its message, in plain words, when it ended with:
+- an `accio-…:` error from a script it ran;
+- a refusal: it said it can't or won't go on (prophecy's "there are no checks to run", say);
+- a "What I need from you" line that says anything but "nothing" or "next: …".
+Then don't read the board again: it still names the same step, and running that step again only repeats it.
 
 ## The step
 - `wand`, `sort`, `prophecy`, `owl`: load that step's skill with the Skill tool (`accio:<step>`, with the argument `driven`) and
@@ -26,7 +34,8 @@ with no variables and no `&&` or `;` chains.
 - `done`: no skill. Say the `sentence`, ask what to design next, and stop.
 
 ## Auto and the user
-- When `auto` is true, run that step's skill and read the board again, with no question in between.
+- When `auto` is true, run that step's skill and, unless it ended as "When a step ends" says, read the board again,
+  with no question in between.
 - When `auto` is false, the step will need the user. Still run that step's skill, up to its first question to the
   user, and stop there: that question is the stop. After the answer, carry on with the skill, then read the board
   again.
