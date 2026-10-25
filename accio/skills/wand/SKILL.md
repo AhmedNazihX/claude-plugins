@@ -74,7 +74,8 @@ way, one question at a time, until nothing a builder would have to guess is left
    for a note), nothing else from the interview: "Read .accio/design.md (note: `## <Feature>`); write your notes to
    .accio/run/wand/first-year-notes.md." Read its notes; drop a point the interview already settled; ask each
    remaining one as a question in the format of `${CLAUDE_SKILL_DIR}/references/interview.md`, one at a time;
-   write each answer into the design with Edit (a clash with a decision is asked as step 2 says). One read-back
+   write each answer into the design with Edit (a clash with a decision is asked as step 2 says; an answer that
+   settles a choice between real alternatives is recorded as in 1, and the design cites it). One read-back
    only: never call it twice in a run. With `driven`, these questions are still asked (they are real decisions).
    With no points left, go on and say "the fresh reader found nothing" in the What happened line.
 4. Run `accio-board record-design`. If it refuses an older design for a missing `## Outcome`, ask the user for the

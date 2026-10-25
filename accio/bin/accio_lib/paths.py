@@ -7,12 +7,14 @@ Any failure gives None, so hooks can exit silently and never crash.
 """
 import os
 import pathlib
+import shutil
 import subprocess
 
 ACCIO_DIR_NAME = ".accio"
 WORKTREE_ROOT_SUFFIX = "-accio-wt"
 REPORTS_DIR_NAME = ".reports"  # house-elf's reports, beside the story worktrees (S-082)
 REPORT_NAME = "build-report.md"  # house-elf writes it; a name Claude Code lets a subagent write (S-023)
+EARLIER_REPORT_NAME = "earlier-build-report.md"  # an older build's report, moved beside a newer one (S-082)
 RUN_PROBE = ".accio/run/x"  # git checks a path inside the run folder
 
 
@@ -51,6 +53,26 @@ def reports_dir(main):
 def report_path(main, story_id):
     """House-elf's report for one story: `<worktree root>/.reports/<ID>/build-report.md` (S-082)."""
     return reports_dir(main) / story_id / REPORT_NAME
+
+
+def move_old_reports(main):
+    """Move each report an older accio left in `.accio/run/<folder>/` (any letter case) to its place in `.reports/`,
+    so the run folder, which a search from the main checkout passes over, never holds one (S-082). When that place
+    already holds a report, the old one goes beside it as EARLIER_REPORT_NAME. Returns the new paths; an OSError is
+    left to the caller."""
+    run = pathlib.Path(main) / ACCIO_DIR_NAME / "run"
+    if not run.is_dir():
+        return []
+    moved = []
+    for folder in sorted(item for item in run.iterdir() if item.is_dir() and not item.is_symlink()):
+        for old in sorted(item for item in folder.iterdir() if item.name.casefold() == REPORT_NAME):
+            target = report_path(main, folder.name)
+            if os.path.lexists(target):
+                target = target.with_name(EARLIER_REPORT_NAME)
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.move(str(old), str(target))
+            moved.append(target)
+    return moved
 
 
 def accio_dir(start="."):

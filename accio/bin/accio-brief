@@ -32,6 +32,10 @@ def run(args):
     main, accio = paths.main_root(), paths.accio_dir()
     if main is None or accio is None:
         raise brief.BriefError("no .accio/ folder in this repo; run accio's setup first")
+    try:  # every brief and package first moves an older accio's reports out of the run folder (S-082)
+        paths.move_old_reports(main)
+    except OSError as error:
+        raise brief.BriefError(f"could not move an older build's report out of {accio / 'run'}: {error}") from error
     if args.fix_branch:
         return review.package_fix(accio, main, args.fix_branch, args.acceptance, config.load(accio))
     if not story.STORY_ID.match(args.id):
