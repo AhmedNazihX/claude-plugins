@@ -566,7 +566,9 @@ test('S-076/1 a verify that fails after a fix round blocks the story', async () 
 const withUi = (extra = {}) => async (call, id) => ({
   package: `/run/${id}/review-package.md`, head: 'h0', risky: false, code: false, breaker: false, ui: true, preview: true, test_data: true, ...extra,
 })
-const SEEN = { findings: [{ id: 'mad-eye-1', where: '/login', claim: 'shows a Sign in button', dod: 'S-001/1', failure: 'no button', screenshot: '/r/.accio/run/S-001/mad-eye/S-001-1.png' }] }
+const SEEN = { findings: [{ id: 'mad-eye-1', where: '/login', claim: 'shows a Sign in button', dod: 'S-001/1', failure: 'no button', screenshot: '/r/.accio/run/S-001/mad-eye/S-001-1.png' }],
+  checked: ['S-001/1'], skipped: [] }  // S-087: every reply names the lines it checked and skipped
+const LOOKED_AWAY = { checked: [], skipped: ['S-001/1'] }  // what a reply that couldn't look adds
 const WALK = ['preview-start', 'mad-eye', 'preview-stop']
 const frontMatter = (name) => readFileSync(join(AGENTS, `${name}.md`), 'utf8').split('\n---\n')[0]
 const README = join(AGENTS, '..', 'README.md')
@@ -623,8 +625,8 @@ test('S-047/3 a UI diff whose preview lacks test_data true logs a skip that name
 
 test('S-047/4 the missing browser tools outcome of S-044 logs a skip, and the preview still stops', async () => {
   const missing = [
-    ['the agent says so', async () => ({ no_browser_tools: true })],
-    ['the call errors', async () => ({ error: 'Error: No such tool available: mcp__plugin_playwright_playwright__browser_navigate' })],
+    ['the agent says so', async () => ({ no_browser_tools: true, ...LOOKED_AWAY })],
+    ['the call errors', async () => ({ error: 'Error: No such tool available: mcp__plugin_playwright_playwright__browser_navigate', ...LOOKED_AWAY })],
   ]
   for (const [name, reply] of missing) {
     const { result, calls } = await runWorkflow('brew', happy([story('S-001')], { package: withUi(), 'mad-eye': reply }))
@@ -644,10 +646,11 @@ test('S-047/5 mad-eye runs between accio-preview start and stop, run by prefect,
 })
 
 test('S-047/6 mad-eye failing, erroring or throwing still stops the preview', async () => {
-  const bad = [async () => null, async () => ({ error: 'it broke' }), async () => { throw new Error('boom') }]
+  const bad = [async () => null, async () => ({ error: 'it broke', ...LOOKED_AWAY }), async () => { throw new Error('boom') }]
   for (const reply of bad) {
     const { result, calls } = await runWorkflow('brew', happy([story('S-001')], { package: withUi(), 'mad-eye': reply }))
-    assert.deepEqual(steps(calls, 'S-001').slice(-4), WALK.concat('outcome'))
+    const walked = steps(calls, 'S-001').filter((step) => step !== 'mad-eye retry')  // S-087/2: no answer gets one more try
+    assert.deepEqual(walked.slice(-4), WALK.concat('outcome'))
     assert.match(result, /READY\s+(?:boggart skipped[^;\n]*; )?mad-eye skipped/)
   }
 })

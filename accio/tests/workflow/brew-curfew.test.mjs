@@ -42,7 +42,7 @@ const SCENARIOS = [
   () => runWorkflow('brew', happy([story('S-003')], {
     'S-003 check': async () => ({ pass: false, failing: ['python3 -m unittest'], findings: '.accio/run/S-003/check-findings.md' }),
     package: pkg({ ui: true, preview: true, test_data: true }),
-    'S-003 mad-eye': async () => ({ findings: [{ id: 'm1', claim: 'the button is hidden' }] }),
+    'S-003 mad-eye': async () => ({ findings: [{ id: 'm1', claim: 'the button is hidden' }], checked: ['S-003/1'], skipped: [] }),
   })),
   // mad-eye on a native app's screenshots.
   () => runWorkflow('brew', happy([story('S-004')], {
@@ -50,7 +50,7 @@ const SCENARIOS = [
     'S-004 evidence-plan': async () => ({ ui_evidence: true, takes_over_screen: false, steps_doc: 'docs/ui-walk.md', themes: [] }),
     'S-004 mad-eye-steps': async () => ({ steps: 'open main\n' }),
     'S-004 evidence': async () => ({ ok: true, folder: '.accio/run/S-004/ui-evidence', head: HEAD, screenshots: 1 }),
-    'S-004 mad-eye': async () => ({ findings: [] }),
+    'S-004 mad-eye': async () => ({ findings: [], checked: ['S-004/1'], skipped: [] }),
   })),
   // A verify that fails: the story is BLOCKED with a question (S-076/1).
   () => runWorkflow('brew', happy([story('S-005')], {

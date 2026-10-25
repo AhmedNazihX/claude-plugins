@@ -597,11 +597,19 @@ async function boggartStage(story, worktree, model, ruling, fixes, whole, review
 // starts the preview, mad-eye walks each visible DoD line and saves a screenshot per line, and prefect stops the
 // preview whatever happened. mad-eye never edits, so prefect writes its findings to mad-eye-findings.md, and they go
 // to a fix round. A skip, a failure or no answer never blocks the story: it leaves a note for owl.
+// mad-eye names the DoD lines it `checked` and `skipped` (S-087): a reply that checked none is a note, never a clean
+// pass, since a page that never loaded or a failed login gives empty findings too.
 
+const DOD_IDS = { type: 'array', items: { type: 'string' } }
 const SEEN_SCHEMA = {
   type: 'object',
-  properties: { findings: { type: 'array', items: { type: 'object' } }, no_browser_tools: { type: 'boolean' }, error: { type: 'string' } },
+  properties: {
+    findings: { type: 'array', items: { type: 'object' } }, checked: DOD_IDS, skipped: DOD_IDS,
+    no_browser_tools: { type: 'boolean' }, error: { type: 'string' },
+  },
+  required: ['checked', 'skipped'],  // a reply without them is retried, never read as checked (S-087/2)
 }
+const SEEN_REPLY = '{findings, checked, skipped}: checked and skipped list DoD ids like S-012/2'
 const MISSING_TOOLS = /No such tool available/i  // S-044: what an agent gets for a browser tool the session lacks
 const NO_BROWSER = 'the browser tools are missing from this session'
 const madEyePath = (story) => `.accio/run/${story.id}/mad-eye-findings.md`
@@ -614,11 +622,18 @@ function previewStep(story, action) {
     { agentType: PREFECT, model: 'haiku', schema: OUTCOME_SCHEMA, label: label(story, `preview-${action}`) })
 }
 
+// mad-eye's look gets one more try when no reply came or it lacked a field SEEN_SCHEMA requires (the runtime gives up
+// on such a reply with an error, S-087/2). A reply that says why it couldn't look ({error}, no_browser_tools) stands.
+async function askMadEye(prompt, opts) {
+  const first = await call(prompt, opts)
+  return first || call(prompt, { ...opts, label: `${opts.label} retry` })
+}
+
 function walkPreview(story, pkg) {
-  return call(
+  return askMadEye(
     `Step 4c, look at the preview of story ${story.id}. Your review package: ${pkg.package}. Follow your instructions: ` +
       'walk each DoD line a user can see, and save one screenshot per line at an absolute path inside the repo: ' +
-      `<your working folder>/${shotFolder(story)}<name>.png. You never edit; reply {findings, no_browser_tools}.`,
+      `<your working folder>/${shotFolder(story)}<name>.png. You never edit; reply ${SEEN_REPLY}, plus no_browser_tools.`,
     { agentType: MAD_EYE, model: REVIEW_MODEL, schema: SEEN_SCHEMA, label: label(story, 'mad-eye') })
 }
 
@@ -631,12 +646,21 @@ function writeSeenFindings(story, round, findings) {
     { agentType: PREFECT, model: 'haiku', schema: OUTCOME_SCHEMA, label: label(story, 'mad-eye-findings', round) })
 }
 
-// What mad-eye's reply means: {skip: why} when it could not look, {findings} when it saw problems, else {}.
+// The note for a reply that checked no DoD line (S-087/1): what it skipped, so owl sees why.
+function uncheckedNote(reply) {
+  const skipped = Array.isArray(reply.skipped) ? reply.skipped : []
+  return `mad-eye checked no DoD line (${skipped.length ? `skipped ${skipped.join(', ')}` : 'it named no line skipped either'})`
+}
+
+// What mad-eye's reply means: {skip: why} when it could not look, {findings} when it saw problems, {note} when it
+// checked no DoD line, else {}.
 function seenOutcome(reply) {
   if (!reply) return { skip: 'mad-eye gave no answer' }
   if (reply.no_browser_tools) return { skip: NO_BROWSER }
   if (reply.error) return { skip: MISSING_TOOLS.test(reply.error) ? NO_BROWSER : `mad-eye failed (${reply.error})` }
-  return Array.isArray(reply.findings) && reply.findings.length ? { findings: reply.findings } : {}
+  if (Array.isArray(reply.findings) && reply.findings.length) return { findings: reply.findings }
+  if (!Array.isArray(reply.checked) || !reply.checked.length) return { note: uncheckedNote(reply) }
+  return {}
 }
 
 // --- mad-eye on a native app: screenshots `ui_evidence` makes (S-068) -------------------------------------------
@@ -703,16 +727,16 @@ function runEvidence(story, steps, head) {
 }
 
 function judgeEvidence(story, pkg, plan) {
-  return call(
+  return askMadEye(
     `Step 4c, evidence mode, pass 2: judge story ${story.id} from its screenshots. Your review package: ` +
       `${pkg.package}. The evidence folder, made by running your steps on the story's head: <your working folder>/` +
       `${evidenceFolder(story)}. Use only Read: no browser tools. For each DoD line a user can see, look at its ` +
       `screenshots ${themesText(plan)}, and the element dumps there when present, and cite one screenshot per line. ` +
-      'A screen that is missing, blank, garbled or wrong is a finding. Reply {findings}, each naming its screenshot.',
+      `A screen that is missing, blank, garbled or wrong is a finding. Reply ${SEEN_REPLY}; each finding names its screenshot.`,
     { agentType: MAD_EYE, model: REVIEW_MODEL, schema: SEEN_SCHEMA, label: label(story, 'mad-eye') })
 }
 
-// Steps, evidence, judgement. Returns {skip}, {findings} or {}, as walkAndStop does.
+// Steps, evidence, judgement. Returns {skip}, {findings}, {note} or {}, as walkAndStop does.
 async function lookAtEvidence(story, pkg, plan, worktree, head) {
   const asked = await askSteps(story, pkg, plan, worktree)
   if (failed(asked) || typeof asked.steps !== 'string' || !asked.steps.trim()) {
@@ -738,7 +762,7 @@ async function lookingWay(story, worktree, whole) {
   return { what: 'screenshots', look: (pkg, head) => lookAtEvidence(story, pkg, plan, worktree, head) }
 }
 
-// Preview up, mad-eye, preview down (also when mad-eye fails or throws). Returns {skip}, {findings} or {}.
+// Preview up, mad-eye, preview down (also when mad-eye fails or throws). Returns {skip}, {findings}, {note} or {}.
 async function walkAndStop(story, pkg) {
   const started = await previewStep(story, 'start')
   try {
@@ -761,6 +785,7 @@ async function madEyeStage(story, worktree, model, state, whole) {
   }
   const seen = await way.look(pkg, state.head)
   if (seen.skip) return { ...state, note: `mad-eye skipped: ${seen.skip}` }
+  if (seen.note) return { ...state, note: seen.note }
   if (!seen.findings) return state
   if (state.fixes >= MAX_FIX_ROUNDS) {
     return stop(`mad-eye found problems in the ${way.what} after ${MAX_FIX_ROUNDS} fix rounds: ${JSON.stringify(seen.findings)}. ` +

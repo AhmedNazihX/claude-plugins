@@ -24,7 +24,8 @@ const native = (extra = {}) => async (call, id) => ({
 const PLAN = { ui_evidence: true, takes_over_screen: false, steps_doc: 'docs/ui-walk.md', themes: ['light', 'dark'] }
 const STEPS = { steps: 'open main\nresize 800x600\nminimize\nrestore\nswitch-tab 2\n' }
 const RAN = { ok: true, folder: '/r/.accio/run/S-001/ui-evidence', head: HEAD, screenshots: 4 }
-const SEEN = { findings: [{ id: 'mad-eye-1', where: 'terminal pane', claim: 'shows a live terminal', dod: 'S-001/2', failure: 'the pane is blank after restore', screenshot: '/r/.accio/run/S-001/ui-evidence/dark/restore.png' }] }
+const SEEN = { findings: [{ id: 'mad-eye-1', where: 'terminal pane', claim: 'shows a live terminal', dod: 'S-001/2', failure: 'the pane is blank after restore', screenshot: '/r/.accio/run/S-001/ui-evidence/dark/restore.png' }],
+  checked: ['S-001/2'], skipped: [] }  // S-087: every reply names the lines it checked and skipped
 const EVIDENCE_WALK = ['evidence-plan', 'mad-eye-steps', 'evidence', 'mad-eye']
 
 const overrides = (extra = {}) => ({
