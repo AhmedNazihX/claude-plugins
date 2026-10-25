@@ -34,7 +34,9 @@ flagged in the summary.
 If quill's replies named questions, ask each now, one at a time, with your recommendation; pass each answer to
 quill ("Fix: <ID>: the user says …") and score what it changed as in step 3. Then call the `accio:examiner` agent: "Backlog check (sort): the stories <IDs> in .accio/stories/, from .accio/design.md; look for a counted file missing from a story's `files` (a file a test counts, such as `accio/README.md` for a new agent);
 findings template ${CLAUDE_PLUGIN_ROOT}/references/findings-template.md; write your findings to
-.accio/run/sort/examiner-findings.md." If its verdict is fail, run `accio-board new` and call quill once: "Fix:
+.accio/run/sort/examiner-findings.md." If its verdict is incomplete, call examiner once more with the same words; if
+it is still incomplete, go on without its findings: never take it as a pass, and name the file in its `missing` in
+the summary (step 6). If its verdict is fail, run `accio-board new` and call quill once: "Fix:
 answer each finding in .accio/run/sort/examiner-findings.md; new stories, if a finding needs a split, from <ID>."
 Add the IDs it names and score them as in step 3. Don't check a second time; findings quill leaves `open` go in the
 summary. A question this fix raises is asked as above before step 5.
@@ -52,11 +54,13 @@ the `record` command to run again.
 
 ## 6. Show the summary only
 Read `.accio/run/sort/quill-summary.md` and show it, with each story's track from its last score, any story still
-flagged, and the findings left open. Never paste story files or DoD lines into the chat. End:
+flagged, and the findings left open. When the backlog check came back incomplete twice, say "backlog check
+incomplete: examiner couldn't read <missing>, so the stories were not checked", and ask for that file in "What I need".
+Never paste story files or DoD lines into the chat. End:
 
 ```
 What happened: <n> stories written from the design (<IDs>), committed | written but not committed (<git's reason>)
-What I need from you: <nothing | the fix> — then /accio:prophecy to plan the first iteration
+What I need from you: <nothing | the fix | the file the backlog check couldn't read> — then /accio:prophecy to plan the first iteration
 My recommendation: <one line>
 ```
 
