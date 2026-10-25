@@ -219,6 +219,7 @@ def render_brief(parsed, accio, worktree, onto, checks, reuse_files, notes):
               "files": bullets(f"`{path}`" for path in parsed.meta.get("files", ())),
               "reuse": bullets(reuse), "checks": bullets(f"`{check['command']}`" for check in checks),
               "scripts": bullets(f"`{shlex.quote(str(path))}`" for path in sorted(BIN.glob("accio-*"))),
+              "allowed": "".join(f"- `{command}`\n" for command in config.load(accio)["agent_allow"]),
               "context": story.section(parsed, "Context") or "none",
               "review_notes": story.section(parsed, "Review notes") or "none",
               "answered": "".join(f"\n## The question from the last build, and its answer\n{text}\n"

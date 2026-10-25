@@ -97,18 +97,18 @@ class WandScriptsTest(unittest.TestCase):
         self.assertEqual(reply["commit"], git(self.repo, "rev-parse", "HEAD"))
         self.assertEqual(git(self.repo, "status", "--porcelain"), "A  notes.txt")
 
-    def test_a_later_design_note_commits_only_the_design_not_the_users_other_edits(self):
+    def test_a_later_design_note_commits_the_design_and_config_not_the_users_other_edits(self):
         self.board("init")
         write(self.accio / "design.md", "# Design: x\n\n## Outcome\nUsers can sign in.\n")
         first = self.board("record-design")
         with (self.repo / ".gitignore").open("a") as stream:
             stream.write("secret-wip/\n")
-        write(self.accio / "config.json", '{"base_branch": "trunk"}\n')  # the user's own edit, not the design's
+        write(self.accio / "config.json", '{"base_branch": "trunk"}\n')  # S-089: a changed config goes in too
         write(self.accio / "design.md", "# Design: x\n\n## Outcome\nUsers can sign in.\n\n## Export\nCSV.\n")
         self.board("record-design")
-        self.assertEqual(git(self.repo, "show", "--name-only", "--format=", "HEAD"), ".accio/design.md")
+        self.assertEqual(set(git(self.repo, "show", "--name-only", "--format=", "HEAD").splitlines()),
+                         {".accio/design.md", ".accio/config.json"})
         self.assertIn("secret-wip/", git(self.repo, "diff", "--", ".gitignore"))
-        self.assertIn("trunk", git(self.repo, "diff", "--", ".accio/config.json"))
         self.assertEqual(self.board("record-design")["commit"], git(self.repo, "rev-parse", "HEAD"))
         self.assertNotEqual(first["commit"], git(self.repo, "rev-parse", "HEAD"))
 

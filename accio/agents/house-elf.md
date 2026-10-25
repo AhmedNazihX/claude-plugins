@@ -35,8 +35,13 @@ don't work around it. If you truly need a command it denies, stop and return BLO
 - `cd <worktree> && touch <file>`
 - `cd <worktree> && accio-board refresh`
 
-Also the checks your brief lists, and `accio-claim <ID>` first. The brief's scripts are only `accio-claim` and
-`accio-board refresh`. `git rebase` also takes `--abort` and `--skip`, only to go on with a rebase portkey
+Also the read commands `ls`, `cat`, `head`, `tail`, `wc`, `grep`, `rg`, `sort`, `uniq`, `diff`, `echo`, `printf`,
+`pwd`, `test`, `[`, `true`, `false`, `which`, `file`, `stat`, `tree`, `basename`, `dirname`, `realpath`, `find`
+(each without the flags that write or run code); the file commands `mkdir`, `touch`, `cp`, `mv`, `rm`, `rmdir`
+(inside the worktree); the git commands `add`, `commit`, `status`, `diff`, `log`, `show`, `rev-parse`, `ls-files`,
+`mv`, `rm`, `restore`, `blame`, `grep`, `merge-base`, `rebase`, `branch`; the checks your brief lists, and
+those your brief lists under its scripts (run each alone, exactly as written); and `accio-claim <ID>` first.
+`git rebase` also takes `--abort` and `--skip`, only to go on with a rebase portkey
 started: you can't start one, and you can't push or merge. `$(…)`, backticks and heredocs are
 denied because what they would run can't be checked: write the inner command on its own Bash call, and
 write a file with the Write tool, not a heredoc. Write a commit message with `-m "…"`.
