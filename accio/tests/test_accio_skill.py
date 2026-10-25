@@ -52,6 +52,23 @@ class AccioSkillTest(unittest.TestCase):
         self.assertIn("never say", flat().lower())
         self.assertNotRegex(skill_text(), r"(?i)\btype /accio:(wand|sort|prophecy|owl|brew)")
 
+    def test_S_087_3_stops_and_passes_on_a_step_that_ended_with_an_error_a_refusal_or_a_need(self):
+        text = flat()
+        rule = re.search(r"(?i)after a step's skill ends, stop and pass on its message.{0,600}", text)
+        self.assertTrue(rule, "the skill says to stop and pass on the step's message")
+        ending = rule.group(0)
+        self.assertIn("`accio-…:` error", ending)
+        self.assertRegex(ending, r"(?i)\brefus")
+        self.assertIn('"What I need from you"', ending)
+        self.assertRegex(ending, r'anything but "nothing" or "next: …"')
+        self.assertRegex(ending, r"(?i)don't read the board again")
+
+    def test_S_087_3_the_loop_goes_back_to_1_only_after_a_clean_ending(self):
+        loop = " ".join(skill_text().split("## Loop", 1)[1].split("\n## ", 1)[0].split())
+        self.assertNotIn("Do the step, then go back to 1", loop)
+        self.assertRegex(loop, r"(?i)only when it ended clean.{0,40}go back to 1")
+        self.assertRegex(flat(), r"`auto` is true.{0,300}?unless it ended as .When a step ends. says")
+
     def test_S_006_brew_is_started_by_the_skill_and_wait_resumes_at_the_end_notice(self):
         text = flat()
         self.assertIn("accio:brew", text)

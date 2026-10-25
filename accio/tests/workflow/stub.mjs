@@ -62,6 +62,7 @@ export function happy(stories, overrides = {}) {
     if (REVIEWERS.includes(step)) return pass(id, step)
     if (step === 'fix-brief') return { worktree: `/wt/${id}`, brief: `/run/${id}/fix-brief.md`, base: 'abc' }
     if (step === 'judge') return { kind: 'ruling', text: 'The story is right; the finding goes.', path: null }
+    if (step === 'mad-eye') return { findings: [], checked: [`${id}/1`], skipped: [] }  // S-087: it checked a line
     return { done: true }
   }
 }

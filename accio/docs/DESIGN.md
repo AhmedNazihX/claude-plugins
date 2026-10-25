@@ -174,7 +174,7 @@ about 150 tokens per story. For each READY story, the plugin shows:
 - what changed
 - how to try it
 - its risks, starting with any note the build left (`run/<ID>/brew-notes.md`: boggart or mad-eye skipped, did not
-  run or gave no answer, S-076)
+  run or gave no answer, S-076, or mad-eye checked no DoD line, S-087)
 - its token cost
 
 The user answers everything in one batch:
@@ -505,6 +505,8 @@ Next: /accio:owl
   - paid calls above $0
   - safety overrides
   - commands `curfew` denied
+  - a step that ended with an `accio-…:` error, a refusal, or a "What I need from you" other than "nothing" or
+    "next: …": it passes that message on and doesn't read the board again, which would run the same step again (S-087)
 - **It does not stop** to ask "go" (the plan's low-stakes defaults are taken and reported) or to accept a story that
   passed every check and review (it is merged into main locally and reported). **Never mid-build.**
 - **An honest count per iteration:** one typed `/accio`, plus the answers to k real questions (design, open
@@ -682,6 +684,7 @@ from = merge-base with base, or the parent's head for a stacked child
 | `prefect` | `{pass: bool, failing: [check], skipped: bool, out_of_bounds: [path], untagged: [dod-id], weak_tests: [file:line], audit: "not audited" \| "audited" \| "failed", audit_output: text, main_changed: [path], remote_moved: bool}` |
 | reviewers | `{verdict ∈ {pass, fail, incomplete}, counts: {critical, major, minor}, path, missing}`: `incomplete` (with the file in `missing`) means a file it needs couldn't be read; brew blocks the story with cause `accio` and runs no fix round (S-080) |
 | `boggart` | `{breaks, questions, incomplete, missing}`: `incomplete` leaves a note naming `missing`, never a block (S-080) |
+| `mad-eye` | `{findings, checked, skipped, no_browser_tools}`: `checked` and `skipped` (DoD ids) are required, and a reply without them gets one more try; an empty `checked` leaves the note "mad-eye checked no DoD line (…)", never a clean pass (S-087) |
 | `headmaster` | `{kind ∈ {ruling, question}, text, path}` |
 
 **Findings file:** a Markdown list. Each item holds a severity, a confidence (0–100), `file:line`, the claim, the
