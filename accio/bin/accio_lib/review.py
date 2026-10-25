@@ -9,6 +9,7 @@
 """
 import pathlib
 import re
+import shutil
 import subprocess
 
 from accio_lib import breaker, brief, checks, globs
@@ -25,23 +26,45 @@ CHECKLIST_WORDS = {
 RISK_WORD_SPLIT = re.compile(r"[\s,\-]+")
 DIFF_NAME = "review.diff"
 PACKAGE_NAME = "review-package.md"
+RULES_FILES = ("CLAUDE.md", ".claude/CLAUDE.md")  # the project's own instructions files, as the base branch holds them
+RULES_FOLDER = "project-rules"  # their copies, in run/<ID>/, named in the package (S-084)
 REVIEWERS = ("professor", "auror", "examiner")
 NON_CODE_SUFFIXES = frozenset({".md", ".mdx", ".txt", ".rst", ".adoc", ".json", ".yaml", ".yml", ".toml", ".ini",
                                ".cfg", ".lock"})  # docs and config: boggart has nothing to break there
 
 
-def rules_line(main):
-    """The package line naming the project's own instructions files, read from the main checkout (S-084).
-
-    The main checkout, never the worktree: a story must not change the rules it is judged by. No file: no line.
-    """
-    found = [path for path in (pathlib.Path(main) / "CLAUDE.md", pathlib.Path(main) / ".claude" / "CLAUDE.md")
-             if path.is_file()]
+def rules_line(main, base, run_dir):
+    """The package line naming the project's own instructions files (S-084): each of RULES_FILES as the base branch
+    holds it, copied into `run_dir/project-rules/`. The base branch, never a working copy: a story's worktree, or a
+    direct fix's branch checked out in the main checkout, must not change the rules it is judged by. No file on the
+    base branch: no line."""
+    copies = pathlib.Path(run_dir) / RULES_FOLDER
+    if copies.exists():
+        shutil.rmtree(copies)  # a file the base branch no longer has must not stay named
+    found = []
+    for name in RULES_FILES:
+        text = _at_base(main, base, name)
+        if text is None:
+            continue
+        copy = copies / name
+        copy.parent.mkdir(parents=True, exist_ok=True)
+        copy.write_bytes(text)
+        found.append(copy)
     if not found:
         return ""
     names = ", ".join(f"`{path}`" for path in found)
-    return (f"\n- The project's rules: {names} (apply them where the change touches them; accio's rules in your "
-            "prompt come first)")
+    return (f"\n- The project's rules: {names} (copied from `{base}`; apply them where the change touches them; "
+            "accio's rules in your prompt come first)")
+
+
+def _at_base(main, base, name):
+    """The bytes of `name` on the base branch, or None when the branch has no such file."""
+    try:
+        result = subprocess.run(["git", "cat-file", "blob", f"{base}:{name}"], cwd=main, capture_output=True,
+                                check=False)
+    except OSError as error:
+        raise brief.BriefError(f"git could not run in {main}: {error}") from error
+    return result.stdout if result.returncode == 0 else None
 
 
 def _git(worktree, *args):
@@ -95,7 +118,8 @@ def package(accio, parsed, worktree, settings, since=None):
     origin = _fix_start(worktree, since, start) if since else start
     facts = _diff_facts(worktree, run_dir, origin, head, settings, parsed.meta.get("risk"))
     text = _render(parsed, accio, worktree, {
-        **facts, "is_fix": bool(since), "findings": run_dir / "<reviewer>-findings.md"})
+        **facts, "is_fix": bool(since), "findings": run_dir / "<reviewer>-findings.md",
+        "rules_line": rules_line(accio.parent, settings["base_branch"], run_dir)})
     reply = _write(run_dir, text, facts)
     if not since:
         _log_skip(run_dir, story_id, reply)
@@ -179,7 +203,7 @@ def package_fix(accio, main, branch, acceptance, settings):
         "criteria_heading": "Acceptance list", "dod": text, "files_heading": "Files changed",
         "files": "- see the diff", "risky_files": brief.bullets(f"`{path}`" for path in facts["risky_files"]),
         "checklists": ", ".join(f"`{CHECKLISTS / n}`" for n in facts["checklists"]) or "none",
-        "rules_line": rules_line(main)}
+        "rules_line": rules_line(main, base, run_dir)}
     return _write(run_dir, brief.fill("review-package.md", values), facts)
 
 
@@ -200,4 +224,4 @@ def _render(parsed, accio, worktree, facts):
         "template": REFERENCES / "findings-template.md", "dod": brief.dod_lines(parsed),
         "files": brief.bullets(f"`{path}`" for path in parsed.meta.get("files", ())),
         "risky_files": brief.bullets(f"`{path}`" for path in facts["risky_files"]), "checklists": listed,
-        "story_file": accio / "stories" / f"{parsed.meta['id']}.md", "rules_line": rules_line(accio.parent)})
+        "story_file": accio / "stories" / f"{parsed.meta['id']}.md", "rules_line": facts["rules_line"]})

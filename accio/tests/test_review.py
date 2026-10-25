@@ -285,34 +285,66 @@ class ReviewPackageTest(unittest.TestCase):
     def rules_lines(self, text):
         return [line for line in text.splitlines() if line.startswith("- The project's rules")]
 
-    def test_S_084_3_a_story_package_names_each_instructions_file_of_the_main_checkout(self):
+    def commit_rules(self, **files):
+        for name, text in files.items():
+            write(self.repo / name, text)
+        git(self.repo, "add", *files)
+        git(self.repo, "commit", "-q", "-m", "rules")
+
+    def copies(self, run_name):
+        return self.accio / "run" / run_name / "project-rules"
+
+    def test_S_084_3_a_story_package_names_copies_of_the_base_branchs_instructions_files(self):
+        self.commit_rules(**{"CLAUDE.md": "main rules\n", ".claude/CLAUDE.md": "more rules\n"})
         self.story()
         self.brief()
         self.build()
-        write(self.repo / "CLAUDE.md", "main rules\n")
-        write(self.repo / ".claude" / "CLAUDE.md", "more rules\n")
-        write(self.worktree / "CLAUDE.md", "the story changed these\n")  # the worktree's copy is never the one named
+        write(self.repo / "CLAUDE.md", "an edit nobody committed\n")  # neither a working copy
+        write(self.worktree / "CLAUDE.md", "the story changed these\n")  # nor the worktree's is the one named
         text = self.package()[1]
         (line,) = self.rules_lines(text)
-        self.assertIn(f"`{self.repo / 'CLAUDE.md'}`", line)
-        self.assertIn(f"`{self.repo / '.claude' / 'CLAUDE.md'}`", line)
+        copies = self.copies("S-001")
+        self.assertIn(f"`{copies / 'CLAUDE.md'}`", line)
+        self.assertIn(f"`{copies / '.claude' / 'CLAUDE.md'}`", line)
+        self.assertEqual((copies / "CLAUDE.md").read_text(encoding="utf-8"), "main rules\n")
+        self.assertEqual((copies / ".claude" / "CLAUDE.md").read_text(encoding="utf-8"), "more rules\n")
         self.assertNotIn(str(self.worktree / "CLAUDE.md"), text)
         self.assertIn("apply them where the change touches them", line)
 
-    def test_S_084_3_only_the_file_that_exists_is_named_in_a_story_and_a_direct_fix_package(self):
-        write(self.repo / "CLAUDE.md", "main rules\n")
-        reply = json.loads(self.fix_review().stdout)
+    def test_S_084_3_a_direct_fix_checked_out_in_the_main_checkout_cant_change_its_own_rules(self):
+        self.commit_rules(**{"CLAUDE.md": "main rules\n"})
+        git(self.repo, "checkout", "-q", "-b", "fix/rules")
+        write(self.repo / "CLAUDE.md", "the fix loosened these\n")
+        write(self.repo / "src" / "a.py", "value = 4\n")
+        git(self.repo, "add", "CLAUDE.md", "src")
+        git(self.repo, "commit", "-q", "-m", "fix that edits the rules")
+        reply = json.loads(self.fix_review(branch="fix/rules").stdout)  # the main checkout stays on fix/rules
         (line,) = self.rules_lines(pathlib.Path(reply["package"]).read_text(encoding="utf-8"))
-        self.assertIn(f"`{self.repo / 'CLAUDE.md'}`", line)
+        copy = self.copies("fix-rules") / "CLAUDE.md"
+        self.assertIn(f"`{copy}`", line)
         self.assertNotIn(".claude/CLAUDE.md", line)
+        self.assertEqual(copy.read_text(encoding="utf-8"), "main rules\n")
 
-    def test_S_084_4_no_instructions_file_means_no_project_rules_line(self):
+    def test_S_084_4_no_instructions_file_on_the_base_branch_means_no_project_rules_line(self):
         self.story()
         self.brief()
         self.build()
+        write(self.repo / "CLAUDE.md", "not committed, so not the project's rules\n")
         self.assertEqual(self.rules_lines(self.package()[1]), [])
+        self.assertFalse(self.copies("S-001").exists())
         self.assertEqual(self.rules_lines(pathlib.Path(json.loads(self.fix_review().stdout)["package"])
                                           .read_text(encoding="utf-8")), [])
+
+    def test_S_084_4_a_file_the_base_branch_no_longer_holds_is_no_longer_named(self):
+        self.commit_rules(**{".claude/CLAUDE.md": "old rules\n"})
+        self.story()
+        self.brief()
+        self.build()
+        self.assertEqual(len(self.rules_lines(self.package()[1])), 1)
+        git(self.repo, "rm", "-q", ".claude/CLAUDE.md")
+        git(self.repo, "commit", "-q", "-m", "drop the rules")
+        self.assertEqual(self.rules_lines(self.package()[1]), [])
+        self.assertFalse(self.copies("S-001").exists())
 
     def test_a_git_failure_is_a_plain_error_not_a_traceback(self):
         self.story()

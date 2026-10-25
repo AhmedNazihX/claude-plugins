@@ -53,6 +53,7 @@ class ReviewersNeverReadTheReportTest(CurfewTestBase):
                     self.assert_allowed(tool, tool_input, agent=agent, cwd=cwd)
 
     def test_S_082_4_a_reviewer_reading_a_file_in_the_reports_folder_is_denied_with_the_reason(self):
+        # S-079/2: a reviewer's read of house-elf's report is denied (the report now lives in `.reports/`, S-082).
         link = self.repo / "link"
         os.symlink(self.reports / "S-001", link)
         reports = (self.report, paths.report_path(self.repo, "S-123"), self.reports / "S-001" / "notes.md",
