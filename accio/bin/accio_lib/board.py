@@ -34,10 +34,15 @@ def run_dir(accio):
 
 
 def wand_reset(accio):
-    """Remove the files wand's helpers write in run/wand/, so the notes wand reads are this run's (S-090)."""
+    """Remove the files wand's helpers write in run/wand/, so the notes wand reads are this run's (S-090). A run or
+    wand folder that is a link is refused, so the reset never deletes outside the run folder; a link inside it is
+    removed as a link, never followed."""
     if runlock.is_held(run_dir(accio)):
         raise BoardError("a build is running (run/brew.lock); reset wand's notes after it ends")
     folder = run_dir(accio) / "wand"
+    for linked in (run_dir(accio), folder):
+        if linked.is_symlink():
+            raise BoardError(f"{linked} is a link, so wand-reset won't delete through it; replace it with a folder")
     if not folder.is_dir():
         return
     for path in folder.iterdir():

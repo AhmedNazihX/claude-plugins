@@ -142,6 +142,24 @@ class WandScriptsTest(unittest.TestCase):
         self.assertIn("build is running", refused.stderr)
         self.assertTrue((wand / "seeker-notes.md").exists())
 
+    def test_S_090_1_wand_reset_never_deletes_through_a_link(self):
+        self.board("init")
+        elsewhere = self.accio.parent.parent / "elsewhere"
+        write(elsewhere / "keep.md", "not wand's\n")
+        run = self.accio / "run"
+        run.mkdir(exist_ok=True)
+        os.symlink(elsewhere, run / "wand")  # run/wand is a link to a folder outside the run folder
+        refused = self.board("wand-reset", check=False)
+        self.assertEqual(refused.returncode, 1)
+        self.assertIn("is a link", refused.stderr)
+        self.assertTrue((elsewhere / "keep.md").exists())
+        (run / "wand").unlink()
+        write(run / "wand" / "seeker-notes.md", "old\n")
+        os.symlink(elsewhere / "keep.md", run / "wand" / "notes-link.md")  # a link inside is removed, not followed
+        self.assertEqual(self.board("wand-reset", check=False).returncode, 0)
+        self.assertEqual(list((run / "wand").iterdir()), [])
+        self.assertTrue((elsewhere / "keep.md").exists())
+
 
 class WandAsksFirstTest(unittest.TestCase):
     def step_1(self):
