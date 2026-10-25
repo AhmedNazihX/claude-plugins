@@ -410,6 +410,18 @@ function unreadQuestion({ name, reply }) {
   return `The ${ROLES[name]} (${name}) couldn't read ${unreadOf(reply)}, so it gave no verdict. Fix that and review again?`
 }
 
+// A reviewer that couldn't read a file gets one more try before the story stops: a read can fail once (a slow disk,
+// a mistyped path), and a file that is really missing fails the second try too. The others' replies stand.
+async function retryUnread(story, verdicts, pkg, round, ruling) {
+  return Promise.all(verdicts.map(async (each) => {
+    if (failed(each.reply) || each.reply.verdict !== 'incomplete') return each
+    const again = ` Your last try couldn't read ${unreadOf(each.reply)}: read it again before your verdict.`
+    const reply = await callRetry(reviewPrompt(story, each.name, pkg, round, ruling) + again,
+      { agentType: `accio:${each.name}`, model: REVIEW_MODEL, schema: REVIEW_SCHEMA, label: label(story, `${each.name} again`, round) })
+    return { name: each.name, reply }
+  }))
+}
+
 // The review rounds for `first`, a package: review, and while a reviewer fails run a fix round and review the fix diff.
 // Returns a stop, or {fixes, ruling, head} (head: the commit the last review judged).
 async function reviewLoop(story, worktree, model, earlier, usedFixes, first, firstNames, startRound) {
@@ -418,7 +430,7 @@ async function reviewLoop(story, worktree, model, earlier, usedFixes, first, fir
   let ruling = earlier
   let fixes = usedFixes
   for (let round = startRound; ; round += 1) {
-    const verdicts = await review(story, names, pkg, round, ruling)
+    const verdicts = await retryUnread(story, await review(story, names, pkg, round, ruling), pkg, round, ruling)
     const silent = verdicts.find((each) => failed(each.reply))
     if (silent) return accioStop(`The ${ROLES[silent.name]} (${silent.name}) stopped answering for over 20 minutes. Review it again?`)
     const unread = verdicts.find((each) => each.reply.verdict === 'incomplete')
