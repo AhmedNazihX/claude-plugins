@@ -10,6 +10,10 @@ pass. A repro that fails is read from its output:
 Head runs up to twice: a pass, or a failure in only one run, drops the repro. A break that also fails on base, for
 a reason that is not a setup error, is `pre-existing` (out of scope); a setup error on base means the code is new. `verify` writes `run/<ID>/boggart/verdicts.json`. It judges every repro again, also
 those marked `fixed` or `pre-existing` before (an old verdict is never copied); one that now passes is `fixed`.
+
+A repro must load the code of the commit it runs on, so it imports relative to its own folder. One whose text names
+the main checkout, the worktree root, the story's worktree or a `.accio-repro` folder by absolute path is refused by
+`try` and dropped, unrun, by `verify` (S-086).
 """
 import json
 import pathlib
@@ -19,7 +23,7 @@ import shutil
 import subprocess
 import tempfile
 
-from accio_lib import checks, merge
+from accio_lib import checks, merge, paths
 
 REPRO_FOLDER = "repros"
 BOGGART_FOLDER = "boggart"
@@ -36,6 +40,11 @@ SETUP_ERROR = re.compile(r"ImportError|ModuleNotFoundError|SyntaxError|Indentati
                          r"|command not found")
 ASSERTION = re.compile(r"AssertionError|^FAIL\b|^not ok\b|Assertion failed|^E\s+assert\b", re.MULTILINE)
 COMMENT_FIELD = r"^\s*(?:#+|//+|--|;+|/\*+|\*)\s*{name}:[ \t]*(?P<value>.*?)\s*(?:\*/)?\s*$"
+PATH_CHAR = r"[\w.-]"  # a character that would make a longer folder name, so `/a/app` is not `/a/app2`
+REPRO_FOLDER_PATH = re.compile(rf"(?<!{PATH_CHAR})/[^\s'\"`]+/{re.escape(IN_WORKTREE)}(?!{PATH_CHAR})")
+HOW_TO_IMPORT = (f"it is copied to `<throwaway worktree>/{IN_WORKTREE}/<file>` and run there at head and at base, so "
+                 "import the project's code relative to the repro's own folder (for Python, "
+                 "`Path(__file__).resolve().parents[1]`; for Node, `../<path>`)")
 
 
 class BreakerError(Exception):
@@ -57,6 +66,34 @@ def read_field(text, name):
         if match:
             return match["value"].strip()
     return ""
+
+
+def _fixed_folders(run_dir, worktree):
+    """The folders a repro must never name by absolute path: the main checkout (run_dir is
+    `<main>/.accio/run/<ID>`), the worktree root and this story's worktree, as given and resolved."""
+    main = pathlib.Path(run_dir).parents[2]
+    folders = (main, paths.worktree_root(main), pathlib.Path(worktree))
+    return sorted({str(form) for folder in folders for form in (folder, folder.resolve())}, key=len, reverse=True)
+
+
+def absolute_path_in(text, run_dir, worktree):
+    """The fixed folder a repro's text names by absolute path, or None (S-086). Such a repro runs that folder's code
+    at head and at base alike, so a real break would read as pre-existing."""
+    for folder in _fixed_folders(run_dir, worktree):
+        if re.search(rf"(?<!{PATH_CHAR}){re.escape(folder)}(?!{PATH_CHAR})", text):
+            return folder
+    match = REPRO_FOLDER_PATH.search(text)
+    return match.group(0) if match else None
+
+
+def absolute_path_reason(name, folder):
+    return f"{name} names {folder} by absolute path, so it can't test the code at the commit it runs on: {HOW_TO_IMPORT}"
+
+
+def _absolute_path_problem(repro, run_dir, worktree):
+    """The refusal reason for a repro that names a fixed folder, or None."""
+    folder = absolute_path_in(repro.read_text(encoding="utf-8", errors="replace"), run_dir, worktree)
+    return absolute_path_reason(repro.name, folder) if folder else None
 
 
 def _run_at(worktree, commit, repro, command):
@@ -176,6 +213,9 @@ def try_repro(worktree, run_dir, settings, dod_ids, file):
     source = pathlib.Path(file)
     if not source.is_file():
         raise BreakerError(f"{file} is not a file")
+    problem = _absolute_path_problem(source, run_dir, worktree)
+    if problem:
+        raise BreakerError(f"refused: {problem}")
     folder = pathlib.Path(run_dir) / BOGGART_FOLDER / REPRO_FOLDER
     folder.mkdir(parents=True, exist_ok=True)
     repro = folder / source.name
@@ -205,7 +245,10 @@ def verify(worktree, run_dir, settings, dod_ids):
     entries = []
     for repro in sorted((pathlib.Path(run_dir) / BOGGART_FOLDER / REPRO_FOLDER).glob("*")):
         before = earlier.get(repro.name)
-        if before and before["verdict"] in (KEPT, FIXED, PRE_EXISTING):
+        problem = _absolute_path_problem(repro, run_dir, worktree)
+        if problem:  # an old saved repro: dropped, never run (S-086/3)
+            entry = _entry(repro, DROPPED, problem)
+        elif before and before["verdict"] in (KEPT, FIXED, PRE_EXISTING):
             entry = _rerun(worktree, repro, command, head, base, changed, before)
         else:
             entry = judge(worktree, repro, command, head, base, changed)
