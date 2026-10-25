@@ -14,6 +14,10 @@ checks, `agent_allow`, read-only tools, file tools in the worktree and a short l
 agents run only the accio scripts and subcommands their step needs (SCRIPTS). prefect runs `accio-preview` only in
 the exact forms brew.js gives it (PREFECT_PREVIEW), each on its own, and writes the steps file it hands it (S-070),
 the mad-eye and boggart findings files (S-071) and a READY story's brew-notes.md (S-076).
+
+The reviewers (examiner, professor, auror, boggart) never read house-elf's report (REPORT_BLIND, S-079): no Read of
+a `build-report.md` under `.accio/run/`, and no Grep or Glob inside `.accio/run/` or for `build-report`. They read
+their package and findings files with Read. house-elf, headmaster and prefect keep reading the report.
 """
 import collections.abc
 import dataclasses
@@ -53,6 +57,13 @@ IN_PROGRESS = "doing"
 # mad-eye and boggart never edit, so prefect writes their findings for the fix round (brew.js, S-071).
 PREFECT_FINDINGS = ("run/S-[0-9]*/mad-eye-findings.md", "run/S-[0-9]*/boggart-findings.md")
 PREFECT_NOTES = f"run/S-[0-9]*/{summary.NOTES_NAME}"  # brew's note for a READY story, for owl.md (S-076/3)
+# The reviewers judge the story, its diff and its tests, never house-elf's report (S-079, Elephant-Goldfish).
+REPORT_BLIND = frozenset({"examiner", "professor", "auror", "boggart"})
+REPORT_WORD = REPORT_NAME.removesuffix(".md")  # "build-report", in a Grep or Glob pattern, glob or path
+SEARCH_TOOLS = frozenset({"Grep", "Glob"})
+GLOB_CHARS = re.compile(r"[*?\[{]")
+REPORT_WHY = ("a reviewer judges the story, its diff and its tests, and never reads house-elf's report or its "
+              "reasoning (rule: builder's report)")
 
 
 @dataclasses.dataclass(frozen=True)
@@ -159,6 +170,10 @@ def decide(agent, agent_id, tool, tool_input, ctx):
     lists = AGENTS.get(agent)
     if lists is None:
         return deny(f"accio:{agent} isn't one of accio's agents, so curfew allows it nothing.")
+    if agent in REPORT_BLIND and tool in READ_TOOLS:
+        report = _report_rule(tool, tool_input, ctx)
+        if report:
+            return deny(report)
     if tool in READ_TOOLS or (tool in WEB_TOOLS and lists.web):
         return allow()
     if tool in WRITE_TOOLS:
@@ -260,6 +275,43 @@ def _saved_pages_rule(tool, tool_input):
 
 def _verdict(reason):
     return deny(reason) if reason else allow()
+
+
+# --- the reviewers never read house-elf's report (S-079) -----------------------------------------------------------
+
+def _report_rule(tool, tool_input, ctx):
+    """The reason to deny a reviewer a read tool, or "": no Read of a `build-report.md` under `.accio/run/`, and no
+    Grep or Glob inside `.accio/run/` or for `build-report`. Its package and findings files stay readable by Read."""
+    run = ctx.accio / "run"
+    if tool == "Read":
+        target = _target(tool_input)
+        is_report = target is not None and target.name.casefold() == REPORT_NAME and _inside_any_case(target, run)
+        return f"Read of {target} is denied: {REPORT_WHY}." if is_report else ""
+    if tool not in SEARCH_TOOLS:
+        return ""
+    words = [tool_input.get(key) for key in ("pattern", "glob", "path")]
+    if any(isinstance(word, str) and REPORT_WORD in word.casefold() for word in words):
+        return f"{tool} for `{REPORT_WORD}` is denied: {REPORT_WHY}."
+    if any(_inside_any_case(folder, run) for folder in _search_folders(tool, tool_input)):
+        return (f"{tool} inside {run} is denied: {REPORT_WHY}. Read your review package and findings file by the "
+                "paths the package gives.")
+    return ""
+
+
+def _search_folders(tool, tool_input):
+    """Where a Grep or Glob searches, symlinks and `..` resolved: its `path`, and an absolute Glob pattern's fixed
+    start (the part before its first wildcard)."""
+    found = [tool_input.get("path")]
+    pattern = tool_input.get("pattern")
+    if tool == "Glob" and isinstance(pattern, str) and os.path.isabs(pattern):
+        found.append(GLOB_CHARS.split(pattern, 1)[0])
+    return [target for target in (_target({"file_path": value}) for value in found) if target is not None]
+
+
+def _inside_any_case(path, folder):
+    """True when `path` is `folder` or inside it, letter case ignored (the default macOS disk ignores it)."""
+    wanted = [part.casefold() for part in pathlib.Path(os.path.realpath(folder)).parts]
+    return [part.casefold() for part in path.parts[:len(wanted)]] == wanted
 
 
 # --- house-elf ---------------------------------------------------------------------------------------------------
