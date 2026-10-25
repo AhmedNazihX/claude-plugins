@@ -18,7 +18,8 @@ REFERENCES = brief.BIN.parent / "references"
 CHECKLISTS = REFERENCES / "checklists"
 SECURITY = "auth-and-security.md"
 CHECKLIST_WORDS = {
-    SECURITY: frozenset({"auth", "security", "secret", "permission", "payment"}),
+    SECURITY: frozenset({"auth", "security", "secret", "permission", "payment",  # accio's own guards too (S-085)
+                         "curfew", "guard", "guards", "hook", "hooks", "sandbox", "access"}),
     "performance.md": frozenset({"performance", "perf", "latency", "scale"}),
     "data-migration.md": frozenset({"migration", "schema", "data"}),
     "accessibility.md": frozenset({"accessibility", "a11y", "ui"}),
