@@ -1,1 +1,1 @@
-../first-question/repo.sh
+../outcome-asked/repo.sh

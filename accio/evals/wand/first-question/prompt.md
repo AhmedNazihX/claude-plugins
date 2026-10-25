@@ -1,5 +1,5 @@
 ---
-description: on first use wand sets accio up, then asks one question and writes nothing else yet
+description: in a repo with no .accio/, wand asks once before setting accio up and changes nothing yet (S-030)
 tags: [wand, ci]
 runs: 2
 model: sonnet
