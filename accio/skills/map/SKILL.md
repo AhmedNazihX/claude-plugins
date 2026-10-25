@@ -2,7 +2,7 @@
 name: map
 description: Board (map): shows accio's board, what the last build left stuck, and the next step, without changing anything.
 when_to_use: When the user asks "show the board", "where are we", "what's next" or "is the build still running", or runs /accio:map, in a repo with an .accio/ folder. Not for planning (prophecy), building or reviewing (owl).
-allowed-tools: Read, Glob, Bash(${CLAUDE_PLUGIN_ROOT}/bin/accio-board board --print), Bash(${CLAUDE_PLUGIN_ROOT}/bin/accio-board status), Bash(${CLAUDE_PLUGIN_ROOT}/bin/accio-board next)
+allowed-tools: Read, Glob, Bash(${CLAUDE_PLUGIN_ROOT}/bin/accio-board board --print), Bash(${CLAUDE_PLUGIN_ROOT}/bin/accio-board status), Bash(${CLAUDE_PLUGIN_ROOT}/bin/accio-board drift), Bash(${CLAUDE_PLUGIN_ROOT}/bin/accio-board next)
 ---
 
 # map: show the board
@@ -17,8 +17,11 @@ command by its full path (`${CLAUDE_PLUGIN_ROOT}/bin/accio-board …`), with no 
 2. Show the board as it is.
 3. Read `.accio/run/stuck.json` (skip this if it doesn't exist): each entry is a build agent that froze on a
    permission question. Name its `agent_type`, `tool` and `detail`, one line each.
-4. Run `accio-board next` and say its sentence as the next step, in one line. The script holds the rule; don't
-   restate it.
+4. Run `accio-board drift` (it writes nothing). Each line it prints is a done story whose DoD lines
+   no test carries any more (`S-012/2 · title`): show those lines as they are, under the board. If it prints
+   `no drift`, show nothing for it.
+5. Run `accio-board next` and say its sentence as the next step, in one line. The script holds the rule; don't
+   restate it. If drift showed lines, add that a lost test is fixed by a new story or a direct fix.
 
    If no tool named `Workflow` appears anywhere in your tools, including tools listed only by name, workflows are
    switched off, and accio's build needs them: where the sentence says to build, say to turn them on instead (the
