@@ -126,6 +126,23 @@ class WandScriptsTest(unittest.TestCase):
         self.assertIn("build is running", self.board("record-design", check=False).stderr)
 
 
+    def test_S_090_1_wand_reset_removes_the_helpers_notes_and_refuses_during_a_build(self):
+        self.board("init")
+        wand = self.accio / "run" / "wand"
+        write(wand / "seeker-notes.md", "old\n")
+        write(wand / "first-year-notes.md", "old\n")
+        result = self.board("wand-reset", check=False)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(list(wand.iterdir()), [])
+        self.assertEqual(self.board("wand-reset", check=False).returncode, 0)  # nothing there is fine
+        write(wand / "seeker-notes.md", "old\n")
+        runlock.take(self.accio / "run")
+        refused = self.board("wand-reset", check=False)
+        self.assertEqual(refused.returncode, 1)
+        self.assertIn("build is running", refused.stderr)
+        self.assertTrue((wand / "seeker-notes.md").exists())
+
+
 class WandAsksFirstTest(unittest.TestCase):
     def step_1(self):
         text = (ROOT / "skills" / "wand" / "SKILL.md").read_text(encoding="utf-8")
@@ -175,6 +192,31 @@ class FreshReaderTest(unittest.TestCase):
                       "the fresh reader found nothing"):
             with self.subTest(words):
                 self.assertIn(words, text)
+
+
+class HelpersDidntRunTest(unittest.TestCase):
+    """S-090/2 and /3: a helper that did not run is said, never "found nothing"."""
+
+    def test_S_090_2_wand_resets_first_and_names_the_didnt_run_wording(self):
+        text = skill_flat()
+        self.assertIn("Bash(${CLAUDE_PLUGIN_ROOT}/bin/accio-board wand-reset)", text.split("---")[1])
+        step_1 = section(text, "## 1. Set up", "**Check commands.**")
+        self.assertIn("accio-board wand-reset", step_1)
+        self.assertLess(step_1.index("accio-board init"), step_1.index("wand-reset"))  # .accio/ must exist first
+        for start, end in (("## 3. Check the facts", "## 4."), ("## 4. Get options", "## 5."),
+                           ("3. **Fresh reader.**", "4. Run")):
+            with self.subTest(start):
+                part = section(text, start, end)
+                for words in ("didn't run", "reply", "is not there"):
+                    self.assertIn(words, part)
+        self.assertIn("never \"found nothing\"", section(text, "3. **Fresh reader.**", "End:"))
+        self.assertIn("incomplete", section(text, "3. **Fresh reader.**", "4. Run"))
+        self.assertIn("the fresh reader didn't run", text)
+
+    def test_S_090_3_first_year_replies_incomplete_with_the_path_when_it_cannot_read_the_design(self):
+        text = " ".join((ROOT / "agents" / "first-year.md").read_text(encoding="utf-8").split())
+        self.assertIn("notes: none · incomplete: <path>", text)
+        self.assertIn("cannot read the design", text)
 
 
 class DecisionClashTest(unittest.TestCase):

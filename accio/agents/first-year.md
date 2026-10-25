@@ -30,4 +30,8 @@ found" is a fine answer; never invent a point to have one.
 design line, what a builder would have to guess or what is wrong, and (for Already there or Clash) the `file:line`
 or the decision's number. With no points, write the single line `nothing found`.
 
-Reply with one line: `notes: <path> · points: <n>`.
+**If you cannot read the design** (the file is missing or empty, or the named section is not there), write no notes
+and reply with one line: `notes: none · incomplete: <path>`, where `<path>` is the design path you were given. Never
+write `nothing found` for a design you did not read.
+
+Otherwise reply with one line: `notes: <path> · points: <n>`.

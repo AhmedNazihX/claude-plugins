@@ -33,6 +33,22 @@ def run_dir(accio):
     return accio / RUN_DIR_NAME
 
 
+def wand_reset(accio):
+    """Remove the files wand's helpers write in run/wand/, so the notes wand reads are this run's (S-090)."""
+    if runlock.is_held(run_dir(accio)):
+        raise BoardError("a build is running (run/brew.lock); reset wand's notes after it ends")
+    folder = run_dir(accio) / "wand"
+    if not folder.is_dir():
+        return
+    for path in folder.iterdir():
+        if path.is_dir() and not path.is_symlink():
+            continue
+        try:
+            path.unlink()
+        except OSError as error:
+            raise BoardError(f"cannot remove {path}: {error}") from error
+
+
 def stories_dir(accio):
     return accio / "stories"
 
