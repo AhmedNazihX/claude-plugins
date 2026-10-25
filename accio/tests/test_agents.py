@@ -51,6 +51,13 @@ class ReviewAgentsTest(unittest.TestCase):
                               "same id"):
                     self.assertIn(words, body)
 
+    def test_S_079_4_reviewers_never_read_house_elfs_report_or_its_reasoning(self):
+        for name in REVIEWERS:
+            with self.subTest(name):
+                body = " ".join(front_and_body(name)[1].split())
+                self.assertIn("never read house-elf's report (`build-report.md`) or its reasoning", body)
+                self.assertIn("you judge the code, not the builder's account of it", body)
+
     def test_the_template_holds_every_field_including_id_and_status(self):
         text = (REFERENCES / "findings-template.md").read_text(encoding="utf-8")
         for field in ("id:", "status:", "severity:", "confidence:", "where:", "claim:", "failure:", "dod:"):
