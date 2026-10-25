@@ -92,12 +92,12 @@ def _check_outcome(design, text):
 
 
 def _setup_files(accio):
-    """The setup files that aren't committed yet: an untracked config.json, a .gitignore that HEAD doesn't have
-    ignoring .accio/run/."""
+    """The setup files that aren't committed yet: a config.json that is untracked or changed (S-089: check commands
+    a design note adds go in with it), a .gitignore that HEAD doesn't have ignoring .accio/run/."""
     root = accio.parent
     files = []
     config = accio / "config.json"
-    if config.exists() and _git(root, "ls-files", "--error-unmatch", "--", str(config)).returncode != 0:
+    if config.exists() and _git(root, "status", "--porcelain", "--", str(config)).stdout.strip():
         files.append(config)
     ignore = root / ".gitignore"
     committed = _git(root, "show", "HEAD:.gitignore")

@@ -26,9 +26,10 @@ hooks switched off), tell the user in one line, as a statement with its fix (nev
 **Check commands.** So a build never skips its tests, find the commands that check this repo: run
 `python3 ${CLAUDE_PLUGIN_ROOT}/bin/accio_lib/checkfinder.py` (it reads the `run:` lines of `.github/workflows/*.yml`
 that hold `test`, `lint`, `check`, `pytest`, `unittest` or `build`, the test and lint scripts in `package.json`, and
-pytest folders; it writes nothing). Skip this when `.accio/config.json` already has `checks`. Show the user the
-proposed commands and ask which to keep. Add only the kept ones to `checks` in `.accio/config.json` (Edit; each is
-`{"command": …, "glob": "**"}`). If it finds nothing, say so in one line and write nothing.
+pytest folders; it writes nothing). Skip this when `.accio/config.json` already has `checks`. Keep every
+proposed command, without a stop: add them all to `checks` in `.accio/config.json` (Edit; each is
+`{"command": …, "glob": "**"}`) and say in one line "I kept these check commands: …; say if one should go". If the
+user later says one should go, remove it. If it finds nothing, say so in one line and write nothing.
 
 **New design or design note.** If `.accio/design.md` exists, this run adds a **design note**: one new `## <Feature>`
 section at the end, with Edit; never Write the file, never change the rest of it.
@@ -77,9 +78,10 @@ way, one question at a time, until nothing a builder would have to guess is left
 3. **Fresh reader.** Call the `accio:first-year` agent once, with only the design's path (and the note's heading
    for a note), nothing else from the interview: "Read .accio/design.md (note: `## <Feature>`); write your notes to
    .accio/run/wand/first-year-notes.md." If its reply has no `notes:` line, says `incomplete`, or `.accio/run/wand/first-year-notes.md` is not there, say
-   "the fresh reader didn't run: <why>", never "found nothing", and go on without it. Otherwise read its notes; drop a point the interview already settled; ask each
-   remaining one as a question in the format of `${CLAUDE_SKILL_DIR}/references/interview.md`, one at a time;
-   write each answer into the design with Edit (a clash with a decision is asked as step 2 says; an answer that
+   "the fresh reader didn't run: <why>", never "found nothing", and go on without it. Otherwise read its notes; drop a point the interview already settled; put the small points (wording, a default with an obvious
+   answer) in one line, "I'll assume A, B and C", and write those assumptions into the design with Edit; ask each real
+   decision left as a question in the format of `${CLAUDE_SKILL_DIR}/references/interview.md`, one at a
+   time; write each answer into the design with Edit (a clash with a decision is asked as step 2 says; an answer that
    settles a choice between real alternatives is recorded as in 1, and the design cites it). One read-back
    only: never call it twice in a run. With `driven`, these questions are still asked (they are real decisions).
    With no points left, go on and say "the fresh reader found nothing" in the What happened line (only when it ran and its notes say

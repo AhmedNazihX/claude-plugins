@@ -29,7 +29,7 @@ $checks
 ## Scripts you may run
 - `accio-claim`
 - `accio-board refresh`
-
+$allowed
 ## Review notes
 $review_notes
 $answered
