@@ -10,7 +10,7 @@
   board [--print]       regenerate .accio/board.md (--print: show it, write nothing)
   status                one-line summary of the columns
   drift [--json]        done stories whose testable DoD lines no test carries any more (writes nothing)
-  plan [--json]        the next iteration's proposal: eligible stories (deps done, or stacked within
+  plan [--json]         the next iteration's proposal: eligible stories (deps done, or stacked within
                         stack_depth), held ones and why, and stories whose dep was dropped (prophecy)
   go <ID>... [--track <ID>=<track>] [--also <story file>]   make them exactly the next iteration: status
                         ready in the story files, iterations/<N>.md and board.md, committed with any --also
