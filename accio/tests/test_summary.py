@@ -8,7 +8,7 @@ import unittest
 
 from support import ROOT, init_repo, write
 
-from accio_lib import brief, story, summary
+from accio_lib import brief, paths, story, summary
 
 SUMMARY = ROOT / "bin" / "accio-summary"
 REPORT = """# Report S-001
@@ -45,7 +45,7 @@ class SummaryBase(unittest.TestCase):
         self.add("S-002", "blocked")
         self.add("S-003", "review", deps=("S-001",))
         self.add("S-004", "done")
-        write(self.accio / "run" / "S-001" / "build-report.md", REPORT)
+        self.write_report("S-001", REPORT)
         write(self.accio / "run" / "questions" / "S-002.md", "Should the link expire after 15 or 30 minutes?\n")
         agent(self.transcripts, "a1", "S-001 implement", 212_000)
         agent(self.transcripts, "a2", "S-003 implement", 90_000)
@@ -73,10 +73,25 @@ class SummaryBase(unittest.TestCase):
         return f"### {story_id} " + text.split(f"### {story_id} ", 1)[1].split("\n\n", 1)[0]
 
     def write_report(self, story_id, text):
-        write(self.accio / "run" / story_id / "build-report.md", text)
+        write(paths.report_path(self.repo, story_id), text)
 
 
 class SummaryTest(SummaryBase):
+    def test_S_082_3_the_summary_quotes_the_report_from_beside_the_worktrees(self):
+        self.assertEqual(paths.report_path(self.repo, "S-001"),
+                         self.repo.parent / ".app-accio-wt" / ".reports" / "S-001" / "build-report.md")
+        self.assertIn("Added a reset link email", self.block(self.run_summary(), "S-001"))
+
+    def test_S_082_3_an_older_build_s_report_in_the_run_folder_is_quoted_when_only_it_exists(self):
+        write(self.accio / "run" / "S-003" / "build-report.md", "## What changed\nAn older build's change.\n")
+        self.assertIn("Changed: An older build's change.", self.block(self.run_summary(), "S-003"))
+
+    def test_S_082_3_the_new_report_wins_over_an_old_one(self):
+        write(self.accio / "run" / "S-001" / "build-report.md", "## What changed\nA stale change.\n")
+        part = self.block(self.run_summary(), "S-001")
+        self.assertIn("Added a reset link email", part)
+        self.assertNotIn("A stale change", part)
+
     def test_S_010_1_each_ready_story_gets_change_try_risk_and_cost(self):
         part = self.block(self.run_summary(), "S-001")
         for expected in ("Added a reset link email", "Forgot password", "SMTP is down", "212k tokens"):
@@ -118,7 +133,7 @@ class SummaryTest(SummaryBase):
         self.assertIn("Risks: (missing from the report)", self.block(self.run_summary(), "S-001"))
 
     def test_S_010_1_an_unreadable_report_says_unreadable_not_missing(self):
-        (self.accio / "run" / "S-001" / "build-report.md").write_bytes(b"## What changed\n\xff\xfe bad bytes\n")
+        paths.report_path(self.repo, "S-001").write_bytes(b"## What changed\n\xff\xfe bad bytes\n")
         part = self.block(self.run_summary(), "S-001")
         self.assertIn("report unreadable", part)
         self.assertNotIn("no report written", part)
@@ -229,7 +244,9 @@ class BuildNotesTest(SummaryBase):
         self.assertIn("- Risks: Build note: mad-eye skipped: word", part)
 
     def test_S_076_3_an_unreadable_note_says_so_rather_than_vanishing(self):
-        (self.accio / "run" / "S-001" / summary.NOTES_NAME).write_bytes(b"\xff\xfe bad bytes\n")
+        note = self.accio / "run" / "S-001" / summary.NOTES_NAME
+        note.parent.mkdir(parents=True, exist_ok=True)  # the report no longer makes this folder (S-082)
+        note.write_bytes(b"\xff\xfe bad bytes\n")
         self.assertIn(f"Build note: ({summary.NOTES_NAME} unreadable).", self.risks("S-001"))
 
     def test_S_076_3_a_blocked_story_shows_no_note(self):

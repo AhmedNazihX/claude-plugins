@@ -161,23 +161,32 @@ class HouseElfWritesTest(CurfewTestBase):
         key = "notebook_path" if tool == "NotebookEdit" else "file_path"
         return self.hook(tool, {key: str(path), "content": "x", "old_string": "a", "new_string": "b"})
 
-    def test_S_015_4_writes_inside_the_worktree_or_its_run_folder_are_allowed(self):
-        for path in (self.worktree / "src" / "a.py", self.run_dir / "S-001" / "build-report.md"):
+    def test_S_015_4_S_082_2_writes_inside_the_worktree_or_to_its_report_are_allowed(self):
+        for path in (self.worktree / "src" / "a.py", paths.report_path(self.repo, "S-001")):
             for tool in ("Write", "Edit", "MultiEdit", "NotebookEdit"):
                 with self.subTest(path=path, tool=tool):
                     self.assertEqual(self.write_to(path, tool)["permissionDecision"], "allow")
 
-    def test_S_015_4_in_its_run_folder_house_elf_writes_only_its_report(self):
-        for name in ("examiner-findings.md", "base", "brief.md"):
+    def test_S_015_4_in_its_run_folder_house_elf_writes_nothing(self):
+        for name in ("examiner-findings.md", "base", "brief.md", "build-report.md"):
             with self.subTest(name):
                 self.assertEqual(self.write_to(self.run_dir / "S-001" / name)["permissionDecision"], "deny")
+
+    def test_S_082_2_another_storys_report_or_another_file_beside_its_own_is_denied(self):
+        reports = paths.reports_dir(self.repo)
+        for path in (paths.report_path(self.repo, "S-002"), reports / "S-001" / "notes.md", reports / "S-001.md",
+                     reports / "S-002" / ".." / "S-003" / "build-report.md"):
+            with self.subTest(path=path):
+                answer = self.write_to(path)
+                self.assertEqual(answer["permissionDecision"], "deny")
+                self.assertIn(str(paths.report_path(self.repo, "S-001")), answer["permissionDecisionReason"])
 
     def test_S_015_4_writes_anywhere_else_are_denied_and_name_the_folder(self):
         outside = self.worktree.parent / "outside.txt"
         (self.worktree / "link").symlink_to(self.repo)
         for path in (self.repo / "app.py", self.worktree / ".." / "outside.txt", self.worktree / "link" / "x.py",
                      self.run_dir / "push-ok", self.run_dir / "brew.lock", self.run_dir / "S-002" / "build-report.md",
-                     outside):
+                     paths.report_path(self.repo, "S-002"), outside):
             with self.subTest(path):
                 answer = self.write_to(path)
                 self.assertEqual(answer["permissionDecision"], "deny")

@@ -8,19 +8,20 @@ denied with the reason, which in a build becomes a BLOCKED question at `owl`. No
 `house-elf` first runs `accio-claim <ID>` on its own (accio's own script, nothing else in the command) for a story
 in progress (`doing` in `run/status.json`) that no other agent holds. That links its `agent_id` to the story's
 worktree; the story's next `accio-brief` (a fix round) releases the claim. Until it claims, it may only read.
-After the claim it writes only inside its worktree (never its `.git`) and its `.accio/run/<ID>/build-report.md`,
-symlinks and `..` resolved, and its Bash commands follow `bashpolicy`: they start in the worktree, and run the
+After the claim it writes only inside its worktree (never its `.git`) and its report,
+`<worktree root>/.reports/<ID>/build-report.md` (S-082), symlinks and `..` resolved, and its Bash commands follow `bashpolicy`: they start in the worktree, and run the
 checks, `agent_allow`, read-only tools, file tools in the worktree and a short list of git subcommands. The other
 agents run only the accio scripts and subcommands their step needs (SCRIPTS). prefect runs `accio-preview` only in
 the exact forms brew.js gives it (PREFECT_PREVIEW), each on its own, and writes the steps file it hands it (S-070),
 the mad-eye and boggart findings files (S-071) and a READY story's brew-notes.md (S-076).
 
-The reviewers (examiner, professor, auror, boggart) never read house-elf's report (REPORT_BLIND, S-079): no Read of
-a `build-report.md` under `.accio/run/`, and no Grep or Glob inside `.accio/run/`, on a path naming `build-report`, or
-from above `.accio/run/` unless git ignores it and the search's file pattern can't pick out the report (ripgrep's
-`--glob` overrides git's ignore rules). Paths are read as the tool reads them (`~`, relative to the agent's folder),
-and one curfew can't resolve is denied. They read their package and findings files with Read. house-elf,
-headmaster and prefect keep reading the report.
+The reviewers (examiner, professor, auror, boggart) never read house-elf's report (REPORT_BLIND, S-079). The report
+lives beside the story worktrees, outside the main checkout and every worktree (S-082), so one folder rule keeps them
+out: no Read, Grep or Glob inside `<worktree root>/.reports/`, and no Grep or Glob from a folder that holds it; also
+no Read of an older build's `.accio/run/<ID>/build-report.md`. Searching the main checkout or the worktree is fine
+with any file pattern. Paths are read as the tool reads them (`~`, relative to the agent's folder), and one curfew
+can't resolve is denied. They read their package and findings files with Read. house-elf, headmaster and prefect
+keep reading the report.
 """
 import collections.abc
 import dataclasses
@@ -62,10 +63,9 @@ PREFECT_FINDINGS = ("run/S-[0-9]*/mad-eye-findings.md", "run/S-[0-9]*/boggart-fi
 PREFECT_NOTES = f"run/S-[0-9]*/{summary.NOTES_NAME}"  # brew's note for a READY story, for owl.md (S-076/3)
 # The reviewers judge the story, its diff and its tests, never house-elf's report (S-079, Elephant-Goldfish).
 REPORT_BLIND = frozenset({"examiner", "professor", "auror", "boggart"})
-REPORT_WORD = REPORT_NAME.removesuffix(".md")  # "build-report", in a Grep or Glob pattern, glob or path
 SEARCH_TOOLS = frozenset({"Grep", "Glob"})
 GLOB_CHARS = re.compile(r"[*?\[{]")
-PLAIN_PATTERN = re.compile(r"[A-Za-z0-9_./*?-]+")  # a file pattern ripgrep and fnmatch read alike
+PARENT = ".."  # a Glob pattern climbing past a wildcard can't be resolved before it runs
 REPORT_WHY = ("a reviewer judges the story, its diff and its tests, and never reads house-elf's report or its "
               "reasoning (rule: builder's report)")
 
@@ -140,7 +140,6 @@ class Context:
     statuses: dict          # story -> status, from run/status.json
     fenced: bool = False    # mad-eye is on a page off the preview (the fence record names this agent, S-064)
     cwd: pathlib.Path = None  # the agent's folder (the hook's `cwd`): where its relative paths start
-    run_ignored: bool = False  # git ignores `.accio/run/`, so a search from above it never reaches the reports
 
 
 @dataclasses.dataclass(frozen=True)
@@ -284,65 +283,50 @@ def _verdict(reason):
     return deny(reason) if reason else allow()
 
 
-# --- the reviewers never read house-elf's report (S-079) -----------------------------------------------------------
+# --- the reviewers never read house-elf's report (S-079, S-082) ----------------------------------------------------
 
 def _report_rule(tool, tool_input, ctx):
-    """The reason to deny a reviewer a read tool, or "": no Read of a `build-report.md` under `.accio/run/`; no Grep
-    or Glob inside `.accio/run/`, for files named `build-report`, or from above `.accio/run/` unless git ignores it
-    (a search skips ignored files). Its package and findings files stay readable by Read. Paths are taken as the tool
-    takes them (`~` expanded, relative to the agent's folder); one that can't be resolved is denied (fail closed).
-    A Grep's text pattern is not a file name: searching the code for the word `build-report` stays allowed."""
-    run = pathlib.Path(os.path.realpath(ctx.accio / "run"))
+    """The reason to deny a reviewer a read tool, or "". The reports live in `<worktree root>/.reports/`, outside the
+    main checkout and every story worktree (S-082), so the rule is one folder check: no Read, Grep or Glob inside that
+    folder, and no Grep or Glob from a folder that holds it. A Read (or a search) of an older build's
+    `.accio/run/<ID>/build-report.md` is denied too. Paths are taken as the tool takes them (`~` expanded, relative to
+    the agent's folder); one that can't be resolved is denied (fail closed). A search's file pattern doesn't matter,
+    and a Grep's text pattern is not a file name: searching the code for the word `build-report` stays allowed."""
+    reports = pathlib.Path(os.path.realpath(paths.reports_dir(ctx.root)))
     if tool == "Read":
-        target = _resolved(tool_input.get("file_path"), ctx)
-        is_report = target is not None and target.name.casefold() == REPORT_NAME and _inside_any_case(target, run)
-        return f"Read of {target} is denied: {REPORT_WHY}." if is_report else ""
-    if tool not in SEARCH_TOOLS:
+        targets = [_resolved(tool_input.get("file_path"), ctx)]
+    elif tool in SEARCH_TOOLS:
+        targets = _search_folders(tool, tool_input, ctx)
+    else:
         return ""
-    path = tool_input.get("path")
-    if isinstance(path, str) and REPORT_WORD in path.casefold():
-        return f"{tool} for `{REPORT_WORD}` files is denied: {REPORT_WHY}."
-    name_pattern = tool_input.get("glob" if tool == "Grep" else "pattern")
-    for folder in _search_folders(tool, tool_input, ctx):
-        if folder is None:
+    for target in targets:
+        if target is None:
             return f"{tool} on a path curfew can't resolve is denied: {REPORT_WHY}. Give an absolute path."
-        if _inside_any_case(folder, run):
-            return (f"{tool} inside {run} is denied: {REPORT_WHY}. Read your review package and findings file by "
-                    "the paths the package gives.")
-        if not _inside_any_case(run, folder):
-            continue
-        if not ctx.run_ignored:
-            return (f"{tool} from {folder} would reach {run}, which git doesn't ignore, so it is denied: {REPORT_WHY}. "
-                    "Search the worktree or a folder below the repo root.")
-        if _may_name_report(name_pattern):
-            return (f"{tool} from {folder} with the file pattern `{name_pattern}` could reach {run} (a file pattern "
-                    f"overrides git's ignore rules), so it is denied: {REPORT_WHY}. Search the worktree instead.")
+        if _inside_any_case(target, reports) or _is_old_report(target, ctx):
+            return f"{tool} of {target} is denied: {REPORT_WHY}."
+        if tool in SEARCH_TOOLS and _inside_any_case(reports, target):
+            return (f"{tool} from {target} would reach {reports}, so it is denied: {REPORT_WHY}. Search the main "
+                    "checkout or the story worktree.")
     return ""
 
 
-def _may_name_report(name_pattern):
-    """True when a search's file pattern (a Grep `glob`, a Glob `pattern`) could pick out a `build-report.md`. Only a
-    plain pattern is judged: letters, digits, `. _ - /`, `*` and `?`, which mean the same to ripgrep and to fnmatch;
-    its last part must not match the name, letter case ignored. Anything else (spaces or commas, which Grep splits into
-    several patterns; `\\` escapes; `[...]` classes; braces; `!`) counts as a match (fail closed). None or "" is no
-    pattern."""
-    if name_pattern is None or name_pattern == "":
-        return False
-    if not isinstance(name_pattern, str) or not PLAIN_PATTERN.fullmatch(name_pattern):
-        return True
-    return fnmatch.fnmatchcase(REPORT_NAME, name_pattern.rsplit("/", 1)[-1].casefold())
+def _is_old_report(path, ctx):
+    """True for a `build-report.md` an older accio left in `.accio/run/<ID>/` (letter case ignored)."""
+    return path.name.casefold() == REPORT_NAME and _inside_any_case(path, ctx.accio / "run")
 
 
 def _search_folders(tool, tool_input, ctx):
     """Where a Grep or Glob searches: its `path` (the agent's folder when it gives none) and, for a Glob, the folder
     its pattern's fixed start (the part before its first wildcard) names, from that path. None for one that can't be
-    resolved."""
+    resolved, and for a Glob whose pattern climbs with `..` past a wildcard."""
     path = tool_input.get("path")
     root = _resolved(path, ctx) if path is not None and path != "" else _resolved(str(ctx.cwd or ctx.root), ctx)
     pattern = tool_input.get("pattern")
     if tool != "Glob" or not isinstance(pattern, str) or root is None:
         return [root]
-    start = GLOB_CHARS.split(os.path.expanduser(pattern), 1)[0]
+    start, *rest = GLOB_CHARS.split(os.path.expanduser(pattern), 1)
+    if rest and PARENT in rest[0]:  # `*/../x`, `{src,../..}/x`: any `..` after a wildcard (fail closed)
+        return [root, None]
     folder = start if start.endswith(("/", os.sep)) or not start else os.path.dirname(start)
     return [root, _resolved(os.path.join(root, folder) if folder else str(root), ctx)]
 
@@ -379,7 +363,7 @@ def _house_elf(agent_id, tool, tool_input, ctx):
         return deny("house-elf first runs `accio-claim <ID>` (the command in its brief); until then it may only read.")
     worktree = pathlib.Path(claim["worktree"])
     if tool in WRITE_TOOLS:
-        return _house_elf_write(_target(tool_input), worktree, ctx.accio / "run" / claim["story"] / REPORT_NAME)
+        return _house_elf_write(_target(tool_input), worktree, paths.report_path(ctx.root, claim["story"]))
     if tool == "Bash":
         return _verdict(bashpolicy.check(_command(tool_input), _house_elf_judge(worktree, ctx), start_in=worktree))
     return deny(f"{tool} isn't on accio:house-elf's list.")

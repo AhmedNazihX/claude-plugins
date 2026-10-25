@@ -1,14 +1,17 @@
 """run/owl.md, the one file `owl` reads (DESIGN § 3.5, § 7.2): at most 150 tokens per story.
 
 For each story the build finished (status `review`): what changed, how to try it, its risks and its token cost,
-taken from the sections of `run/<ID>/build-report.md` that the brief and the fix brief ask house-elf to write; brew's
-note for the story (`run/<ID>/brew-notes.md`: a boggart or mad-eye skip, say) comes first under Risks. A stacked
-child names the parents to accept with it, and the ones that keep it from being accepted yet. For each blocked
-story: its one question from `run/questions/<ID>.md`.
+taken from the sections of house-elf's report that the brief and the fix brief ask it to write
+(`<worktree root>/.reports/<ID>/build-report.md`, S-082; a build by an older accio left it in `run/<ID>/`, read when
+the new one is missing); brew's note for the story (`run/<ID>/brew-notes.md`: a boggart or mad-eye skip, say) comes
+first under Risks. A stacked child names the parents to accept with it, and the ones that keep it from being accepted
+yet. For each blocked story: its one question from `run/questions/<ID>.md`.
 """
 import re
 
-REPORT_NAME = "build-report.md"  # house-elf writes it; a name Claude Code lets a subagent write (S-023)
+from accio_lib import paths
+
+REPORT_NAME = paths.REPORT_NAME
 NOTES_NAME = "brew-notes.md"  # prefect writes brew's note for a READY story (boggart's, mad-eye's), S-076/3
 NOTE_PREFIX = "Build note: "
 STORY_TOKEN_TARGET = 150
@@ -72,6 +75,13 @@ def _read(path):
         return None, "missing"
     except (OSError, UnicodeDecodeError):
         return None, "unreadable"
+
+
+def read_report(run_dir, story_id):
+    """House-elf's report as a (text, problem) pair: from `<worktree root>/.reports/<ID>/` (S-082), else from the
+    `run/<ID>/` an older accio wrote it to. `run_dir` is the main checkout's `.accio/run/`."""
+    report = _read(paths.report_path(run_dir.parent.parent, story_id))
+    return report if report[1] != "missing" else _read(run_dir / story_id / REPORT_NAME)
 
 
 def _cost(entry):
@@ -159,7 +169,7 @@ def render(stories, status, run_dir, costs):
     for story_id in sorted(stories):
         parsed, entry = stories[story_id], costs.get(story_id)
         if status[story_id] == "review":
-            blocks.append(ready_block(parsed, status, _read(run_dir / story_id / REPORT_NAME), entry,
+            blocks.append(ready_block(parsed, status, read_report(run_dir, story_id), entry,
                                       _read(run_dir / story_id / NOTES_NAME)))
         elif status[story_id] == "blocked":
             blocks.append(blocked_block(parsed, _read(run_dir / "questions" / f"{story_id}.md"), entry))
