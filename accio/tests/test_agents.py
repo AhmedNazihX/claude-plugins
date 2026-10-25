@@ -137,6 +137,11 @@ class BrewRolesTest(unittest.TestCase):
             with self.subTest(name):
                 self.assertEqual(front_and_body(name)[0].get("omitClaudeMd", "").strip(), "true")
 
+    def test_S_084_1_their_prompts_say_to_read_the_project_rules_the_package_names(self):
+        for name in (*REVIEWERS, "boggart"):
+            with self.subTest(name):
+                self.assertIn("package names the project's rules", " ".join(front_and_body(name)[1].split()))
+
     def test_S_084_2_house_elf_and_headmaster_keep_claude_md(self):
         for name in ("house-elf", "headmaster"):
             with self.subTest(name):

@@ -282,6 +282,38 @@ class ReviewPackageTest(unittest.TestCase):
                 self.assertNotIn("build-report", text)
                 self.assertNotIn("implementer's report", text)
 
+    def rules_lines(self, text):
+        return [line for line in text.splitlines() if line.startswith("- The project's rules")]
+
+    def test_S_084_3_a_story_package_names_each_instructions_file_of_the_main_checkout(self):
+        self.story()
+        self.brief()
+        self.build()
+        write(self.repo / "CLAUDE.md", "main rules\n")
+        write(self.repo / ".claude" / "CLAUDE.md", "more rules\n")
+        write(self.worktree / "CLAUDE.md", "the story changed these\n")  # the worktree's copy is never the one named
+        text = self.package()[1]
+        (line,) = self.rules_lines(text)
+        self.assertIn(f"`{self.repo / 'CLAUDE.md'}`", line)
+        self.assertIn(f"`{self.repo / '.claude' / 'CLAUDE.md'}`", line)
+        self.assertNotIn(str(self.worktree / "CLAUDE.md"), text)
+        self.assertIn("apply them where the change touches them", line)
+
+    def test_S_084_3_only_the_file_that_exists_is_named_in_a_story_and_a_direct_fix_package(self):
+        write(self.repo / "CLAUDE.md", "main rules\n")
+        reply = json.loads(self.fix_review().stdout)
+        (line,) = self.rules_lines(pathlib.Path(reply["package"]).read_text(encoding="utf-8"))
+        self.assertIn(f"`{self.repo / 'CLAUDE.md'}`", line)
+        self.assertNotIn(".claude/CLAUDE.md", line)
+
+    def test_S_084_4_no_instructions_file_means_no_project_rules_line(self):
+        self.story()
+        self.brief()
+        self.build()
+        self.assertEqual(self.rules_lines(self.package()[1]), [])
+        self.assertEqual(self.rules_lines(pathlib.Path(json.loads(self.fix_review().stdout)["package"])
+                                          .read_text(encoding="utf-8")), [])
+
     def test_a_git_failure_is_a_plain_error_not_a_traceback(self):
         self.story()
         self.brief()

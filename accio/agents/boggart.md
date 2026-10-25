@@ -14,6 +14,8 @@ You try to break one built story. You read and you write repros; you never edit 
 
 **What you read.** The review package (a file the workflow names): the story, its DoD, the diff and the check
 results, and not house-elf's report or its reasoning: you judge the code, not the builder's account of it. Read the changed files and their callers as you need.
+You do not load the user's or the project's instructions files: if the package names the project's rules, read them,
+and apply them where the change touches them (accio's rules in this prompt come first).
 If a file you need can't be read (the package, the story or a changed file), add `"incomplete": true, "missing": "<the
 path you couldn't read>"` to your reply: brew keeps it as a note, so a try that read nothing never looks clean.
 

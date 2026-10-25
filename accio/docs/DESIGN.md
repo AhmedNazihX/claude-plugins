@@ -456,7 +456,9 @@ Messages show only a prefix of the secret.
   listed in each reviewer.
 - **Where the reviewers' rules come from:** `examiner`, `professor`, `auror` and `boggart` set `omitClaudeMd: true`,
   so they judge from their own prompt, the review package and the code, never the user's or the project's
-  `CLAUDE.md` (S-084). A story's own conventions belong in the story or the package. `house-elf` and `headmaster`
+  `CLAUDE.md` (S-084). The project's own rules still reach them: the review package names the main checkout's
+  `CLAUDE.md` and `.claude/CLAUDE.md` (those that exist; never the worktree's copy, which a story could change) as
+  "the project's rules", to apply where the change touches them. `house-elf` and `headmaster`
   keep the project's instructions on purpose: one writes to the project's conventions, the other asks in the
   user's question format.
 - **The spec reviewer comes first.** `examiner` checks the DoD one line at a time: met or not, nothing extra.

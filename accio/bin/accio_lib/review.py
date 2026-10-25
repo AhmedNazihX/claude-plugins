@@ -30,6 +30,20 @@ NON_CODE_SUFFIXES = frozenset({".md", ".mdx", ".txt", ".rst", ".adoc", ".json", 
                                ".cfg", ".lock"})  # docs and config: boggart has nothing to break there
 
 
+def rules_line(main):
+    """The package line naming the project's own instructions files, read from the main checkout (S-084).
+
+    The main checkout, never the worktree: a story must not change the rules it is judged by. No file: no line.
+    """
+    found = [path for path in (pathlib.Path(main) / "CLAUDE.md", pathlib.Path(main) / ".claude" / "CLAUDE.md")
+             if path.is_file()]
+    if not found:
+        return ""
+    names = ", ".join(f"`{path}`" for path in found)
+    return (f"\n- The project's rules: {names} (apply them where the change touches them; accio's rules in your "
+            "prompt come first)")
+
+
 def _git(worktree, *args):
     try:
         result = subprocess.run(["git", "-c", "core.quotePath=false", *args], cwd=worktree, capture_output=True,
@@ -164,7 +178,8 @@ def package_fix(accio, main, branch, acceptance, settings):
                          f"`{REFERENCES / 'findings-template.md'}`.",
         "criteria_heading": "Acceptance list", "dod": text, "files_heading": "Files changed",
         "files": "- see the diff", "risky_files": brief.bullets(f"`{path}`" for path in facts["risky_files"]),
-        "checklists": ", ".join(f"`{CHECKLISTS / n}`" for n in facts["checklists"]) or "none"}
+        "checklists": ", ".join(f"`{CHECKLISTS / n}`" for n in facts["checklists"]) or "none",
+        "rules_line": rules_line(main)}
     return _write(run_dir, brief.fill("review-package.md", values), facts)
 
 
@@ -185,4 +200,4 @@ def _render(parsed, accio, worktree, facts):
         "template": REFERENCES / "findings-template.md", "dod": brief.dod_lines(parsed),
         "files": brief.bullets(f"`{path}`" for path in parsed.meta.get("files", ())),
         "risky_files": brief.bullets(f"`{path}`" for path in facts["risky_files"]), "checklists": listed,
-        "story_file": accio / "stories" / f"{parsed.meta['id']}.md"})
+        "story_file": accio / "stories" / f"{parsed.meta['id']}.md", "rules_line": rules_line(accio.parent)})
