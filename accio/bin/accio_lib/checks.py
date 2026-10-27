@@ -18,17 +18,18 @@ Scripts, not a model, decide these, so an agent's claim never does:
   MAX_LISTED_FILES) or its target (a symlink). After the story, any difference is `main_changed` (`HEAD` for a
   commit; `git refs`, `git config` or `git hooks` when those change), and a moved `origin/<base>` is
   `remote_moved`. `.accio/run/` is left out, since the run writes there, except `push-ok`, each story's `base` and
-  `allow-once.json` (owl's grants for one build), which nothing writes during a story; another story's base,
-  written when a parallel build prepares it, is not watched. Times are recorded with `ctime`, which can't be set back.
+  `parent-heads`, and `allow-once.json` (owl's grants for one build), which nothing writes during a story; another
+  story's base and pins, written when a parallel build prepares it, count only when the base-writes log lacks them. Times are recorded with `ctime`, which can't be set back.
   Paths matching config's `snapshot_skip` globs (another tool's files, such as `.remember/**`) are left out of the
   comparison; nothing under `.accio/` ever is (the skip list itself lives there). Finder's `.DS_Store` files never
   count, anywhere.
   **Limit:** the snapshot file lives in `.accio/run/` too, so code the story runs could rewrite it; like curfew
   (DESIGN § 6), this catches mistakes and leaves a trail, not a determined agent.
 - **diff start:** the base `accio-brief` recorded for the story (its parent's head when stacked), when it is a full
-  commit id, an ancestor of the story's HEAD, and an ancestor of the base branch or of a dep's story branch (so never
-  a commit only the story's own branch has, S-072); never a caller's choice, and the same one `accio-ledger key`
-  uses; the merge-base with the base branch otherwise.
+  commit id, an ancestor of the story's HEAD, and either a parent head `accio-brief` pinned beside it (S-074) or an
+  ancestor of the base branch (so never a commit only the story's own branch has, S-072, and never one a moved
+  parent branch points at); never a caller's choice, and the same one `accio-ledger key` uses; the merge-base with
+  the base branch otherwise.
 - **test audit (decision 011, option A):** with `mutation.command` in config.json, the story's diff goes to
   `run/<ID>/story.diff` and the command runs in the worktree with `{diff}` replaced by that file's path, within what
   is left of the time budget. The tool mutates only the changed lines (natively, like `cargo mutants --in-diff`, or
@@ -45,7 +46,7 @@ import shlex
 import subprocess
 import time
 
-from accio_lib import brief, globs, merge, story
+from accio_lib import brief, globs, merge
 
 TEST_FOLDERS = frozenset({"test", "tests", "__tests__", "spec", "specs", "__snapshots__", "testdata", "fixtures",
                           "e2e", "cypress"})
@@ -62,10 +63,12 @@ ACCIO_FOLDER = ".accio"
 OS_FILES = frozenset({".DS_Store"})  # macOS Finder writes these whenever a folder is opened
 PLAYWRIGHT_FOLDER = ".playwright-mcp"  # the Playwright MCP server logs pages and console here on every session
 RUN_FOLDER = ".accio/run/"
-BASE_NAME = "base"
-WATCHED_RUN_FILES = ("push-ok", f"*/{BASE_NAME}", "allow-once.json")  # nothing writes these during a story,
-# except another story's base in a parallel build (see `compare`)
-BASE_WRITES_LOG = "base-writes.log"  # `accio-brief` appends `<ID> <full sha>` per base it writes; only appends are fine
+BASE_NAME = brief.BASE_RECORD
+PINS_NAME = brief.PARENT_HEADS
+WATCHED_RUN_FILES = ("push-ok", f"*/{BASE_NAME}", f"*/{PINS_NAME}", "allow-once.json")  # nothing writes these during
+# a story, except another story's base and pins in a parallel build (see `compare`)
+BASE_WRITES_LOG = "base-writes.log"  # `accio-brief` appends `<ID> <full sha>` per base and `<ID> <dep> <full sha>`
+# per pinned parent head it writes; only appends are fine
 COMMIT_ID = re.compile(r"[0-9a-f]{40}|[0-9a-f]{64}")
 STORY_REFS = b"refs/heads/story/"  # story branches move with every checkpoint commit
 SNAPSHOT_NAME = "main-snapshot.json"
@@ -183,34 +186,24 @@ def _is_ancestor(worktree, commit, rev):
     return result.returncode == 0
 
 
-def _story_deps(run_dir):
-    """The story's deps from its file in the main checkout (`.accio/stories/<ID>.md`); () when it can't be read."""
-    path = pathlib.Path(run_dir).parent.parent / "stories" / f"{pathlib.Path(run_dir).name}.md"
-    try:
-        return tuple(story.parse(path).meta.get("deps", ()))
-    except story.StoryError:
-        return ()
-
-
-def _allowed_starts(run_dir, base_branch):
-    """The branches a story's diff may start on: the base branch, and each dep's story branch (a stacked parent)."""
-    return (base_branch, *(f"refs/heads/{brief.branch_name(dep)}" for dep in _story_deps(run_dir)))
-
-
 def trusted_base(run_dir, worktree, base_branch):
-    """The base accio-brief recorded, when it is a full commit id, an ancestor of the story's HEAD, and an ancestor of
-    the base branch or of a dep's story branch (a stacked story's parent); else None.
+    """The base accio-brief recorded, when it is a full commit id, an ancestor of the story's HEAD, and either one of
+    the parent heads accio-brief pinned beside it (a stacked story, S-074) or an ancestor of the base branch; else
+    None.
 
     The run folder is reachable from code the story runs, so the record is checked, not trusted. Being an ancestor of
-    HEAD alone isn't enough: HEAD, or any commit the story made, is one too, and would shorten the diff (S-072). The
-    main snapshot also lists a write to `run/<ID>/base`, but only up to `accio-check`, and its own file lives in the
-    run folder too; this check asks git, not a file. Limit: code that moves the base branch or a dep's branch still
-    passes it (a moved base branch shows in the snapshot's `git refs`; story branches are not watched)."""
+    HEAD alone isn't enough: HEAD, or any commit the story made, is one too, and would shorten the diff (S-072). A
+    parent's live `story/<dep>` branch isn't asked either: story branches aren't watched by the main snapshot, so the
+    story's code could move one onto its own commit; the pin is the parent's head as accio-brief saw it, and it still
+    holds after the parent's branch moves on. The main snapshot lists a write to `run/<ID>/base` or
+    `run/<ID>/parent-heads`, but only up to `accio-check`, and its own file lives in the run folder too. Limit: code
+    that moves the base branch still passes this check (that shows in the snapshot's `git refs`)."""
     recorded = brief.recorded_base(run_dir)
     if not recorded or not COMMIT_ID.fullmatch(recorded) or not _is_ancestor(worktree, recorded, "HEAD"):
         return None
-    allowed = any(_is_ancestor(worktree, recorded, rev) for rev in _allowed_starts(run_dir, base_branch))
-    return recorded if allowed else None
+    if recorded in brief.pinned_heads(run_dir) or _is_ancestor(worktree, recorded, base_branch):
+        return recorded
+    return None
 
 
 def diff_start(run_dir, worktree, base_branch):
@@ -290,17 +283,18 @@ def _read_text(path):
         return ""
 
 
-def _base_contents(main):
-    """Each story's `run/<ID>/base` content, so a forgiven change can be matched to the log."""
+def _run_contents(main, name):
+    """Each story's `run/<ID>/<name>` content, so a forgiven change can be matched to the log."""
     run = pathlib.Path(main) / RUN_FOLDER
-    return {path.parent.name: _read_text(path).strip() for path in run.glob(f"*/{BASE_NAME}") if path.is_file()}
+    return {path.parent.name: _read_text(path).strip() for path in run.glob(f"*/{name}") if path.is_file()}
 
 
 def snapshot(main, base_branch):
     dirty = {path: _record(main, code, path) for code, path in merge.status_entries(main)
              if not path.startswith(RUN_FOLDER) and path != RUN_FOLDER.rstrip("/")}
     return {"head": _ref(main, "HEAD"), "dirty": {**dirty, **_watched_run_files(main)}, "git": _git_state(main),
-            "bases": _base_contents(main), "base writes": _read_text(pathlib.Path(main) / RUN_FOLDER / BASE_WRITES_LOG),
+            "bases": _run_contents(main, BASE_NAME), "pins": _run_contents(main, PINS_NAME),
+            "base writes": _read_text(pathlib.Path(main) / RUN_FOLDER / BASE_WRITES_LOG),
             "origin": _ref(main, f"refs/remotes/origin/{base_branch}")}
 
 
@@ -320,21 +314,32 @@ def _skipped(path, skip):
     return globs.matches_any(path, (*skip, *folders))
 
 
-def _base_owner(path):
-    """The story ID when `path` is a `run/<ID>/base`, else None."""
+def _run_file(path):
+    """(story ID, file name) when `path` is a `run/<ID>/base` or `run/<ID>/parent-heads`, else (None, None)."""
     if not path.startswith(RUN_FOLDER):
-        return None
+        return None, None
     folder, _, name = path.removeprefix(RUN_FOLDER).partition("/")
-    return folder if name == BASE_NAME else None
+    return (folder, name) if name in (BASE_NAME, PINS_NAME) else (None, None)
+
+
+def _needed_log_lines(owner, name, after):
+    """The log lines that show accio wrote the file's new content: one for a base, one per pin; None when missing."""
+    if name == BASE_NAME:
+        content = after.get("bases", {}).get(owner)
+        return [f"{owner} {content}"] if content else None
+    content = after.get("pins", {}).get(owner)
+    return None if content is None else [f"{owner} {line.strip()}" for line in content.splitlines() if line.strip()]
 
 
 def _forgiven_base(path, story_id, after):
-    """Whether `path` is another story's base that accio's prepare step wrote: the log has its ID and new content."""
-    owner = _base_owner(path)
+    """Whether `path` is another story's base or pins that accio's prepare step wrote: the log has its ID and each
+    line of its new content (pins with no parents need none)."""
+    owner, name = _run_file(path)
     if story_id is None or owner is None or owner == story_id:
         return False
-    content = after.get("bases", {}).get(owner)
-    return bool(content) and f"{owner} {content}" in after.get("base writes", "").splitlines()
+    needed = _needed_log_lines(owner, name, after)
+    logged = set(after.get("base writes", "").splitlines())
+    return needed is not None and all(line in logged for line in needed)
 
 
 def _log_rewritten(before, after):
@@ -346,8 +351,8 @@ def compare(before, after, skip=(), story_id=None):
     """(paths that changed in the main checkout, `HEAD` for a commit; whether origin/<base> moved).
 
     `skip` holds config's `snapshot_skip` globs: paths another tool keeps writing during a run. With `story_id`,
-    another story's `run/<ID>/base` is forgiven only when the base-writes log holds its new content (accio's own
-    prepare wrote it); the log itself counts only when a line was removed or rewritten.
+    another story's `run/<ID>/base` or `run/<ID>/parent-heads` is forgiven only when the base-writes log holds its new
+    content (accio's own prepare wrote it); the log itself counts only when a line was removed or rewritten.
     """
     paths = sorted(path for path in set(before["dirty"]) | set(after["dirty"])
                    if before["dirty"].get(path) != after["dirty"].get(path) and not _skipped(path, skip)

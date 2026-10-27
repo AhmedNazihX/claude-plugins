@@ -671,6 +671,11 @@ key = sha256(work digest + sha(config.checks) + panel-id + sha(story DoD section
 work digest = sha256(tree at `from` + the exact diff from..head, from plumbing with display settings off)
 from = merge-base with base, or the parent's head for a stacked child
 ```
+- **The parent's head is pinned (S-074).** `accio-brief` writes each parent's head (each dep's `story/<dep>` in the
+  main checkout) to `run/<ID>/parent-heads` beside `run/<ID>/base`, and logs both. A stacked child's recorded base
+  counts only when it is one of those pinned heads (or an ancestor of base), never because the parent's live branch
+  holds it: story branches move with every checkpoint and the main snapshot doesn't watch them. A parent branch that
+  moves on later doesn't change where the child's diff starts.
 - **Invalidation:** the key changes automatically when the diff (any byte, whitespace included), the base it starts
   from, the checks, the reviewer panel or the DoD changes. A rebase onto a moved base therefore re-runs the checks.
   A worktree with uncommitted work can't be keyed (S-006 review).

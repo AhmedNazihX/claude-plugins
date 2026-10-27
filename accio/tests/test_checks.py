@@ -185,6 +185,8 @@ class SnapshotTest(CheckTestBase):
         self.assertEqual(run(), from_merge_base)  # S-072/1: the story's own HEAD is never trusted, here either
         write(self.accio / "stories" / "S-001.md", STORY.replace("status: doing\n", "status: doing\ndeps: [S-002]\n"))
         git(self.repo, "branch", "story/S-002", git(self.worktree, "rev-parse", "HEAD"))  # S-072/2: a parent's head
+        self.assertEqual(run(), from_merge_base)  # S-074/2: but only once accio-brief pinned it
+        write(self.accio / "run" / "S-001" / "parent-heads", f"S-002 {git(self.worktree, 'rev-parse', 'HEAD')}\n")
         self.assertNotEqual(run(), from_merge_base)
 
     def test_S_017_4_refs_git_config_hooks_and_the_runs_control_files_are_watched(self):
@@ -258,6 +260,21 @@ class SnapshotTest(CheckTestBase):
         write(self.accio / "run" / "S-002" / "base", "1" * 40 + "\n")
         write(self.accio / "run" / "base-writes.log", "S-002 " + "2" * 40 + "\n")
         self.assertEqual(self.changed_for_s001(before), [".accio/run/S-002/base"])
+
+    def test_S_074_1_another_storys_pins_in_the_log_are_forgiven(self):
+        before = self.snap_before()
+        write(self.accio / "run" / "S-002" / "parent-heads", "S-003 " + "1" * 40 + "\n")
+        write(self.accio / "run" / "base-writes.log", "S-002 S-003 " + "1" * 40 + "\n")
+        write(self.accio / "run" / "S-004" / "parent-heads", "")  # a story with no parents
+        self.assertEqual(self.changed_for_s001(before), [])
+
+    def test_S_074_1_pins_not_in_the_log_or_the_storys_own_count(self):
+        before = self.snap_before()
+        write(self.accio / "run" / "S-002" / "parent-heads", "S-003 " + "1" * 40 + "\n")
+        write(self.accio / "run" / "base-writes.log", "S-002 S-003 " + "2" * 40 + "\n")
+        write(self.accio / "run" / "S-001" / "parent-heads", "S-003 " + "2" * 40 + "\n")
+        self.assertEqual(self.changed_for_s001(before),
+                         [".accio/run/S-001/parent-heads", ".accio/run/S-002/parent-heads"])
 
     def test_S_016_4_lines_appended_to_the_log_do_not_count(self):
         write(self.accio / "run" / "base-writes.log", "S-009 " + "9" * 40 + "\n")
@@ -394,13 +411,44 @@ class DiffStartTest(CheckTestBase):
         self.record(own)
         self.assertEqual(self.start(), self.prepared)
 
-    def test_S_072_2_a_stacked_storys_parent_head_is_still_the_diff_start(self):
+    def stacked(self):
+        """S-001 stacked on S-002: the parent's head is on story/S-002, recorded and pinned as accio-brief does."""
         write(self.accio / "stories" / "S-001.md", STORY.replace("status: doing\n", "status: doing\ndeps: [S-002]\n"))
         self.change({"src/a.py": "value = 2\n"})  # the parent's work, on the parent's branch
         parent_head = git(self.worktree, "rev-parse", "HEAD")
         git(self.repo, "branch", "story/S-002", parent_head)
         self.change({"src/new.py": "x = 1\n"})
         self.record(parent_head)
+        write(self.run_dir / "parent-heads", f"S-002 {parent_head}\n")
+        return parent_head
+
+    def test_S_072_2_a_stacked_storys_parent_head_is_still_the_diff_start(self):
+        parent_head = self.stacked()
+        self.assertEqual(self.start(), parent_head)
+        self.assertEqual(checks.changed_files(self.worktree, self.start()), ["src/new.py"])
+
+    def test_S_074_2_a_base_on_a_moved_parent_branch_is_not_trusted_unless_pinned(self):
+        self.stacked()
+        own = git(self.worktree, "rev-parse", "HEAD")
+        git(self.repo, "branch", "-f", "story/S-002", own)  # the story's code moves its parent's branch
+        self.record(own)
+        self.assertIsNone(checks.trusted_base(self.run_dir, self.worktree, "main"))
+        self.assertEqual(self.start(), self.prepared)
+        self.assertEqual(sorted(checks.changed_files(self.worktree, self.start())), ["src/a.py", "src/new.py"])
+
+    def test_S_074_2_a_parent_head_that_was_never_pinned_is_not_trusted(self):
+        parent_head = self.stacked()
+        (self.run_dir / "parent-heads").unlink()
+        self.assertIsNone(checks.trusted_base(self.run_dir, self.worktree, "main"))
+        write(self.run_dir / "parent-heads", "S-002 not-a-commit\n")
+        self.assertEqual(self.start(), self.prepared, parent_head)
+
+    def test_S_074_3_a_parent_branch_moved_after_the_pin_still_diffs_from_the_pinned_head(self):
+        parent_head = self.stacked()
+        for moved_to in (self.prepared, git(self.worktree, "rev-parse", "HEAD")):
+            git(self.repo, "branch", "-f", "story/S-002", moved_to)
+            self.assertEqual(self.start(), parent_head, moved_to)
+        git(self.repo, "branch", "-D", "story/S-002")
         self.assertEqual(self.start(), parent_head)
         self.assertEqual(checks.changed_files(self.worktree, self.start()), ["src/new.py"])
 

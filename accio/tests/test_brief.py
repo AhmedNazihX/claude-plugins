@@ -81,6 +81,54 @@ class BriefTest(unittest.TestCase):
         self.assertEqual(self.head("story/S-002"), self.head("story/S-001"))
         self.assertEqual(reply["base"], self.head("story/S-001"))
 
+    def stacked_child(self):
+        """S-001 with a commit of its own, then S-002 (deps: [S-001]) briefed on it, as brew does."""
+        self.brief("S-001")
+        write(self.wt_root / "S-001" / "src" / "parent.py", "x = 1\n")
+        commit_all(self.wt_root / "S-001")
+        write(self.accio / "stories" / "S-002.md", STORY.format(id="S-002", notes="", blocked="").replace(
+            "status: ready\n", "status: ready\ndeps: [S-001]\n"))
+        return self.brief("S-002", "--parent", "story/S-001")
+
+    def pins(self, story_id):
+        return (self.accio / "run" / story_id / "parent-heads").read_text(encoding="utf-8")
+
+    def test_S_074_1_a_stacked_child_pins_its_parents_head_beside_its_base(self):
+        reply = self.stacked_child()
+        parent_head = self.head("story/S-001")
+        self.assertEqual(self.pins("S-002"), f"S-001 {parent_head}\n")
+        self.assertEqual((self.accio / "run" / "S-002" / "base").read_text(encoding="utf-8").strip(), parent_head)
+        self.assertEqual(reply["base"], parent_head)
+        log = (self.accio / "run" / "base-writes.log").read_text(encoding="utf-8").splitlines()
+        self.assertEqual(log[-1], f"S-002 S-001 {parent_head}")
+
+    def test_S_074_1_a_story_without_parents_pins_nothing_and_a_rebrief_drops_old_pins(self):
+        self.brief("S-001")
+        self.assertEqual(self.pins("S-001"), "")
+        self.stacked_child()
+        write(self.accio / "stories" / "S-002.md", STORY.format(id="S-002", notes="", blocked=""))  # no deps now
+        self.brief("S-002")
+        self.assertEqual(self.pins("S-002"), "")
+
+    def test_S_074_1_a_dep_without_a_story_branch_is_not_pinned(self):
+        write(self.accio / "stories" / "S-002.md", STORY.format(id="S-002", notes="", blocked="").replace(
+            "status: ready\n", "status: ready\ndeps: [S-009]\n"))
+        self.brief("S-002")
+        self.assertEqual(self.pins("S-002"), "")
+
+    def test_S_074_3_the_child_diffs_from_the_pinned_head_after_its_parent_is_amended(self):
+        self.stacked_child()
+        pinned = self.head("story/S-001")
+        child = self.wt_root / "S-002"
+        write(child / "src" / "new.py", "y = 2\n")
+        commit_all(child, "child work")
+        parent = self.wt_root / "S-001"
+        write(parent / "src" / "parent.py", "x = 2\n")
+        git(parent, "add", "-A")
+        git(parent, "-c", "user.name=t", "-c", "user.email=t@example.com", "commit", "-q", "--amend", "-m", "amended")
+        from accio_lib import checks
+        self.assertEqual(checks.diff_start(self.accio / "run" / "S-002", child, "main"), pinned)
+
     def test_S_016_1_each_base_write_is_logged_and_earlier_lines_kept(self):
         self.brief("S-001")
         self.add_story("S-002")

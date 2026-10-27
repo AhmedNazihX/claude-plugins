@@ -282,6 +282,8 @@ class BoardTest(unittest.TestCase):
         worktree = paths.worktree_root(self.repo) / "S-002"
         git(self.repo, "worktree", "add", "-q", str(worktree), "-b", "story/S-002", "story/S-001")
         write(self.accio / "run" / "S-002" / "base", git(self.repo, "rev-parse", "story/S-001") + "\n")
+        write(self.accio / "run" / "S-002" / "parent-heads",  # pinned as accio-brief does (S-074/1)
+              f"S-001 {git(self.repo, 'rev-parse', 'story/S-001')}\n")
         listed = {item["id"]: item for item in json.loads(self.board("ready", "--json", "--resume").stdout)["stories"]}
         self.assertEqual((listed["S-001"]["resume"], listed["S-002"]["resume"]), ("check", "prepare"))
         self.assertEqual(listed["S-002"]["worktree"], str(worktree))
