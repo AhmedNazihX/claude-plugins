@@ -4,6 +4,8 @@
 - Branch exists: reuse it (re-adding a removed or hand-deleted worktree) and rebase it. The commit it was built on
   is kept in `run/<ID>/base`, so the rebase is `--onto <new> <old>` and a rewritten parent's old commits are never
   replayed into its child.
+- Each parent's head (a dep's `story/<dep>` in the main checkout) is pinned beside the base in
+  `run/<ID>/parent-heads`, so a stacked story's diff starts only from a head `accio-brief` saw (S-074).
 - Never loses work: uncommitted work is committed as a checkpoint first. A conflict leaves the rebase in progress
   and the brief names the files and `git rebase --continue` (house-elf finishes it; curfew allows only
   --continue, --abort and --skip). A rebase already in progress is left alone. Any other failure aborts the rebase
@@ -22,6 +24,7 @@ from accio_lib import config, githooks, globs, paths, story, summary
 TEMPLATES = pathlib.Path(__file__).resolve().parent / "templates"
 BIN = pathlib.Path(__file__).resolve().parents[1]
 BASE_RECORD = "base"
+PARENT_HEADS = "parent-heads"  # `<dep> <head>` per parent with a story branch, pinned beside the base (S-074)
 
 
 class BriefError(Exception):
@@ -66,15 +69,39 @@ def _branch_exists(main, branch):
     return _git(main, "rev-parse", "--verify", "--quiet", f"refs/heads/{branch}", check=False).returncode == 0
 
 
-def _record_base(run_dir, onto):
+def _log_writes(run_dir, entries):
+    """Append `<ID> <entry>` per entry to the base-writes log, so the main snapshot can tell accio's writes apart."""
     from accio_lib import checks  # late: checks imports this module
-    write_file(run_dir / BASE_RECORD, onto + "\n")
     log = run_dir.parent / checks.BASE_WRITES_LOG
     try:
         with log.open("a", encoding="utf-8") as handle:
-            handle.write(f"{run_dir.name} {onto}\n")
+            handle.writelines(f"{run_dir.name} {entry}\n" for entry in entries)
     except OSError as error:
         raise BriefError(f"cannot write {log}: {error}") from error
+
+
+def story_deps(run_dir):
+    """The story's deps from its file in the main checkout (`.accio/stories/<ID>.md`); () when it can't be read."""
+    path = pathlib.Path(run_dir).parent.parent / "stories" / f"{pathlib.Path(run_dir).name}.md"
+    try:
+        return tuple(story.parse(path).meta.get("deps", ()))
+    except story.StoryError:
+        return ()
+
+
+def parent_heads(main, run_dir):
+    """`<dep> <head>` for each dep whose story branch exists in the main checkout: its parents' heads right now."""
+    found = ((dep, _git(main, "rev-parse", "--verify", "--quiet", f"refs/heads/{branch_name(dep)}^{{commit}}",
+                        check=False)) for dep in story_deps(run_dir))
+    return tuple(f"{dep} {result.stdout.strip()}" for dep, result in found if result.returncode == 0)
+
+
+def _record_base(main, run_dir, onto):
+    """Record the base and pin each parent's head beside it (S-074), and log both: the diff start trusts only these."""
+    pins = parent_heads(main, run_dir)
+    write_file(run_dir / BASE_RECORD, onto + "\n")
+    write_file(run_dir / PARENT_HEADS, "".join(f"{pin}\n" for pin in pins))
+    _log_writes(run_dir, (onto, *pins))
 
 
 def recorded_base(run_dir):
@@ -84,13 +111,22 @@ def recorded_base(run_dir):
         return None
 
 
+def pinned_heads(run_dir):
+    """The parent heads `accio-brief` pinned for the story (the last field of each line); () when none."""
+    try:
+        text = (run_dir / PARENT_HEADS).read_text(encoding="utf-8")
+    except FileNotFoundError:
+        return ()
+    return tuple(fields[-1] for fields in (line.split() for line in text.splitlines()) if len(fields) == 2)
+
+
 def prepare_worktree(main, run_dir, story_id, onto):
     """Create or reuse the story's worktree; returns (worktree, notes for the brief)."""
     worktree = paths.worktree_root(main) / story_id
     branch = branch_name(story_id)
     if not _branch_exists(main, branch):
         _git(main, "worktree", "add", "-q", str(worktree), "-b", branch, onto)
-        _record_base(run_dir, onto)
+        _record_base(main, run_dir, onto)
         _share_hooks(main, worktree)
         return worktree, ()
     if worktree.resolve() not in _registered(main):
@@ -100,7 +136,7 @@ def prepare_worktree(main, run_dir, story_id, onto):
     notes = rebase(worktree, onto, recorded_base(run_dir))
     # Even when the rebase stops on a conflict: `checks.trusted_base` only trusts a base that is an ancestor of HEAD,
     # so an aborted rebase falls back to the merge-base, and a finished one diffs from `onto`.
-    _record_base(run_dir, onto)
+    _record_base(main, run_dir, onto)
     _share_hooks(main, worktree)
     return worktree, notes
 
