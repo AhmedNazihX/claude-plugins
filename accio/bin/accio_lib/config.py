@@ -65,10 +65,10 @@ def _check_budgets(value):
 
 
 def _check_mutation(value):
-    if value is None:
+    if value is None or value is False:  # False: the user declined the mutation check (S-091)
         return None
     if not isinstance(value, dict) or set(value) != {"command"} or not isinstance(value["command"], str):
-        return 'must be {"command": "<the mutation tool, with {diff} where the story\'s diff file goes>"}'
+        return 'must be false, or {"command": "<the mutation tool, with {diff} where the story\'s diff file goes>"}'
     return None if "{diff}" in value["command"] else "command must contain {diff}, where the story's diff file goes"
 
 
@@ -206,6 +206,11 @@ def _read(path):
     if not isinstance(data, dict):
         raise ConfigError(f"{path} must hold a JSON object")
     return data
+
+
+def mutation_unset(accio_dir):
+    """True when config.json has no `mutation` key: accio has never asked about the mutation check (S-091)."""
+    return "mutation" not in _read(accio_dir / CONFIG_NAME)
 
 
 def load(accio_dir):

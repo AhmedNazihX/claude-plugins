@@ -23,6 +23,8 @@ REPORT_SECTIONS = (("What changed", "Changed"), ("How to try it", "Try it"), ("R
 MISSING_SECTION = "(missing from the report)"
 HEADING = re.compile(r"^(#{1,6})\s+(.*?)\s*:?\s*$")
 FENCE = re.compile(r"^ {0,3}(`{3,}|~{3,})")
+UNCHECKED_NOTE = ("Tests not checked for weak spots: the mutation check is off. Set `mutation.command` in "
+                  ".accio/config.json, or `\"mutation\": false` to stop this note.")
 FOOTER = ("\nAnswer in one batch: accept, reject or drop each ready story (with a reason for reject or drop), "
           "answer each question, and say whether to push.\n")
 
@@ -163,8 +165,9 @@ def blocked_block(parsed, question, cost_entry):
     return heading + prefix + _clip(asked, STORY_CHARS - len(heading) - len(prefix))
 
 
-def render(stories, status, run_dir, costs):
-    """The owl.md text for every story in review or blocked."""
+def render(stories, status, run_dir, costs, mutation_unset=False):
+    """The owl.md text for every story in review or blocked. With `mutation_unset` (config has no `mutation` key),
+    it starts with the line saying the tests weren't checked for weak spots (S-091)."""
     blocks = []
     for story_id in sorted(stories):
         parsed, entry = stories[story_id], costs.get(story_id)
@@ -174,7 +177,8 @@ def render(stories, status, run_dir, costs):
         elif status[story_id] == "blocked":
             blocks.append(blocked_block(parsed, _read(run_dir / "questions" / f"{story_id}.md"), entry))
     body = "\n\n".join(blocks) or "Nothing is ready or blocked."
-    return f"# Review\n\n{body}\n{FOOTER}"
+    note = f"{UNCHECKED_NOTE}\n\n" if mutation_unset else ""
+    return f"{note}# Review\n\n{body}\n{FOOTER}"
 
 
 def report_sections():

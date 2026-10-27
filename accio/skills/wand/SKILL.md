@@ -2,7 +2,7 @@
 name: wand
 description: Design (wand): interviews the user one question at a time, checks the facts, settles the choice and writes .accio/design.md.
 when_to_use: When the user wants to design a new project or feature ("help me design X", "plan the architecture", "write the design", "add a design note for …", "I want to build …"), or runs /accio:wand, in a git repo. Not for stories (sort), planning an iteration (prophecy), building (/accio:brew) or reviewing (owl).
-allowed-tools: Read, Glob, Grep, Write, Edit, Agent, Bash(${CLAUDE_PLUGIN_ROOT}/bin/accio-board init), Bash(${CLAUDE_PLUGIN_ROOT}/bin/accio-board wand-reset), Bash(${CLAUDE_PLUGIN_ROOT}/bin/accio-board record-design), Bash(${CLAUDE_PLUGIN_ROOT}/bin/accio-hooks install), Bash(${CLAUDE_PLUGIN_ROOT}/bin/accio-vow *), Bash(python3 ${CLAUDE_PLUGIN_ROOT}/bin/accio_lib/checkfinder.py)
+allowed-tools: Read, Glob, Grep, Write, Edit, Agent, Bash(${CLAUDE_PLUGIN_ROOT}/bin/accio-board init), Bash(${CLAUDE_PLUGIN_ROOT}/bin/accio-board wand-reset), Bash(${CLAUDE_PLUGIN_ROOT}/bin/accio-board record-design), Bash(${CLAUDE_PLUGIN_ROOT}/bin/accio-hooks install), Bash(${CLAUDE_PLUGIN_ROOT}/bin/accio-vow *), Bash(python3 ${CLAUDE_PLUGIN_ROOT}/bin/accio_lib/checkfinder.py), Bash(python3 ${CLAUDE_PLUGIN_ROOT}/bin/accio_lib/mutationfinder.py)
 ---
 
 # wand: design what to build
@@ -30,6 +30,17 @@ pytest folders; it writes nothing). Skip this when `.accio/config.json` already 
 proposed command, without a stop: add them all to `checks` in `.accio/config.json` (Edit; each is
 `{"command": …, "glob": "**"}`) and say in one line "I kept these check commands: …; say if one should go". If the
 user later says one should go, remove it. If it finds nothing, say so in one line and write nothing.
+
+**Mutation check.** When `.accio/config.json` has no `mutation` key, run
+`python3 ${CLAUDE_PLUGIN_ROOT}/bin/accio_lib/mutationfinder.py` (it reads the repo's marker files and prints the tool
+that fits, or "none known"; it writes nothing). Skip this when the key is there, whether `false` or a command. When it
+names a tool, ask once, as one question in its own message: "Your tests aren't checked for weak spots. Turn on the
+mutation check with <tool>?" (name each tool it printed). On no, write `"mutation": false` in `.accio/config.json`
+(Edit), so accio never asks again. On yes, write nothing and say the steps in plain words: install the tool as a dev
+dependency; give it a small wrapper that takes the story's diff file, mutates only the changed lines, and prints each
+surviving mutant on its own line starting `file:line`; then set `mutation.command` to that wrapper with `{diff}` where
+the diff file goes (decision 011). When it prints "none known", say in one line that no mutation tool is known for
+this repo, and don't ask.
 
 **New design or design note.** If `.accio/design.md` exists, this run adds a **design note**: one new `## <Feature>`
 section at the end, with Edit; never Write the file, never change the rest of it.
