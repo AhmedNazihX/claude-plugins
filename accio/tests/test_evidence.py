@@ -139,7 +139,7 @@ class EvidenceRunTest(unittest.TestCase):
         return (self.run_dir / "S-001" / preview.STAMP_NAME).read_text(encoding="utf-8").strip()
 
     def test_S_068_1_the_command_runs_in_the_worktree_with_the_steps_file_and_folder_filled_in(self):
-        result = self.run_evidence(self.settings())
+        result = self.run_evidence(self.settings(fresh_checkout=False))  # S-073: the live worktree, by choice
         self.assertEqual(result, {"ok": True, "folder": str(self.folder), "head": self.head, "screenshots": 1})
         self.assertEqual((self.folder / "cwd.txt").read_text(), str(self.worktree))
         self.assertEqual((self.folder / "steps-seen.txt").read_text(), "open main\nresize 800x600\nminimize\nrestore\n")
@@ -207,8 +207,8 @@ class EvidenceRunTest(unittest.TestCase):
         self.assertIn(preview.STEPS_NAME, result["reason"])
 
     def test_S_068_5_a_stamp_for_another_commit_is_refused_naming_both(self):
-        other = "1" * 40
-        result = self.run_evidence(self.settings(), head=other)
+        other = "1" * 40  # in the live worktree (S-073): a fresh checkout of an unknown commit can't even start
+        result = self.run_evidence(self.settings(fresh_checkout=False), head=other)
         self.assertTrue(result["skipped"])
         self.assertIn(self.head[:12], result["reason"])
         self.assertIn(other[:12], result["reason"])

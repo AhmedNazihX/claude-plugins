@@ -121,7 +121,7 @@ def _check_preview(value):
 
 
 EVIDENCE_REQUIRED = ("command", "steps_doc", "takes_over_screen", "evidence_globs")
-EVIDENCE_KEYS = {*EVIDENCE_REQUIRED, "themes", "timeout"}
+EVIDENCE_KEYS = {*EVIDENCE_REQUIRED, "themes", "timeout", "fresh_checkout"}
 EVIDENCE_PLACEHOLDERS = ("{steps}", "{folder}")
 PREFECT_BASH_LIMIT = 600  # seconds: prefect runs the evidence command, and its Bash tool stops there
 EVIDENCE_TIMEOUT_MAX = 540  # the default too: the command stops first, so its own note reaches the build (S-070)
@@ -144,6 +144,9 @@ def _check_evidence_values(value):
         return f"command must contain {' and '.join(missing)}: accio fills in the steps file and the evidence folder"
     if not isinstance(value["takes_over_screen"], bool):
         return "takes_over_screen must be true or false"
+    if "fresh_checkout" in value and not isinstance(value["fresh_checkout"], bool):
+        return ("fresh_checkout must be true or false: true (the default) runs the command in a clean checkout of the "
+                "story's head, false in its live worktree")
     if not _strings(value["evidence_globs"]):
         return ("evidence_globs must be a list of glob strings: the files that make the evidence (its walk mode and "
                 "window capture); [] means none")
