@@ -8,12 +8,15 @@ after a `start` that crashed too. A lock whose owner process is gone is stale an
 `evidence` is a native app's stand-in for a preview (S-068): it runs `ui_evidence.command` once on mad-eye's steps
 file and leaves screenshots for mad-eye to judge (see the section at the end).
 """
+import contextlib
 import json
 import os
+import pathlib
 import shlex
 import shutil
 import signal
 import subprocess
+import tempfile
 import time
 import urllib.error
 import urllib.parse
@@ -272,8 +275,11 @@ def _stop_locked(run_dir, story_id, settings):
 
 # --- ui_evidence: screenshots of a native app's real window (S-068) ------------------------------------------------
 # mad-eye writes a steps file, accio writes it to run/<ID>/ui-steps.txt, and `evidence` runs the project's command on
-# it in the story's worktree. The folder is accio's own, emptied first, so nothing the builder left there counts; the
-# stamp ties what the command made to the commit it ran on. Every problem is a skip with its reason, never a block.
+# it in a fresh detached checkout of the story's head, removed afterwards (S-073), so nothing the builder left in its
+# worktree (ignored files, files `assume-unchanged` or `skip-worktree` hide from `git status`) reaches the evidence;
+# `fresh_checkout: false` runs it in the live worktree instead. The folder is accio's own, emptied first, so nothing
+# the builder left there counts; the stamp ties what the command made to the commit it ran on. Every problem is a skip
+# with its reason, never a block.
 
 EVIDENCE_FOLDER = "ui-evidence"
 STEPS_NAME = "ui-steps.txt"
@@ -288,6 +294,9 @@ FNV_PRIME = 0x01000193
 WORD_MASK = 0xFFFFFFFF
 STATUS_WIDTH = 3  # `git status --porcelain` puts "XY " before each path
 MAX_NAMED_FILES = 20  # a skip note names this many files not committed, then counts the rest
+CHECKOUT_PREFIX = "accio-evidence-"  # the temporary folder that holds the clean checkout (S-073)
+CHECKOUT_NAME = "checkout"
+NO_HOOKS = ("-c", "core.hooksPath=/dev/null")  # no hook the story could have set runs when the checkout is made
 
 
 def steps_sum(text):
@@ -317,9 +326,10 @@ def _steps_problem(steps, wanted):
             "wrote, so the evidence command did not run")
 
 
-def evidence_files(run_dir, worktree, story_id, settings, base_branch):
-    """(files, problem): the files the story's diff touches that match `evidence_globs` (S-069), the files that make
-    the evidence. No globs, no git work. If git can't say, problem says why and the evidence is not trusted."""
+def evidence_files(run_dir, worktree, story_id, settings, base_branch, head="HEAD"):
+    """(files, problem): the files the story's diff up to `head` touches that match `evidence_globs` (S-069), the files
+    that make the evidence. No globs, no git work. If git can't say, problem says why and the evidence is not
+    trusted."""
     patterns = list(settings.get("evidence_globs", []))
     if not patterns:
         return [], ""
@@ -327,7 +337,7 @@ def evidence_files(run_dir, worktree, story_id, settings, base_branch):
         return [], f"no base branch to compare {story_id} with, so its evidence can't be trusted"
     try:
         origin = checks.diff_start(run_dir / story_id, worktree, base_branch)
-        listed = subprocess.run(["git", "diff", "--name-only", "-z", "--no-renames", origin, "HEAD"], cwd=worktree,
+        listed = subprocess.run(["git", "diff", "--name-only", "-z", "--no-renames", origin, head], cwd=worktree,
                                 capture_output=True, check=True).stdout.decode("utf-8", "replace")
     except (checks.CheckError, subprocess.CalledProcessError, OSError) as error:
         return [], f"can't tell which files {story_id} changes ({error}), so its evidence can't be trusted"
@@ -444,9 +454,9 @@ def stamp_problem(run_dir, story_id, head):
     return ""
 
 
-def _untrusted(run_dir, worktree, story_id, settings):
-    """Why the worktree's evidence can't be trusted, or '': files not committed (S-071), or a diff that touches an
-    `evidence_globs` file (S-069), with the base branch read from config.json."""
+def _untrusted(run_dir, worktree, story_id, settings, head):
+    """Why the worktree's evidence can't be trusted, or '': files not committed (S-071), or a diff up to `head` that
+    touches an `evidence_globs` file (S-069), with the base branch read from config.json."""
     pending, problem = worktree_changes(worktree)
     if problem or pending:
         return problem or not_committed(story_id, pending)
@@ -456,39 +466,86 @@ def _untrusted(run_dir, worktree, story_id, settings):
         base_branch = config.load(run_dir.parent)["base_branch"]
     except config.ConfigError as error:
         return f"can't read config.json ({error}), so the evidence of {story_id} can't be trusted"
-    touched, problem = evidence_files(run_dir, worktree, story_id, settings, base_branch)
+    touched, problem = evidence_files(run_dir, worktree, story_id, settings, base_branch, head)
     return problem or (evidence_not_trusted(touched) if touched else "")
+
+
+def _git_quiet(worktree, *args):
+    """Run git in the worktree; (exit code, its error output). An OSError counts as a failure."""
+    try:
+        result = subprocess.run(["git", *NO_HOOKS, *args], cwd=worktree, capture_output=True, text=True, check=False)
+    except OSError as error:
+        return 1, str(error)
+    return result.returncode, result.stderr.strip()
+
+
+def _remove_checkout(worktree, checkout, holder):
+    """Remove the checkout and its temporary folder, and git's record of it, whatever state the command left."""
+    code, _ = _git_quiet(worktree, "worktree", "remove", "--force", "--force", str(checkout))
+    shutil.rmtree(holder, ignore_errors=True)
+    if code:
+        _git_quiet(worktree, "worktree", "prune")  # forgets the checkout, now that its folder is gone
+
+
+@contextlib.contextmanager
+def _command_folder(worktree, head, settings):
+    """Yields (folder, problem): where the command runs. By default a fresh detached checkout of `head` in a temporary
+    folder, removed afterwards, also when the command fails or times out (S-073); with `fresh_checkout: false`, the
+    live worktree."""
+    if settings.get("fresh_checkout", True) is False:
+        yield worktree, ""
+        return
+    holder = pathlib.Path(tempfile.mkdtemp(prefix=CHECKOUT_PREFIX)).resolve()
+    checkout = holder / CHECKOUT_NAME
+    try:
+        code, error = _git_quiet(worktree, "worktree", "add", "--detach", "--quiet", str(checkout), head)
+        if code:
+            yield None, (f"can't check out {head[:12]} into a clean folder ({error or 'git failed'}), so the "
+                         "evidence command did not run")
+        else:
+            yield checkout, ""
+    finally:
+        _remove_checkout(worktree, checkout, holder)
+
+
+def _make_evidence(run_dir, story_id, settings, steps, ran_in, head):
+    """Run the command in `ran_in`, count its screenshots and stamp them; the result."""
+    story_dir = run_dir / story_id
+    folder = _fresh_folder(story_dir)
+    problem = _run_command(settings, ran_in, steps, folder, story_dir / EVIDENCE_LOG)
+    if problem:
+        return _skip(problem)
+    shots = _screenshots(folder)
+    if not shots:
+        return _skip(f"the evidence command left no PNG screenshots in {folder}")
+    _write_stamp(story_dir, ran_in)
+    problem = stamp_problem(run_dir, story_id, head)
+    if problem:
+        return _skip(problem)
+    return {"ok": True, "folder": str(folder), "head": head, "screenshots": len(shots)}
 
 
 def evidence(run_dir, worktree, story_id, settings, head, steps_checksum=None):
     """Run `ui_evidence.command` on the steps file; {ok, folder, head, screenshots} or {skipped, reason}. With
     `steps_checksum` (brew.js passes it), a steps file whose steps_sum differs never runs (S-070). A worktree with files
-    not committed (S-071), or a story whose diff touches an `evidence_globs` file (S-069), never runs it either."""
+    not committed (S-071), or a story whose diff touches an `evidence_globs` file (S-069), never runs it either. It
+    runs in a fresh checkout of `head` unless `fresh_checkout` is false (S-073)."""
     if settings is None:
         return _skip("config.json has no `ui_evidence`")
     if settings["takes_over_screen"]:
         return _skip(TAKES_OVER)
     if not worktree.is_dir():
         return _skip(f"no worktree for {story_id} at {worktree}")
-    problem = _untrusted(run_dir, worktree, story_id, settings)
+    problem = _untrusted(run_dir, worktree, story_id, settings, head)
     if problem:
         return _skip(problem)
-    story_dir = run_dir / story_id
-    steps = story_dir / STEPS_NAME
+    steps = run_dir / story_id / STEPS_NAME
     if not steps.is_file():
         return _skip(f"no steps file at {steps}: mad-eye's steps were not written")
     problem = _steps_problem(steps, steps_checksum)
     if problem:
         return _skip(problem)
-    folder = _fresh_folder(story_dir)
-    problem = _run_command(settings, worktree, steps, folder, story_dir / EVIDENCE_LOG)
-    if problem:
-        return _skip(problem)
-    shots = _screenshots(folder)
-    if not shots:
-        return _skip(f"the evidence command left no PNG screenshots in {folder}")
-    _write_stamp(story_dir, worktree)
-    problem = stamp_problem(run_dir, story_id, head)
-    if problem:
-        return _skip(problem)
-    return {"ok": True, "folder": str(folder), "head": head, "screenshots": len(shots)}
+    with _command_folder(worktree, head, settings) as (ran_in, problem):
+        if problem:
+            return _skip(problem)
+        return _make_evidence(run_dir, story_id, settings, steps, ran_in, head)
