@@ -9,7 +9,7 @@ yet. For each blocked story: its one question from `run/questions/<ID>.md`.
 """
 import re
 
-from accio_lib import paths
+from accio_lib import config, paths
 
 REPORT_NAME = paths.REPORT_NAME
 NOTES_NAME = "brew-notes.md"  # prefect writes brew's note for a READY story (boggart's, mad-eye's), S-076/3
@@ -23,6 +23,8 @@ REPORT_SECTIONS = (("What changed", "Changed"), ("How to try it", "Try it"), ("R
 MISSING_SECTION = "(missing from the report)"
 HEADING = re.compile(r"^(#{1,6})\s+(.*?)\s*:?\s*$")
 FENCE = re.compile(r"^ {0,3}(`{3,}|~{3,})")
+UNCHECKED_NOTE = ("Tests not checked for weak spots: the mutation check is off. Set `mutation.command` in "
+                  ".accio/config.json, or `\"mutation\": false` to stop this note.")
 FOOTER = ("\nAnswer in one batch: accept, reject or drop each ready story (with a reason for reject or drop), "
           "answer each question, and say whether to push.\n")
 
@@ -164,7 +166,8 @@ def blocked_block(parsed, question, cost_entry):
 
 
 def render(stories, status, run_dir, costs):
-    """The owl.md text for every story in review or blocked."""
+    """The owl.md text for every story in review or blocked. When config.json (next to run_dir) has no `mutation`
+    key, it starts with the line saying the tests weren't checked for weak spots (S-091)."""
     blocks = []
     for story_id in sorted(stories):
         parsed, entry = stories[story_id], costs.get(story_id)
@@ -174,7 +177,8 @@ def render(stories, status, run_dir, costs):
         elif status[story_id] == "blocked":
             blocks.append(blocked_block(parsed, _read(run_dir / "questions" / f"{story_id}.md"), entry))
     body = "\n\n".join(blocks) or "Nothing is ready or blocked."
-    return f"# Review\n\n{body}\n{FOOTER}"
+    note = f"{UNCHECKED_NOTE}\n\n" if config.mutation_unset(run_dir.parent) else ""
+    return f"{note}# Review\n\n{body}\n{FOOTER}"
 
 
 def report_sections():
