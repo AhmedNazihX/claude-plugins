@@ -37,7 +37,7 @@ def main(argv=None):
         costs = cost.report(run_dirs, {sid: cost.budget_for(stories[sid], budgets) for sid in shown})["stories"]
         target = accio / "run" / "owl.md"
         target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_text(summary.render(stories, status, accio / "run", costs, config.mutation_unset(accio)), encoding="utf-8")
+        target.write_text(summary.render(stories, status, accio / "run", costs), encoding="utf-8")
     except (board.BoardError, config.ConfigError) as error:
         print(f"accio-summary: {error}", file=sys.stderr)
         return 1

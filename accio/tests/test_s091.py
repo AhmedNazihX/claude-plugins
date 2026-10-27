@@ -110,7 +110,7 @@ class OwlNoteTest(unittest.TestCase):
     def summarise(self, data):
         if data is not None:
             write(self.accio / "config.json", json.dumps(data))
-        return summary.render({}, {}, self.accio / "run", {}, mutation_unset=config.mutation_unset(self.accio))
+        return summary.render({}, {}, self.accio / "run", {})
 
     def test_S_091_4_missing_key_starts_owl_with_the_note(self):
         for data in (None, {}, {"wip": 2}):
